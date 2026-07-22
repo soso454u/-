@@ -107,6 +107,7 @@
     if(notify)toast('info','系统媒体保活已停止');
   }
   function ensureKeepAlive(){
+    if(current&&!audio.paused)updateMediaMetadata(current,true);
     if(!settings.keepAlive)return;
     if(keepAliveAudio.paused)startKeepAlive({persist:false,notify:false});
   }
@@ -121,13 +122,13 @@
     if(keepAliveObjectUrl){try{ROOT.URL.revokeObjectURL(keepAliveObjectUrl);}catch{}keepAliveObjectUrl='';}
     keepAliveUrl='';
   }
-  keepAliveAudio.addEventListener('play',()=>{keepAlivePending=false;keepAliveError='';updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('play',()=>{keepAlivePending=false;keepAliveError='';updateKeepAliveUI();if(current&&!audio.paused)updateMediaMetadata(current,true);emitPublicState();});
   keepAliveAudio.addEventListener('pause',()=>{if(settings.keepAlive&&!disposed)keepAlivePending=true;updateKeepAliveUI();emitPublicState();});
   keepAliveAudio.addEventListener('error',()=>{keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, progressSeeking = false, pendingProgressValue = 0; const lyricCache = new Map();
   const mediaSession=ROOT.navigator?.mediaSession||null;
   const mediaActions=['play','pause','stop','previoustrack','nexttrack','seekbackward','seekforward','seekto'];
-  let lastMediaPositionSecond=-1;
+  let lastMediaPositionSecond=-1,mediaMetadataRefreshTimers=[];
   function setMediaAction(action,handler){if(!mediaSession?.setActionHandler)return;try{mediaSession.setActionHandler(action,handler);}catch(error){console.info(`[音乐播放器] 系统媒体操作不受支持：${action}`,error);}}
   function clearMediaPosition(){lastMediaPositionSecond=-1;if(mediaSession?.setPositionState)try{mediaSession.setPositionState();}catch{}}
   function updateMediaPosition(force=false){
@@ -144,11 +145,15 @@
     try{mediaSession.playbackState=audio.paused?'paused':'playing';}catch{}
     updateMediaPosition(forcePosition);
   }
-  function updateMediaMetadata(song=current){
+  function clearMediaMetadataRefresh(){for(const timer of mediaMetadataRefreshTimers)ROOT.clearTimeout(timer);mediaMetadataRefreshTimers=[];}
+  function updateMediaMetadata(song=current,force=false){
     if(!mediaSession||!ROOT.MediaMetadata||!song)return;
-    const data={title:String(song.title||'未知歌曲'),artist:String(song.artist||'未知歌手'),album:String(song.album||'Selene 音乐播放器')};
+    const clean=(value,fallback)=>String(value||fallback).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim()||fallback;
+    const data={title:clean(song.title,'未知歌曲'),artist:clean(song.artist,'未知歌手'),album:clean(song.album,'Selene 音乐播放器')};
     if(song.cover)try{const artwork=new URL(String(song.cover),DOC.baseURI);if(/^https?:$/.test(artwork.protocol))data.artwork=[{src:artwork.href}];}catch{}
-    try{mediaSession.metadata=new ROOT.MediaMetadata(data);}catch(error){console.warn('[音乐播放器] 系统媒体信息更新失败',error);}
+    const apply=()=>{if(disposed||current!==song)return;try{mediaSession.metadata=new ROOT.MediaMetadata(data);}catch(error){console.warn('[音乐播放器] 系统媒体信息更新失败',error);}};
+    apply();
+    if(force){clearMediaMetadataRefresh();for(const delay of [100,600])mediaMetadataRefreshTimers.push(ROOT.setTimeout(()=>{apply();updateMediaPlaybackState(true);},delay));}
   }
   function seekMediaTo(value){
     const duration=Number(audio.duration),target=Number(value);
@@ -159,6 +164,7 @@
   function switchMediaTrack(step){const song=nextSong(step);if(song)play(song);}
   function setupMediaSession(){
     if(!mediaSession)return;
+    audio.addEventListener('playing',updatePlayButton);
     setMediaAction('play',()=>{if(!current)return;if(!audio.currentSrc&&!audio.src){play(current);return;}const attempt=audio.play();attempt?.catch?.(()=>play(current));});
     setMediaAction('pause',()=>audio.pause());
     setMediaAction('stop',()=>{audio.pause();seekMediaTo(0);});
@@ -170,6 +176,7 @@
   }
   function clearMediaSession(){
     if(!mediaSession)return;
+    clearMediaMetadataRefresh();
     for(const action of mediaActions)setMediaAction(action,null);
     try{mediaSession.metadata=null;mediaSession.playbackState='none';}catch{}
     clearMediaPosition();
@@ -278,7 +285,7 @@
   function applyPlayerSize(el=DOC.getElementById(ID)){if(!el||preserveMiniGeometry(el))return;const preferredWidth={s:310,m:365,l:430}[settings.playerSize]||365;if(isMobile()){const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth||390,maxWidth=Math.max(0,viewportWidth-28),width=Math.min(preferredWidth,maxWidth);el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('max-width',`${maxWidth}px`,'important');el.style.setProperty('min-width','0','important');return;}el.style.width=`min(${preferredWidth}px,calc(100vw - 24px))`;el.style.maxWidth='calc(100vw - 24px)';}
   function isMobile(){const media=ROOT.matchMedia?.bind(ROOT),width=ROOT.visualViewport?.width||ROOT.innerWidth||0,height=ROOT.visualViewport?.height||ROOT.innerHeight||0,touch=Number(ROOT.navigator?.maxTouchPoints||0)>0,touchTablet=touch&&Math.min(width,height)<=1024&&Math.max(width,height)<=1400;return !!(media?.('(max-width:480px)').matches||media?.('(max-width:1024px) and (hover:none) and (pointer:coarse)').matches||touchTablet);}
   function applyMobilePosition(el=DOC.getElementById(ID)){if(!el||!isMobile())return;const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth;const maxLeft=Math.max(6,viewportWidth-el.offsetWidth-6),left=Math.max(6,Math.min(maxLeft,settings.mobilePosition.left));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${settings.mobilePosition.top}dvh`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}
-  function updatePlayButton(){const button=DOC.querySelector(`#${ID} [data-c="play"]`);if(button)button.textContent=audio.paused?'▶':'❚❚';updateMediaPlaybackState(true);}
+  function updatePlayButton(){const button=DOC.querySelector(`#${ID} [data-c="play"]`);if(button)button.textContent=audio.paused?'▶':'❚❚';if(!audio.paused&&current)updateMediaMetadata(current,true);updateMediaPlaybackState(true);}
   function updateLyricsLock(){const button=DOC.querySelector(`#${ID} [data-a="lock"]`);if(button)button.textContent=settings.lyricsLocked?'歌词 🔒':'歌词 🔓';}
   function updatePlayMode(){const button=DOC.querySelector(`#${ID} [data-a="mode"]`),labels={loop:'循环 ↻',one:'单曲 ↺',shuffle:'随机 ⤨'};if(button)button.textContent=labels[settings.playMode]||labels.loop;}
   function nextSong(step=1){const list=queue.length?queue:(settings.favorites||[]);if(!list.length)return null;if(settings.playMode==='one')return current;if(settings.playMode==='shuffle'){if(list.length===1)return list[0];let pick;do pick=list[Math.floor(Math.random()*list.length)];while(pick===current);queueIndex=queue.length?queue.indexOf(pick):-1;return pick;}let index=queue.length?queueIndex:list.indexOf(current);if(index<0)index=step>0?-1:0;index=(index+step+list.length)%list.length;if(queue.length)queueIndex=index;return list[index];}
@@ -329,7 +336,7 @@
   function favorite(s){const i=settings.favorites?.findIndex(x=>x.id===s.id);if(i>=0)settings.favorites.splice(i,1);else{settings.favorites=settings.favorites||[];settings.favorites.unshift(strip(s));}save();}
   function saveFavorite(s){settings.favorites=settings.favorites||[];if(!settings.favorites.some(x=>x.id===s.id)){settings.favorites.unshift(strip(s));save();}}
   function count(){const x=DOC.querySelector(`#${ID} [data-a="queue"] i`);if(x)x.textContent=queue.length;}
-  function show(s){const changed=current!==s;current=s;if(changed)clearMediaPosition();updateMediaMetadata(s);const e=DOC.getElementById(ID);if(!e)return;e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');img.style.visibility='visible';const applyCover=cover=>{if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;img.src=cover;large.src=cover;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{img.removeAttribute('src');large.removeAttribute('src');e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}};img.onerror=()=>{console.warn('[音乐播放器] 当前封面加载失败',{title:s.title,artist:s.artist,cover:img.src});img.removeAttribute('src');};applyCover(s.cover);}
+  function show(s){const changed=current!==s;current=s;if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');img.style.visibility='visible';const applyCover=cover=>{if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;img.src=cover;large.src=cover;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{img.removeAttribute('src');large.removeAttribute('src');e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}};img.onerror=()=>{console.warn('[音乐播放器] 当前封面加载失败',{title:s.title,artist:s.artist,cover:img.src});img.removeAttribute('src');};applyCover(s.cover);}
   const clock = seconds => { seconds=Number.isFinite(seconds)?Math.max(0,seconds):0;return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`; };
   const mediaDetail = error => { const m=error?.media||{};return `${error?.message||'播放失败'}；code: ${m.code??'无'}；message: ${m.message||'无'}；currentSrc: ${m.currentSrc||'空'}；networkState: ${m.networkState??'无'}；readyState: ${m.readyState??'无'}`; };
   function normalizeSongText(value){return String(value||'').toLowerCase().normalize('NFKC').replace(/\b(feat(?:uring)?|ft)\.?\b/g,' ').replace(/[\s·•._\-—–()（）\[\]【】'"“”‘’/\\,:：;；!?！？]+/g,'');}
