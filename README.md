@@ -19,7 +19,7 @@
 4. 粘贴本仓库的 HTTPS 链接，例如：
 
    ```text
-   https://github.com/你的用户名/你的仓库名
+   https://github.com/soso454u/-
    ```
 
 5. 点击安装，并按 SillyTavern 的提示重新加载页面。

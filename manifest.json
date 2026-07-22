@@ -4,6 +4,7 @@
   "js": "index.js",
   "author": "Selene海莉",
   "version": "1.0.0",
+  "homePage": "https://github.com/soso454u/-",
   "auto_update": true,
   "hooks": {
     "disable": "onDisable",
