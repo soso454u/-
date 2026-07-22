@@ -18,16 +18,22 @@
   keepAliveAudio.playsInline = true;
   keepAliveAudio.setAttribute('playsinline','');
   keepAliveAudio.setAttribute('webkit-playsinline','');
-  try { keepAliveAudio.disableRemotePlayback = true; } catch {}
-  let keepAliveUrl = '', keepAliveTimer = 0, keepAlivePending = false, keepAliveGestureArmed = false;
-  function makeKeepAliveUrl(){
-    if(keepAliveUrl)return keepAliveUrl;
+  keepAliveAudio.setAttribute('title','Selene Background Keep Alive');
+  keepAliveAudio.id='selene-keepalive-media';
+  keepAliveAudio.style.cssText='position:fixed;width:1px;height:1px;left:-10px;bottom:-10px;opacity:.001;pointer-events:none';
+  let keepAliveUrl = '', keepAliveObjectUrl = '', keepAliveTimer = 0, keepAlivePending = false, keepAliveError = '', keepAliveGestureArmed = false;
+  function ensureKeepAliveUrl(){
+    if(keepAliveUrl){if(keepAliveAudio.src!==keepAliveUrl)keepAliveAudio.src=keepAliveUrl;return keepAliveUrl;}
+    const extensionAsset=String(ROOT.__SELENE_KEEPALIVE_URL__||'').trim();
+    if(extensionAsset){keepAliveUrl=extensionAsset;keepAliveAudio.src=keepAliveUrl;return keepAliveUrl;}
+    // Standalone-script fallback. The installed extension always uses keepalive.m4a above.
     const sampleRate=8000,seconds=2,samples=sampleRate*seconds,buffer=new ArrayBuffer(44+samples*2),view=new DataView(buffer);
     const text=(offset,value)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
     text(0,'RIFF');view.setUint32(4,36+samples*2,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,sampleRate,true);view.setUint32(28,sampleRate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,samples*2,true);
     // 20Hz、仅 1 个最低有效位的极低振幅信号，实际听感近似静音，但避免部分浏览器把“全零音轨”优化掉。
     for(let i=0;i<samples;i++)view.setInt16(44+i*2,(i%400)<200?1:-1,true);
-    keepAliveUrl=ROOT.URL.createObjectURL(new ROOT.Blob([buffer],{type:'audio/wav'}));
+    keepAliveObjectUrl=ROOT.URL.createObjectURL(new ROOT.Blob([buffer],{type:'audio/wav'}));
+    keepAliveUrl=keepAliveObjectUrl;
     keepAliveAudio.src=keepAliveUrl;
     return keepAliveUrl;
   }
@@ -36,8 +42,8 @@
     const panel=DOC.querySelector(`#${ID} .settings-panel`),state=panel?.querySelector('[data-keepalive-state]'),button=panel?.querySelector('[data-keepalive-toggle]'),card=panel?.querySelector('[data-keepalive-card]');
     if(!state||!button)return;
     const active=keepAliveActive(),pending=!!settings.keepAlive&&keepAlivePending;
-    state.textContent=active?'已启动':pending?'等待一次点击授权':'未启动';
-    state.style.color=active?'#9fdda9':pending?'#f2cf70':'#b8b8c2';
+    state.textContent=active?'系统媒体已启动':keepAliveError?'启动失败':pending?'等待一次点击授权':'未启动';
+    state.style.color=active?'#9fdda9':keepAliveError?'#ee9b9b':pending?'#f2cf70':'#b8b8c2';
     button.textContent=active?'■ 停止保活':settings.keepAlive?'▶ 重新启动保活':'▶ 启动保活';
     card?.classList.remove('active');
     card?.classList.toggle('keepalive-running',active);
@@ -62,8 +68,10 @@
   }
   async function startKeepAlive({persist=true,notify=false}={}){
     settings.keepAlive=true;
+    keepAliveError='';
     if(persist)save();
-    makeKeepAliveUrl();
+    if(!keepAliveAudio.isConnected)DOC.body.appendChild(keepAliveAudio);
+    ensureKeepAliveUrl();
     keepAliveAudio.loop=true;
     keepAliveAudio.muted=false;
     keepAliveAudio.volume=1;
@@ -74,10 +82,11 @@
       disarmKeepAliveGesture();
       if(!keepAliveTimer)keepAliveTimer=ROOT.setInterval(()=>{if(settings.keepAlive&&keepAliveAudio.paused)startKeepAlive({persist:false,notify:false});},20000);
       updateKeepAliveUI();
-      if(notify)toast('success','后台保活已启动');
+      if(notify)toast('success','系统媒体保活已启动');
       return true;
     }catch(error){
       keepAlivePending=error?.name==='NotAllowedError';
+      keepAliveError=keepAlivePending?'':String(error?.message||'媒体无法播放');
       if(keepAlivePending)armKeepAliveGesture();
       updateKeepAliveUI();
       if(notify)toast(keepAlivePending?'warning':'error',keepAlivePending?'浏览器需要一次点击授权，请再点一次启动保活':`保活启动失败：${error?.message||'未知错误'}`);
@@ -88,12 +97,13 @@
   function stopKeepAlive({persist=true,notify=false}={}){
     settings.keepAlive=false;
     keepAlivePending=false;
+    keepAliveError='';
     disarmKeepAliveGesture();
     if(keepAliveTimer){ROOT.clearInterval(keepAliveTimer);keepAliveTimer=0;}
     try{keepAliveAudio.pause();keepAliveAudio.currentTime=0;}catch{}
     if(persist)save();
     updateKeepAliveUI();
-    if(notify)toast('info','后台保活已停止');
+    if(notify)toast('info','系统媒体保活已停止');
   }
   function ensureKeepAlive(){
     if(!settings.keepAlive)return;
@@ -106,10 +116,13 @@
     ROOT.removeEventListener('pageshow',ensureKeepAlive);
     ROOT.removeEventListener('focus',ensureKeepAlive);
     try{keepAliveAudio.pause();keepAliveAudio.removeAttribute('src');keepAliveAudio.load();}catch{}
-    if(keepAliveUrl){try{ROOT.URL.revokeObjectURL(keepAliveUrl);}catch{}keepAliveUrl='';}
+    keepAliveAudio.remove();
+    if(keepAliveObjectUrl){try{ROOT.URL.revokeObjectURL(keepAliveObjectUrl);}catch{}keepAliveObjectUrl='';}
+    keepAliveUrl='';
   }
-  keepAliveAudio.addEventListener('play',updateKeepAliveUI);
-  keepAliveAudio.addEventListener('pause',updateKeepAliveUI);
+  keepAliveAudio.addEventListener('play',()=>{updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('pause',()=>{updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('error',()=>{keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0; const lyricCache = new Map();
   function stopPlayback({release=true,stopBackground=false}={}){
     ++playRequest;
@@ -332,7 +345,7 @@
     let f=host.querySelector('.settings-panel');
     if(f&&f.style.display!=='none'){f.style.display='none';return;}
     if(!f){
-      host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;z-index:3;padding:14px;color:#eee;font:14px system-ui;overflow:auto"><button type="button" data-x style="float:right">×</button><h3 style="margin:0 0 4px">播放器设置</h3><div class="set-grid"><label class="set-card"><input type="checkbox" name="auto"> 自动读取推荐</label><div class="set-card" data-keepalive-card style="grid-column:1/-1"><b>后台保活</b> · <small data-keepalive-state style="color:#b8b8c2">未启动</small><br><button type="button" data-keepalive-toggle style="margin:8px 0 6px!important">▶ 启动保活</button><br><small style="color:#c8c1b0;line-height:1.5">循环播放本地近静音音频。第一次需要手动点击，可能占用锁屏媒体控制栏；系统强制冻结浏览器时仍无法保证 100% 不掉线。</small></div><label class="set-card">播放器尺寸 <select name="playerSize"><option value="s">小巧</option><option value="m">标准</option><option value="l">宽屏</option></select></label><label class="set-card"><input type="checkbox" name="mobileLyrics"> 手机版悬浮歌词</label><label class="set-card">歌词主色 <input type="color" name="lyricColor"></label><label class="set-card"><input type="checkbox" name="gradient"> 启用渐变<br>渐变副色 <input type="color" name="gradientColor"></label></div><button type="button" data-reset-lyrics>重置歌词位置</button></form>`);
+      host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;z-index:3;padding:14px;color:#eee;font:14px system-ui;overflow:auto"><button type="button" data-x style="float:right">×</button><h3 style="margin:0 0 4px">播放器设置</h3><div class="set-grid"><label class="set-card"><input type="checkbox" name="auto"> 自动读取推荐</label><div class="set-card" data-keepalive-card style="grid-column:1/-1"><b>系统媒体保活</b> · <small data-keepalive-state style="color:#b8b8c2">未启动</small><br><button type="button" data-keepalive-toggle style="margin:8px 0 6px!important">▶ 启动保活</button><br><small style="color:#c8c1b0;line-height:1.5">播放扩展内置的 10 小时静音 AAC，让 iOS/Chrome 建立真实媒体会话。第一次需要手动点击，可能占用锁屏媒体控制栏；系统强制冻结浏览器时仍无法保证 100% 不掉线。</small></div><label class="set-card">播放器尺寸 <select name="playerSize"><option value="s">小巧</option><option value="m">标准</option><option value="l">宽屏</option></select></label><label class="set-card"><input type="checkbox" name="mobileLyrics"> 手机版悬浮歌词</label><label class="set-card">歌词主色 <input type="color" name="lyricColor"></label><label class="set-card"><input type="checkbox" name="gradient"> 启用渐变<br>渐变副色 <input type="color" name="gradientColor"></label></div><button type="button" data-reset-lyrics>重置歌词位置</button></form>`);
       f=host.querySelector('.settings-panel');
     }
     f.style.display='block';
@@ -471,6 +484,7 @@
       menuEnabled:settings.menuEnabled!==false,
       keepAlive:!!settings.keepAlive,
       keepAliveActive:keepAliveActive(),
+      keepAliveError,
     };
   }
   function emitPublicState(){

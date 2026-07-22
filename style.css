@@ -22,10 +22,23 @@
 }
 
 #selene-music-extension-settings [data-selene-status],
+#selene-music-extension-settings [data-selene-keepalive-status],
 #selene-music-extension-settings .selene-keepalive-note {
   display: block;
   margin-top: 6px;
   opacity: 0.82;
+}
+
+#selene-music-extension-settings [data-selene-keepalive-status][data-state='active'] {
+  color: #8fd19a;
+}
+
+#selene-music-extension-settings [data-selene-keepalive-status][data-state='pending'] {
+  color: #f2cf70;
+}
+
+#selene-music-extension-settings [data-selene-keepalive-status][data-state='error'] {
+  color: #ee9b9b;
 }
 
 #selene-music-extension-settings [data-selene-status][data-state='visible'] {

@@ -1,6 +1,4 @@
 // SillyTavern extension entry point.
-import './纯音乐播放器.js';
-
 const ROOT = (() => {
   try {
     return window.parent?.document ? window.parent : window;
@@ -8,6 +6,11 @@ const ROOT = (() => {
     return window;
   }
 })();
+
+// Give the player an extension-relative, cache-safe URL before its module starts.
+// A real long-form AAC track is required for iOS/Chrome to create a system media session.
+ROOT.__SELENE_KEEPALIVE_URL__ = new URL('./keepalive.m4a', import.meta.url).href;
+const initialPlayerLoad = import('./纯音乐播放器.js');
 
 const DOC = ROOT.document;
 const PANEL_ID = 'selene-music-extension-settings';
@@ -37,6 +40,17 @@ function syncPanel() {
   $('#selene_auto_show').prop('checked', state.autoShow);
   $('#selene_menu_enabled').prop('checked', state.menuEnabled);
   $('#selene_keep_alive').prop('checked', state.keepAlive);
+  const keepAliveStatus = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-status]`);
+  if (keepAliveStatus) {
+    keepAliveStatus.textContent = state.keepAliveActive
+      ? '系统媒体已播放，可在手机后台控制'
+      : state.keepAliveError
+        ? `启动失败：${state.keepAliveError}`
+      : state.keepAlive
+        ? '等待浏览器播放授权，请点击页面一次'
+        : '未启动';
+    keepAliveStatus.dataset.state = state.keepAliveActive ? 'active' : state.keepAliveError ? 'error' : state.keepAlive ? 'pending' : 'off';
+  }
   setStatus(state.visible ? '播放器窗口已显示' : '播放器窗口已隐藏', state.visible ? 'visible' : 'hidden');
 }
 
@@ -83,15 +97,16 @@ function mountPanel() {
           </label>
           <label class="checkbox_label" for="selene_keep_alive">
             <input id="selene_keep_alive" type="checkbox">
-            <span>后台音频保活</span>
+            <span>系统媒体保活</span>
           </label>
         </div>
+        <small data-selene-keepalive-status data-state="off">未启动</small>
         <div class="selene-setting-actions">
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
           <button type="button" class="menu_button" data-selene-reset-window>重置窗口尺寸</button>
         </div>
         <small data-selene-status>正在检查播放器…</small>
-        <small class="selene-keepalive-note">保活可减少移动端切到后台后停播；首次启用可能需要再点击一次页面授权。</small>
+        <small class="selene-keepalive-note">启用后会播放本地长时静音媒体，让 iOS/Chrome 建立后台媒体会话；首次启用可能需要再点击一次页面授权。</small>
       </div>
     </div>`);
 
@@ -130,6 +145,7 @@ function mountPanel() {
 }
 
 async function ensurePlayer() {
+  await initialPlayerLoad;
   if (DOC.getElementById('safe-music-player')) return;
   const playerUrl = new URL('./纯音乐播放器.js', import.meta.url);
   playerUrl.searchParams.set('reload', String(Date.now()));
@@ -144,7 +160,10 @@ async function activateImmediately({ announce = false } = {}) {
   if (announce) ROOT.toastr?.success?.('Selene 音乐播放器已加载');
 }
 
-jQuery(mountPanel);
+jQuery(async () => {
+  await initialPlayerLoad;
+  mountPanel();
+});
 
 export async function onInstall() {
   await activateImmediately({ announce: true });
