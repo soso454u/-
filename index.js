@@ -44,7 +44,9 @@ function syncPanel() {
   const keepAliveNative = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`);
   if (keepAliveStatus) {
     keepAliveStatus.textContent = state.keepAliveActive
-      ? '系统媒体已播放，可在手机后台控制'
+      ? '播放器空闲，静音保活运行中'
+      : state.keepAliveSuspended
+        ? '歌曲播放中，静音保活已自动让位'
       : state.keepAliveError
         ? `启动失败：${state.keepAliveError}`
       : state.keepAlive
@@ -52,7 +54,7 @@ function syncPanel() {
         : '未启动';
     keepAliveStatus.dataset.state = state.keepAliveActive ? 'active' : state.keepAliveError ? 'error' : state.keepAlive ? 'pending' : 'off';
   }
-  if (keepAliveNative) keepAliveNative.hidden = !state.keepAlive || state.keepAliveActive;
+  if (keepAliveNative) keepAliveNative.hidden = !state.keepAlive || state.keepAliveActive || state.keepAliveSuspended;
   setStatus(state.visible ? '播放器窗口已显示' : '播放器窗口已隐藏', state.visible ? 'visible' : 'hidden');
 }
 
