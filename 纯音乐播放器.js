@@ -9,6 +9,8 @@
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
   const GD_SOURCES = ['netease','joox','bilibili'];
   const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'film', playerSize: 'm', playMode: 'loop', desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, windowPinned: false, immersive: false, miniMode: false, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const KEEPALIVE_NAME = 'SillyTavern';
+  const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings;
   try { const saved=JSON.parse(ROOT.localStorage.getItem(KEY) || '{}');settings = { ...defaults, ...saved, position: { ...defaults.position, ...(saved.position || {}) }, mobilePosition: { ...defaults.mobilePosition, ...(saved.mobilePosition || {}) }, desktopPosition: { ...defaults.desktopPosition, ...(saved.desktopPosition || {}) }, mobileLyricsPosition: { ...defaults.mobileLyricsPosition, ...(saved.mobileLyricsPosition || {}) } }; if(!Number.isFinite(Number(settings.mobileLyricsPosition?.top)))settings.mobileLyricsPosition={left:Number(settings.mobileLyricsPosition?.left)||50,top:50}; } catch { settings = { ...defaults }; }
   const audio = new ROOT.Audio();
@@ -21,7 +23,7 @@
   keepAliveAudio.playsInline = true;
   keepAliveAudio.setAttribute('playsinline','');
   keepAliveAudio.setAttribute('webkit-playsinline','');
-  keepAliveAudio.setAttribute('title','Selene Background Keep Alive');
+  keepAliveAudio.setAttribute('title',KEEPALIVE_NAME);
   keepAliveAudio.id='selene-keepalive-media';
   keepAliveAudio.hidden=true;
   let keepAliveUrl = '', keepAliveObjectUrl = '', keepAliveTimer = 0, keepAliveSyncTimer = 0, keepAlivePending = false, keepAliveError = '', keepAliveGestureArmed = false, keepAliveSuspendedForTrack = false, keepAliveManualTakeover = false, keepAliveStarting = false, keepAliveFallbackTried = false;
@@ -149,7 +151,7 @@
     if(keepAliveObjectUrl){try{ROOT.URL.revokeObjectURL(keepAliveObjectUrl);}catch{}keepAliveObjectUrl='';}
     keepAliveUrl='';
   }
-  keepAliveAudio.addEventListener('play',()=>{if(!settings.keepAlive||mainTrackOwnsMediaSession()){try{keepAliveAudio.pause();}catch{}if(mainTrackOwnsMediaSession())pauseKeepAliveForTrack();return;}keepAliveSuspendedForTrack=false;keepAlivePending=false;keepAliveError='';updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('play',()=>{if(!settings.keepAlive||mainTrackOwnsMediaSession()){try{keepAliveAudio.pause();}catch{}if(mainTrackOwnsMediaSession())pauseKeepAliveForTrack();return;}keepAliveSuspendedForTrack=false;keepAlivePending=false;keepAliveError='';updateKeepAliveMediaMetadata(true);updateKeepAliveUI();emitPublicState();});
   keepAliveAudio.addEventListener('pause',()=>{if(settings.keepAlive&&!disposed&&!keepAliveSuspendedForTrack&&!mainTrackOwnsMediaSession())keepAlivePending=true;updateKeepAliveUI();emitPublicState();});
   keepAliveAudio.addEventListener('error',()=>{if(settings.keepAlive&&!keepAliveSuspendedForTrack)keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, progressSeeking = false, pendingProgressValue = 0; const lyricCache = new Map();
@@ -173,6 +175,19 @@
     updateMediaPosition(forcePosition);
   }
   function clearMediaMetadataRefresh(){for(const timer of mediaMetadataRefreshTimers)ROOT.clearTimeout(timer);mediaMetadataRefreshTimers=[];}
+  function updateKeepAliveMediaMetadata(force=false){
+    if(!mediaSession||!ROOT.MediaMetadata||!keepAliveActive()||mainTrackOwnsMediaSession())return;
+    const data={title:KEEPALIVE_NAME};
+    if(KEEPALIVE_ARTWORK_URL)data.artwork=[{src:KEEPALIVE_ARTWORK_URL,sizes:'1254x1254',type:'image/png'}];
+    const apply=()=>{
+      if(disposed||!keepAliveActive()||mainTrackOwnsMediaSession())return;
+      try{mediaSession.metadata=new ROOT.MediaMetadata(data);mediaSession.playbackState='playing';}catch(error){console.warn('[音乐播放器] 保活媒体信息更新失败',error);}
+      clearMediaPosition();
+    };
+    clearMediaMetadataRefresh();
+    apply();
+    if(force)for(const delay of [100,600])mediaMetadataRefreshTimers.push(ROOT.setTimeout(apply,delay));
+  }
   function updateMediaMetadata(song=current,force=false){
     if(!mediaSession||!ROOT.MediaMetadata||!song)return;
     const clean=(value,fallback)=>String(value||fallback).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim()||fallback;

@@ -10,6 +10,7 @@ const ROOT = (() => {
 // Give the player an extension-relative, cache-safe URL before its module starts.
 // A real long-form AAC track is required for iOS/Chrome to create a system media session.
 ROOT.__SELENE_KEEPALIVE_URL__ = new URL('./keepalive.m4a', import.meta.url).href;
+ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ = new URL('./keepalive-cover.png', import.meta.url).href;
 const initialPlayerLoad = import('./纯音乐播放器.js');
 
 const DOC = ROOT.document;
