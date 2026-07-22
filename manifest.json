@@ -1,0 +1,12 @@
+{
+  "display_name": "Selene 音乐播放器",
+  "loading_order": 10,
+  "js": "index.js",
+  "author": "Selene海莉",
+  "version": "1.0.0",
+  "auto_update": true,
+  "hooks": {
+    "disable": "onDisable",
+    "delete": "onDelete"
+  }
+}
