@@ -269,7 +269,7 @@
     el.querySelector('.now').insertAdjacentHTML('afterend','<div class="immersive-view"><div class="ambient"></div><button class="immersive-close" title="返回小窗">⌄</button><div class="cover-glass"><img class="immersive-cover" alt="专辑封面"></div><div class="immersive-info"><small>NOW PLAYING</small><h2>尚未选择歌曲</h2><p>搜索并播放一首歌曲</p><div class="immersive-lyric">暂无歌词</div></div></div>');
     el.insertAdjacentHTML('beforeend','<i class="resize-handle n" data-r="n"></i><i class="resize-handle ne" data-r="ne"></i><i class="resize-handle e" data-r="e"></i><i class="resize-handle se" data-r="se"></i><i class="resize-handle s" data-r="s"></i><i class="resize-handle sw" data-r="sw"></i><i class="resize-handle w" data-r="w"></i><i class="resize-handle nw" data-r="nw"></i>');
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-immersive-style">#${ID}{min-width:300px;min-height:220px}#${ID} .now img{cursor:zoom-in}#${ID} .pin{font-size:15px}#${ID}.pinned .pin{background:#f2cf7040!important;border-color:#f2cf70!important;transform:rotate(-35deg)}#${ID}.pinned .head{cursor:default}#${ID} .immersive-view{display:none;position:relative;min-height:0;overflow:hidden;border-radius:14px;margin-bottom:10px;padding:clamp(18px,4vw,46px);isolation:isolate;grid-template-columns:minmax(170px,.8fr) minmax(210px,1.2fr);gap:clamp(22px,5vw,64px);align-items:center}#${ID} .immersive-view .ambient{position:absolute;z-index:-2;inset:-40px;background-image:var(--cover-image);background-size:cover;background-position:center;filter:blur(48px) saturate(1.45);transform:scale(1.2);opacity:.72}#${ID} .immersive-view:after{content:'';position:absolute;z-index:-1;inset:0;background:linear-gradient(120deg,#090b12c9,#15121aba 55%,#080a0fd9);backdrop-filter:blur(22px)}#${ID} .cover-glass{aspect-ratio:1;padding:clamp(10px,2vw,20px);border:1px solid #ffffff52;border-radius:24px;background:#ffffff16;box-shadow:0 22px 55px #000a,inset 0 1px #ffffff55;backdrop-filter:blur(18px)}#${ID} .immersive-cover{display:block;width:100%;height:100%;object-fit:cover;border-radius:16px;box-shadow:0 12px 30px #0009}#${ID} .immersive-info{min-width:0;color:#fff;text-shadow:0 2px 12px #0008}#${ID} .immersive-info small{letter-spacing:3px;opacity:.6}#${ID} .immersive-info h2{font:700 clamp(25px,4vw,52px)/1.08 Georgia,serif;margin:14px 0 8px;overflow-wrap:anywhere}#${ID} .immersive-info p{font-size:clamp(14px,2vw,20px);opacity:.72;margin:0}#${ID} .immersive-lyric{margin-top:clamp(24px,5vh,58px);font:500 clamp(17px,2.4vw,28px)/1.55 Georgia,serif;white-space:pre-line;min-height:3em}#${ID} .immersive-close{position:absolute;right:14px;top:14px;z-index:2;font-size:22px!important}#${ID}.immersive{width:min(900px,calc(100vw - 28px));height:min(680px,calc(100vh - 28px));max-width:calc(100vw - 12px);max-height:calc(100vh - 12px)}#${ID}.immersive .body{height:calc(100% - 45px);display:flex;flex-direction:column}#${ID}.immersive .now,#${ID}.immersive form,#${ID}.immersive .actions,#${ID}.immersive .list{display:none!important}#${ID}.immersive .immersive-view{display:grid;flex:1}#${ID}.immersive .lyrics{display:none}#${ID}.immersive .controls,#${ID}.immersive .time,#${ID}.immersive .volume{position:relative;z-index:2}#${ID} .resize-handle{position:absolute;z-index:20;display:block}#${ID}.pinned .resize-handle{display:none}#${ID} .resize-handle.n,#${ID} .resize-handle.s{left:12px;right:12px;height:9px;cursor:ns-resize}#${ID} .resize-handle.n{top:0}#${ID} .resize-handle.s{bottom:0}#${ID} .resize-handle.e,#${ID} .resize-handle.w{top:12px;bottom:12px;width:9px;cursor:ew-resize}#${ID} .resize-handle.e{right:0}#${ID} .resize-handle.w{left:0}#${ID} .resize-handle.ne,#${ID} .resize-handle.se,#${ID} .resize-handle.sw,#${ID} .resize-handle.nw{width:18px;height:18px}#${ID} .resize-handle.ne{right:0;top:0;cursor:nesw-resize}#${ID} .resize-handle.se{right:0;bottom:0;cursor:nwse-resize}#${ID} .resize-handle.sw{left:0;bottom:0;cursor:nesw-resize}#${ID} .resize-handle.nw{left:0;top:0;cursor:nwse-resize}@media(max-width:600px){#${ID}.immersive .immersive-view{grid-template-columns:1fr;text-align:center;overflow:auto}#${ID}.immersive .cover-glass{width:min(54vw,230px);margin:auto}#${ID}.immersive .immersive-lyric{margin-top:18px}}</style>`);
-    el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindSizePreset(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); const picker=el.querySelector('.skin-picker');el.querySelector('.skin').onclick=()=>picker.classList.toggle('hidden');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
+    el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindSizePreset(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');el.querySelector('.skin').onclick=()=>picker.classList.toggle('hidden');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
   }
   const setStatus = x => { const el = DOC.querySelector(`#${ID} .status`); if (el) el.textContent = x; };
   function applyTheme(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('theme-light','theme-dark');if(settings.theme==='light')el.classList.add('theme-light');if(settings.theme==='dark')el.classList.add('theme-dark');}
@@ -377,6 +377,69 @@
   async function play(s){const request=++playRequest;show(s);lyricTimeline=[];currentLyricWords='';paintTime();setStatus('正在播放');let lastError,played=null;try{for(let attempt=0;attempt<6&&!played;attempt++){if(request!==playRequest)return;played=await gdFallback(s);if(!played&&attempt<5)await waitForRetry(700*(attempt+1));}if(played){if(request!==playRequest)return;Object.assign(s,played);if(settings.favorites?.includes(s))save();show(s);setStatus('正在播放');applyCurrentCover(s,request);loadLyrics(s,request);return;}lastError=Error('GD Studio 暂未找到严格匹配的可播放歌曲（已自动重试 5 次）');}catch(error){if(isNotAllowed(error)){if(request===playRequest)setStatus('浏览器阻止播放，请再次点击播放按钮');return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}if(request!==playRequest)return;const detail=mediaDetail(lastError);setStatus(detail);if(lastError?.media)toast('error',detail);}
   function parse(text){const b=String(text||'').match(/<music_recommend>([\s\S]*?)<\/music_recommend>/i);if(!b)return null;const tag=n=>b[1].match(new RegExp(`<${n}>\\s*([\\s\\S]*?)\\s*<\\/${n}>`,'i'))?.[1]?.trim()||'';const x={title:tag('title'),artist:tag('artist'),reason:tag('reason')};return x.title?x:null;}
   async function recommendation(force=false){const chat=context()?.chat||[];let m;for(let i=chat.length-1;i>=0;i--)if(!chat[i]?.is_user){m={i,text:chat[i].mes};break;}const r=m&&parse(m.text);if(!r){if(force)toast('warning','本层没有 music_recommend 标签');return;}const key=`${m.i}:${r.title}:${r.artist}`;if(!force&&key===lastRecommendation)return;lastRecommendation=key;DOC.querySelector(`#${ID} .reason`).textContent=r.reason?`推荐：${r.reason}`:'';if(settings.autoLoad||force)await search(`${r.title} ${r.artist}`,true,true,'本层推荐候选');}
+  function parseWorldPlaylist(content,bookName=''){
+    const songs=[];
+    for(const section of String(content||'').matchAll(/<selene_playlist(?:\s[^>]*)?>([\s\S]*?)<\/selene_playlist>/gi)){
+      let pending={title:'',artist:''};
+      const push=()=>{const title=String(pending.title||'').trim(),artist=String(pending.artist||'').trim();if(title&&artist)songs.push({title,artist,bookName});pending={title:'',artist:''};};
+      for(const rawLine of section[1].split(/\r?\n/)){
+        const line=rawLine.trim().replace(/^[-*+]\s+|^\d+[.)、]\s*/,'');
+        if(!line||/^#/.test(line)||/^(?:歌单名|playlist)\s*[:：]/i.test(line))continue;
+        const title=line.match(/^(?:歌曲名?|歌名|song|title)\s*[:：]\s*(.+)$/i);
+        if(title){if(pending.title&&pending.artist)push();pending.title=title[1].trim();continue;}
+        const artist=line.match(/^(?:歌手|歌手名|艺人|artist)\s*[:：]\s*(.+)$/i);
+        if(artist){pending.artist=artist[1].trim();if(pending.title)push();continue;}
+        const pair=line.match(/^(.+?)\s*(?:\|\||[|｜\t]|\s[-—–]\s)\s*(.+)$/);
+        if(pair){push();pending={title:pair[1].trim(),artist:pair[2].trim()};push();}
+      }
+      push();
+    }
+    return songs;
+  }
+  function worldEntryContents(data){const entries=data?.entries;return Array.isArray(entries)?entries.map(x=>x?.content):entries&&typeof entries==='object'?Object.values(entries).map(x=>x?.content):[];}
+  function currentWorldNames(ctx,allNames){
+    const names=[],add=value=>{const name=String(value||'').trim();if(name&&allNames.includes(name)&&!names.includes(name))names.push(name);};
+    add(ctx?.chatMetadata?.world_info);
+    const current=ctx?.characters?.[ctx?.characterId];add(current?.data?.extensions?.world);
+    const group=ctx?.groups?.find?.(x=>String(x.id)===String(ctx?.groupId));
+    for(const avatar of group?.members||[])add(ctx?.characters?.find?.(x=>x.avatar===avatar)?.data?.extensions?.world);
+    DOC.querySelectorAll('#world_info option:checked').forEach(option=>add(option.textContent));
+    DOC.querySelectorAll('.character_extra_world_info_selector option:checked').forEach(option=>add(option.textContent));
+    return names;
+  }
+  async function loadWorldPlaylistBooks(ctx,names){
+    const settled=await Promise.allSettled(names.map(async name=>({name,data:await ctx.loadWorldInfo(name)}))),songs=[],loaded=[];
+    for(const item of settled)if(item.status==='fulfilled'&&item.value.data){loaded.push(item.value.name);for(const content of worldEntryContents(item.value.data))songs.push(...parseWorldPlaylist(content,item.value.name));}
+    return {songs,loaded,failures:settled.filter(x=>x.status==='rejected').length};
+  }
+  function renderWorldPlaylist(songs,bookNames){
+    results=songs;render(songs,`作者推荐 · ${songs.length} 首`,'results',false);
+    const box=DOC.querySelector(`#${ID} .list`),heading=box?.firstElementChild;if(!heading)return;
+    heading.classList.add('batch-heading');
+    const controls=DOC.createElement('span');controls.innerHTML='<button type="button" data-world-queue>全部入队</button><button type="button" data-world-play>一键播放</button>';heading.appendChild(controls);
+    controls.onclick=event=>{event.preventDefault();event.stopPropagation();const known=new Set(queue.map(x=>`${normalizeSongText(x.title)}:${normalizeSongText(x.artist)}`));if(event.target.closest('[data-world-queue]')){let added=0;for(const song of songs){const key=`${normalizeSongText(song.title)}:${normalizeSongText(song.artist)}`;if(!known.has(key)){queue.push(strip(song));known.add(key);added++;}}count();setStatus(added?`已将 ${added} 首作者推荐加入队列`:'作者推荐已在播放队列中');return;}if(event.target.closest('[data-world-play]')){queue=songs.map(strip);queueIndex=0;count();if(queue.length)play(queue[0]);}};
+    setStatus(`已从 ${bookNames.length} 本世界书读取 ${songs.length} 首作者推荐`);
+  }
+  async function readWorldRecommendations(){
+    const ctx=context();
+    if(typeof ctx?.getWorldInfoNames!=='function'||typeof ctx?.loadWorldInfo!=='function'){const message='当前 SillyTavern 版本没有提供世界书读取接口，请更新后重试';setStatus(message);toast('error',message);return;}
+    const allNames=[...new Set((ctx.getWorldInfoNames()||[]).map(String).filter(Boolean))];
+    if(!allNames.length){const message='尚未导入世界书，请先导入作者推荐歌单模板';setStatus(message);toast('warning',message);return;}
+    setStatus('正在读取世界书作者推荐…');
+    try{
+      const active=currentWorldNames(ctx,allNames),primary=active.length?await loadWorldPlaylistBooks(ctx,active):{songs:[],loaded:[],failures:0};
+      const fallbackNames=primary.songs.length?[]:allNames.filter(name=>!active.includes(name)),fallback=fallbackNames.length?await loadWorldPlaylistBooks(ctx,fallbackNames):{songs:[],loaded:[],failures:0};
+      const raw=[...primary.songs,...fallback.songs],seen=new Set(),songs=[];
+      for(const item of raw){const key=`${normalizeSongText(item.title)}:${normalizeSongText(item.artist)}`;if(!key||seen.has(key))continue;seen.add(key);songs.push({id:`world:${key}`,mediaId:'',title:item.title,artist:item.artist,album:item.bookName||'作者推荐',cover:'',coverId:'',lyricId:'',audio:'',source:'netease'});if(songs.length>=300)break;}
+      if(!songs.length){const failed=primary.failures+fallback.failures,message=failed?'世界书读取失败，请稍后重试':'没有找到 <selene_playlist> 作者推荐歌单';setStatus(message);toast(failed?'error':'warning',message);return;}
+      renderWorldPlaylist(songs,[...new Set(raw.map(x=>x.bookName).filter(Boolean))]);
+    }catch(error){const message=`读取世界书推荐失败：${error?.message||'未知错误'}`;console.warn('[音乐播放器] 世界书作者推荐读取失败',error);setStatus(message);toast('error',message);}
+  }
+  function bindWorldRecommendations(el){
+    const playlist=el.querySelector('[data-a="playlist"]');if(!playlist)return;
+    let button=el.querySelector('[data-a="world-rec"]');if(!button){button=DOC.createElement('button');button.type='button';button.dataset.a='world-rec';button.textContent='读取推荐';playlist.insertAdjacentElement('afterend',button);}
+    button.onclick=event=>{event.preventDefault();event.stopPropagation();readWorldRecommendations();};
+  }
   async function importPlaylist(link){
     try{
       const u=new URL(String(link||'').trim()),host=u.hostname.toLowerCase();
