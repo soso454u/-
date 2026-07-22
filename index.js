@@ -44,9 +44,9 @@ function syncPanel() {
   const keepAliveNative = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`);
   if (keepAliveStatus) {
     keepAliveStatus.textContent = state.keepAliveActive
-      ? '播放器空闲，静音保活运行中'
+      ? '未选歌曲，静音保活运行中'
       : state.keepAliveSuspended
-        ? '歌曲播放中，静音保活已自动让位'
+        ? '当前歌曲已接管系统媒体'
       : state.keepAliveError
         ? `启动失败：${state.keepAliveError}`
       : state.keepAlive

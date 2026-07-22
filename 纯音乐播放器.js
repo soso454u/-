@@ -42,13 +42,15 @@
     if(extensionAsset){keepAliveUrl=extensionAsset;keepAliveAudio.src=keepAliveUrl;return keepAliveUrl;}
     return useCompatibilityKeepAliveUrl();
   }
-  function mainTrackIsPlaying(){return !!current&&!audio.paused&&!audio.ended;}
+  // Once a song is selected, it must keep ownership of Media Session even while paused.
+  // Otherwise the silent keepalive becomes the active system card and iOS/macOS keeps showing a pause action.
+  function mainTrackOwnsMediaSession(){return !!current;}
   function keepAliveActive(){return !!settings.keepAlive&&!keepAliveSuspendedForTrack&&!keepAliveAudio.paused&&!keepAliveAudio.ended;}
   function updateKeepAliveUI(){
     const panel=DOC.querySelector(`#${ID} .settings-panel`),state=panel?.querySelector('[data-keepalive-state]'),button=panel?.querySelector('[data-keepalive-toggle]'),card=panel?.querySelector('[data-keepalive-card]');
     if(!state||!button)return;
     const active=keepAliveActive(),suspended=!!settings.keepAlive&&keepAliveSuspendedForTrack,pending=!!settings.keepAlive&&keepAlivePending;
-    state.textContent=active?'空闲保活运行中':suspended?'歌曲播放中，保活已让位':keepAliveError?'启动失败':pending?'等待首次播放授权':'未启动';
+    state.textContent=active?'未选歌曲，保活运行中':suspended?'当前歌曲已接管系统媒体':keepAliveError?'启动失败':pending?'等待首次播放授权':'未启动';
     state.style.color=active||suspended?'#9fdda9':keepAliveError?'#ee9b9b':pending?'#f2cf70':'#b8b8c2';
     button.textContent=settings.keepAlive?'■ 关闭自动保活':'▶ 开启自动保活';
     card?.classList.remove('active');
@@ -78,14 +80,14 @@
   function scheduleKeepAliveSync(delay=180){if(keepAliveSyncTimer)ROOT.clearTimeout(keepAliveSyncTimer);keepAliveSyncTimer=ROOT.setTimeout(()=>{keepAliveSyncTimer=0;syncKeepAliveWithPlayback();},delay);}
   function syncKeepAliveWithPlayback(){
     if(!settings.keepAlive)return;
-    if(mainTrackIsPlaying()){pauseKeepAliveForTrack();return;}
+    if(mainTrackOwnsMediaSession()){pauseKeepAliveForTrack();return;}
     startKeepAlive({persist:false,notify:false});
   }
   async function startKeepAlive({persist=true,notify=false}={}){
     settings.keepAlive=true;
     keepAliveError='';
     if(persist)save();
-    if(mainTrackIsPlaying()){pauseKeepAliveForTrack();if(notify)toast('success','自动保活已开启，歌曲暂停后会自动接管');return true;}
+    if(mainTrackOwnsMediaSession()){pauseKeepAliveForTrack();if(notify)toast('success','自动保活已开启，当前歌曲会继续接管系统媒体');return true;}
     if(keepAliveActive()){updateKeepAliveUI();return true;}
     if(keepAliveStarting)return false;
     keepAliveStarting=true;keepAliveSuspendedForTrack=false;
@@ -96,7 +98,7 @@
     keepAliveAudio.volume=1;
     try{
       await keepAliveAudio.play();
-      if(disposed||!settings.keepAlive||mainTrackIsPlaying()){try{keepAliveAudio.pause();}catch{}if(mainTrackIsPlaying())pauseKeepAliveForTrack();return false;}
+      if(disposed||!settings.keepAlive||mainTrackOwnsMediaSession()){try{keepAliveAudio.pause();}catch{}if(mainTrackOwnsMediaSession())pauseKeepAliveForTrack();return false;}
       keepAlivePending=false;
       disarmKeepAliveGesture();
       if(!keepAliveTimer)keepAliveTimer=ROOT.setInterval(syncKeepAliveWithPlayback,20000);
@@ -145,8 +147,8 @@
     if(keepAliveObjectUrl){try{ROOT.URL.revokeObjectURL(keepAliveObjectUrl);}catch{}keepAliveObjectUrl='';}
     keepAliveUrl='';
   }
-  keepAliveAudio.addEventListener('play',()=>{if(!settings.keepAlive||mainTrackIsPlaying()){try{keepAliveAudio.pause();}catch{}if(mainTrackIsPlaying())pauseKeepAliveForTrack();return;}keepAliveSuspendedForTrack=false;keepAlivePending=false;keepAliveError='';updateKeepAliveUI();if(current){updateMediaMetadata(current,true);updateMediaPlaybackState(true);}emitPublicState();});
-  keepAliveAudio.addEventListener('pause',()=>{if(settings.keepAlive&&!disposed&&!keepAliveSuspendedForTrack&&!mainTrackIsPlaying())keepAlivePending=true;updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('play',()=>{if(!settings.keepAlive||mainTrackOwnsMediaSession()){try{keepAliveAudio.pause();}catch{}if(mainTrackOwnsMediaSession())pauseKeepAliveForTrack();return;}keepAliveSuspendedForTrack=false;keepAlivePending=false;keepAliveError='';updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('pause',()=>{if(settings.keepAlive&&!disposed&&!keepAliveSuspendedForTrack&&!mainTrackOwnsMediaSession())keepAlivePending=true;updateKeepAliveUI();emitPublicState();});
   keepAliveAudio.addEventListener('error',()=>{if(settings.keepAlive&&!keepAliveSuspendedForTrack)keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, progressSeeking = false, pendingProgressValue = 0; const lyricCache = new Map();
   const mediaSession=ROOT.navigator?.mediaSession||null;
@@ -195,7 +197,7 @@
     if(!mediaSession)return;
     audio.addEventListener('playing',updatePlayButton);
     setMediaAction('play',()=>resumeMainAudioFromMediaSession());
-    setMediaAction('pause',()=>{audio.pause();updateMediaPlaybackState(true);scheduleKeepAliveSync();});
+    setMediaAction('pause',()=>{if(audio.paused&&current){resumeMainAudioFromMediaSession();return;}audio.pause();updateMediaPlaybackState(true);scheduleKeepAliveSync();});
     setMediaAction('stop',()=>{audio.pause();seekMediaTo(0);scheduleKeepAliveSync();});
     setMediaAction('previoustrack',()=>switchMediaTrack(-1));
     setMediaAction('nexttrack',()=>switchMediaTrack(1));
@@ -366,7 +368,7 @@
   function favorite(s){const i=settings.favorites?.findIndex(x=>x.id===s.id);if(i>=0)settings.favorites.splice(i,1);else{settings.favorites=settings.favorites||[];settings.favorites.unshift(strip(s));}save();}
   function saveFavorite(s){settings.favorites=settings.favorites||[];if(!settings.favorites.some(x=>x.id===s.id)){settings.favorites.unshift(strip(s));save();}}
   function count(){const x=DOC.querySelector(`#${ID} [data-a="queue"] i`);if(x)x.textContent=queue.length;}
-  function show(s){const changed=current!==s;current=s;if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');img.style.visibility='visible';const applyCover=cover=>{if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;img.src=cover;large.src=cover;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{img.removeAttribute('src');large.removeAttribute('src');e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}};img.onerror=()=>{console.warn('[音乐播放器] 当前封面加载失败',{title:s.title,artist:s.artist,cover:img.src});img.removeAttribute('src');};applyCover(s.cover);}
+  function show(s){const changed=current!==s;current=s;if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');img.style.visibility='visible';const applyCover=cover=>{if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;img.src=cover;large.src=cover;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{img.removeAttribute('src');large.removeAttribute('src');e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}};img.onerror=()=>{console.warn('[音乐播放器] 当前封面加载失败',{title:s.title,artist:s.artist,cover:img.src});img.removeAttribute('src');};applyCover(s.cover);}
   const clock = seconds => { seconds=Number.isFinite(seconds)?Math.max(0,seconds):0;return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`; };
   const mediaDetail = error => { const m=error?.media||{};return `${error?.message||'播放失败'}；code: ${m.code??'无'}；message: ${m.message||'无'}；currentSrc: ${m.currentSrc||'空'}；networkState: ${m.networkState??'无'}；readyState: ${m.readyState??'无'}`; };
   function normalizeSongText(value){return String(value||'').toLowerCase().normalize('NFKC').replace(/\b(feat(?:uring)?|ft)\.?\b/g,' ').replace(/[\s·•._\-—–()（）\[\]【】'"“”‘’/\\,:：;；!?！？]+/g,'');}
@@ -505,7 +507,7 @@
     let f=host.querySelector('.settings-panel');
     if(f&&f.style.display!=='none'){f.style.display='none';return;}
     if(!f){
-      host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;z-index:3;padding:14px;color:#eee;font:14px system-ui;overflow:auto"><button type="button" data-x style="float:right">×</button><h3 style="margin:0 0 4px">播放器设置</h3><div class="set-grid"><label class="set-card"><input type="checkbox" name="auto"> 自动读取推荐</label><div class="set-card" data-keepalive-card style="grid-column:1/-1"><b>系统媒体保活</b> · <small data-keepalive-state style="color:#b8b8c2">未启动</small><br><small style="color:${mediaSession?'#9fdda9':'#ee9b9b'}">当前浏览器：${mediaSession?'已检测到 navigator.mediaSession':'未检测到 navigator.mediaSession'}</small><br><button type="button" data-keepalive-toggle style="margin:8px 0 6px!important">▶ 开启自动保活</button><br><small style="color:#c8c1b0;line-height:1.5">播放器空闲或歌曲暂停时自动运行静音媒体，歌曲恢复播放时立即让位，避免两个音频争抢锁屏与控制中心。扩展版使用内置 AAC，脚本版使用 44.1kHz 兼容 WAV；系统强制冻结浏览器时仍无法保证 100% 不掉线。</small></div><label class="set-card">播放器尺寸 <select name="playerSize"><option value="s">小巧</option><option value="m">标准</option><option value="l">宽屏</option></select></label><label class="set-card"><input type="checkbox" name="mobileLyrics"> 手机版悬浮歌词</label><label class="set-card">歌词主色 <input type="color" name="lyricColor"></label><label class="set-card"><input type="checkbox" name="gradient"> 启用渐变<br>渐变副色 <input type="color" name="gradientColor"></label></div><button type="button" data-reset-lyrics>重置歌词位置</button></form>`);
+      host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;z-index:3;padding:14px;color:#eee;font:14px system-ui;overflow:auto"><button type="button" data-x style="float:right">×</button><h3 style="margin:0 0 4px">播放器设置</h3><div class="set-grid"><label class="set-card"><input type="checkbox" name="auto"> 自动读取推荐</label><div class="set-card" data-keepalive-card style="grid-column:1/-1"><b>系统媒体保活</b> · <small data-keepalive-state style="color:#b8b8c2">未启动</small><br><small style="color:${mediaSession?'#9fdda9':'#ee9b9b'}">当前浏览器：${mediaSession?'已检测到 navigator.mediaSession':'未检测到 navigator.mediaSession'}</small><br><button type="button" data-keepalive-toggle style="margin:8px 0 6px!important">▶ 开启自动保活</button><br><small style="color:#c8c1b0;line-height:1.5">尚未选中歌曲时自动运行静音媒体；一旦选中歌曲，无论正在播放还是暂停，都由当前歌曲独占锁屏与控制中心，确保暂停后能重新播放。扩展版使用内置 AAC，脚本版使用 44.1kHz 兼容 WAV。</small></div><label class="set-card">播放器尺寸 <select name="playerSize"><option value="s">小巧</option><option value="m">标准</option><option value="l">宽屏</option></select></label><label class="set-card"><input type="checkbox" name="mobileLyrics"> 手机版悬浮歌词</label><label class="set-card">歌词主色 <input type="color" name="lyricColor"></label><label class="set-card"><input type="checkbox" name="gradient"> 启用渐变<br>渐变副色 <input type="color" name="gradientColor"></label></div><button type="button" data-reset-lyrics>重置歌词位置</button></form>`);
       f=host.querySelector('.settings-panel');
     }
     f.style.display='block';
