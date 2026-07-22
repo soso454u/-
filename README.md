@@ -16,18 +16,15 @@
 
 ## 安装
 
-1. 确保运行 SillyTavern 的设备已安装 Git。
-2. 打开 SillyTavern，点击顶部的「扩展」。
-3. 选择「安装扩展」。
-4. 粘贴本仓库的 HTTPS 链接：
+1. 打开 SillyTavern，点击顶部的「扩展」。
+2. 选择「安装扩展」。
+3. 粘贴本仓库的 HTTPS 链接：
 
    ```text
    https://github.com/soso454u/-
    ```
 
-5. 点击安装，并按照 SillyTavern 的提示重新加载页面。
-
-在支持扩展生命周期钩子的新版 SillyTavern 中，安装完成后会立即加载并显示播放器，不需要手动刷新。如果旧版 SillyTavern 显示重新加载提示，请按客户端提示操作。
+4. 点击安装，安装完成后会立即加载并显示播放器，不需要手动刷新。若不成功按照 SillyTavern 的提示重新加载页面。
 
 > 请不要粘贴 `raw.githubusercontent.com` 文件链接、ZIP 下载链接或单个 JS 文件链接。SillyTavern 需要的是完整 Git 仓库链接。
 
