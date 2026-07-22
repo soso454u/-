@@ -17,8 +17,23 @@
 #selene-music-extension-settings .selene-setting-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+#selene-music-extension-settings .selene-setting-actions .menu_button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  max-width: 100%;
+  min-width: max-content;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  writing-mode: horizontal-tb !important;
 }
 
 #selene-music-extension-settings .selene-keepalive-native {
