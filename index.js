@@ -41,7 +41,7 @@ function syncPanel() {
   $('#selene_menu_enabled').prop('checked', state.menuEnabled);
   $('#selene_keep_alive').prop('checked', state.keepAlive);
   const keepAliveStatus = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-status]`);
-  const keepAliveRetry = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-retry]`);
+  const keepAliveNative = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`);
   if (keepAliveStatus) {
     keepAliveStatus.textContent = state.keepAliveActive
       ? '系统媒体已播放，可在手机后台控制'
@@ -52,7 +52,7 @@ function syncPanel() {
         : '未启动';
     keepAliveStatus.dataset.state = state.keepAliveActive ? 'active' : state.keepAliveError ? 'error' : state.keepAlive ? 'pending' : 'off';
   }
-  if (keepAliveRetry) keepAliveRetry.hidden = !state.keepAlive || state.keepAliveActive;
+  if (keepAliveNative) keepAliveNative.hidden = !state.keepAlive || state.keepAliveActive;
   setStatus(state.visible ? '播放器窗口已显示' : '播放器窗口已隐藏', state.visible ? 'visible' : 'hidden');
 }
 
@@ -103,8 +103,8 @@ function mountPanel() {
           </label>
         </div>
         <small data-selene-keepalive-status data-state="off">未启动</small>
+        <div class="selene-keepalive-native" data-selene-keepalive-native hidden></div>
         <div class="selene-setting-actions">
-          <button type="button" class="menu_button" data-selene-keepalive-retry hidden>重试系统媒体</button>
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
           <button type="button" class="menu_button" data-selene-reset-window>重置窗口尺寸</button>
         </div>
@@ -118,10 +118,7 @@ function mountPanel() {
   bindSwitch('#selene_menu_enabled', (controls, value) => controls.setMenuEnabled(value));
   bindSwitch('#selene_keep_alive', (controls, value) => controls.setKeepAlive(value));
 
-  $(`#${PANEL_ID} [data-selene-keepalive-retry]`).on('click', async () => {
-    await api()?.setKeepAlive(true);
-    syncPanel();
-  });
+  api()?.attachKeepAliveControl?.(DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`));
   $(`#${PANEL_ID} [data-selene-reset-position]`).on('click', () => {
     api()?.resetPosition();
     syncPanel();

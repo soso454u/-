@@ -14,6 +14,7 @@
   const audio = new ROOT.Audio();
   const keepAliveAudio = new ROOT.Audio();
   keepAliveAudio.autoplay = true;
+  keepAliveAudio.controls = true;
   keepAliveAudio.loop = true;
   keepAliveAudio.preload = 'auto';
   keepAliveAudio.setAttribute('autoplay','');
@@ -22,7 +23,7 @@
   keepAliveAudio.setAttribute('webkit-playsinline','');
   keepAliveAudio.setAttribute('title','Selene Background Keep Alive');
   keepAliveAudio.id='selene-keepalive-media';
-  keepAliveAudio.style.cssText='position:fixed;width:1px;height:1px;left:-10px;bottom:-10px;opacity:.001;pointer-events:none';
+  keepAliveAudio.hidden=true;
   let keepAliveUrl = '', keepAliveObjectUrl = '', keepAliveTimer = 0, keepAlivePending = false, keepAliveError = '', keepAliveGestureArmed = false;
   function ensureKeepAliveUrl(){
     if(keepAliveUrl){if(keepAliveAudio.src!==keepAliveUrl)keepAliveAudio.src=keepAliveUrl;return keepAliveUrl;}
@@ -120,8 +121,8 @@
     if(keepAliveObjectUrl){try{ROOT.URL.revokeObjectURL(keepAliveObjectUrl);}catch{}keepAliveObjectUrl='';}
     keepAliveUrl='';
   }
-  keepAliveAudio.addEventListener('play',()=>{updateKeepAliveUI();emitPublicState();});
-  keepAliveAudio.addEventListener('pause',()=>{updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('play',()=>{keepAlivePending=false;keepAliveError='';updateKeepAliveUI();emitPublicState();});
+  keepAliveAudio.addEventListener('pause',()=>{if(settings.keepAlive&&!disposed)keepAlivePending=true;updateKeepAliveUI();emitPublicState();});
   keepAliveAudio.addEventListener('error',()=>{keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0; const lyricCache = new Map();
   function stopPlayback({release=true,stopBackground=false}={}){
@@ -499,6 +500,13 @@
   }
   function setPublicAutoShow(value){settings.autoShow=!!value;save();emitPublicState();return publicState();}
   function setPublicMenuEnabled(value){settings.menuEnabled=!!value;save();menu();emitPublicState();return publicState();}
+  function attachPublicKeepAliveControl(container){
+    if(container){
+      if(keepAliveAudio.parentElement!==container)container.appendChild(keepAliveAudio);
+      keepAliveAudio.hidden=false;
+    }
+    return publicState();
+  }
   async function setPublicKeepAlive(value){
     if(value)await startKeepAlive({persist:true,notify:true});
     else stopKeepAlive({persist:true,notify:true});
@@ -545,6 +553,7 @@
     setVisible:setPublicVisible,
     setAutoShow:setPublicAutoShow,
     setMenuEnabled:setPublicMenuEnabled,
+    attachKeepAliveControl:attachPublicKeepAliveControl,
     setKeepAlive:setPublicKeepAlive,
     resetPosition:resetPublicPosition,
     resetWindow:resetPublicWindow,

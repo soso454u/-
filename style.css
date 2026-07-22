@@ -21,8 +21,14 @@
   margin-bottom: 10px;
 }
 
-#selene-music-extension-settings [data-selene-keepalive-retry][hidden] {
-  display: none !important;
+#selene-music-extension-settings .selene-keepalive-native {
+  margin: 8px 0 10px;
+}
+
+#selene-music-extension-settings .selene-keepalive-native audio {
+  display: block;
+  width: min(100%, 480px);
+  height: 40px;
 }
 
 #selene-music-extension-settings [data-selene-status],
