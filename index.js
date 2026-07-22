@@ -44,7 +44,9 @@ function syncPanel() {
   const keepAliveNative = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`);
   if (keepAliveStatus) {
     keepAliveStatus.textContent = state.keepAliveActive
-      ? '未选歌曲，静音保活运行中'
+      ? state.keepAliveManualTakeover
+        ? '已手动回到静音保活'
+        : '未选歌曲，静音保活运行中'
       : state.keepAliveSuspended
         ? '当前歌曲已接管系统媒体'
       : state.keepAliveError
@@ -107,11 +109,12 @@ function mountPanel() {
         <small data-selene-keepalive-status data-state="off">未启动</small>
         <div class="selene-keepalive-native" data-selene-keepalive-native hidden></div>
         <div class="selene-setting-actions">
+          <button type="button" class="menu_button" data-selene-return-keepalive>回到保活</button>
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
           <button type="button" class="menu_button" data-selene-reset-window>重置窗口尺寸</button>
         </div>
         <small data-selene-status>正在检查播放器…</small>
-        <small class="selene-keepalive-note">启用后会自动播放本地长时静音媒体，让 iOS/Chrome 建立后台媒体会话。</small>
+        <small class="selene-keepalive-note">“回到保活”会让静音媒体手动接管；下次播放歌曲时会自动让位。</small>
       </div>
     </div>`);
 
@@ -121,6 +124,15 @@ function mountPanel() {
   bindSwitch('#selene_keep_alive', (controls, value) => controls.setKeepAlive(value));
 
   api()?.attachKeepAliveControl?.(DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`));
+  $(`#${PANEL_ID} [data-selene-return-keepalive]`).on('click', async () => {
+    const controls = api();
+    if (!controls?.returnToKeepAlive) {
+      setStatus('播放器版本过旧，请刷新页面', 'error');
+      return;
+    }
+    await controls.returnToKeepAlive();
+    syncPanel();
+  });
   $(`#${PANEL_ID} [data-selene-reset-position]`).on('click', () => {
     api()?.resetPosition();
     syncPanel();

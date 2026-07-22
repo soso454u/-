@@ -24,7 +24,7 @@
   keepAliveAudio.setAttribute('title','Selene Background Keep Alive');
   keepAliveAudio.id='selene-keepalive-media';
   keepAliveAudio.hidden=true;
-  let keepAliveUrl = '', keepAliveObjectUrl = '', keepAliveTimer = 0, keepAliveSyncTimer = 0, keepAlivePending = false, keepAliveError = '', keepAliveGestureArmed = false, keepAliveSuspendedForTrack = false, keepAliveStarting = false, keepAliveFallbackTried = false;
+  let keepAliveUrl = '', keepAliveObjectUrl = '', keepAliveTimer = 0, keepAliveSyncTimer = 0, keepAlivePending = false, keepAliveError = '', keepAliveGestureArmed = false, keepAliveSuspendedForTrack = false, keepAliveManualTakeover = false, keepAliveStarting = false, keepAliveFallbackTried = false;
   function useCompatibilityKeepAliveUrl(){
     if(!keepAliveObjectUrl){
       // 44.1kHz / 16-bit / mono PCM is accepted by significantly more mobile WebViews than the old 8kHz fallback.
@@ -44,13 +44,13 @@
   }
   // Once a song is selected, it must keep ownership of Media Session even while paused.
   // Otherwise the silent keepalive becomes the active system card and iOS/macOS keeps showing a pause action.
-  function mainTrackOwnsMediaSession(){return !!current;}
+  function mainTrackOwnsMediaSession(){return !!current&&!keepAliveManualTakeover;}
   function keepAliveActive(){return !!settings.keepAlive&&!keepAliveSuspendedForTrack&&!keepAliveAudio.paused&&!keepAliveAudio.ended;}
   function updateKeepAliveUI(){
     const panel=DOC.querySelector(`#${ID} .settings-panel`),state=panel?.querySelector('[data-keepalive-state]'),button=panel?.querySelector('[data-keepalive-toggle]'),card=panel?.querySelector('[data-keepalive-card]');
     if(!state||!button)return;
     const active=keepAliveActive(),suspended=!!settings.keepAlive&&keepAliveSuspendedForTrack,pending=!!settings.keepAlive&&keepAlivePending;
-    state.textContent=active?'未选歌曲，保活运行中':suspended?'当前歌曲已接管系统媒体':keepAliveError?'启动失败':pending?'等待首次播放授权':'未启动';
+    state.textContent=active?(keepAliveManualTakeover?'已手动回到静音保活':'未选歌曲，保活运行中'):suspended?'当前歌曲已接管系统媒体':keepAliveError?'启动失败':pending?'等待首次播放授权':'未启动';
     state.style.color=active||suspended?'#9fdda9':keepAliveError?'#ee9b9b':pending?'#f2cf70':'#b8b8c2';
     button.textContent=settings.keepAlive?'■ 关闭自动保活':'▶ 开启自动保活';
     card?.classList.remove('active');
@@ -73,6 +73,7 @@
     if(settings.keepAlive)syncKeepAliveWithPlayback();
   }
   function pauseKeepAliveForTrack(){
+    keepAliveManualTakeover=false;
     keepAliveSuspendedForTrack=!!settings.keepAlive;keepAlivePending=false;keepAliveError='';disarmKeepAliveGesture();
     try{if(!keepAliveAudio.paused)keepAliveAudio.pause();}catch{}
     updateKeepAliveUI();emitPublicState();
@@ -123,6 +124,7 @@
     keepAlivePending=false;
     keepAliveError='';
     keepAliveSuspendedForTrack=false;
+    keepAliveManualTakeover=false;
     disarmKeepAliveGesture();
     if(keepAliveTimer){ROOT.clearInterval(keepAliveTimer);keepAliveTimer=0;}
     if(keepAliveSyncTimer){ROOT.clearTimeout(keepAliveSyncTimer);keepAliveSyncTimer=0;}
@@ -647,6 +649,7 @@
       keepAlive:!!settings.keepAlive,
       keepAliveActive:keepAliveActive(),
       keepAliveSuspended:!!settings.keepAlive&&keepAliveSuspendedForTrack,
+      keepAliveManualTakeover:!!settings.keepAlive&&keepAliveManualTakeover,
       keepAliveError,
     };
   }
@@ -673,6 +676,21 @@
     if(value)await startKeepAlive({persist:true,notify:true});
     else stopKeepAlive({persist:true,notify:true});
     emitPublicState();
+    return publicState();
+  }
+  async function returnPublicToKeepAlive(){
+    settings.keepAlive=true;
+    save();
+    try{audio.pause();}catch{}
+    keepAliveManualTakeover=true;
+    keepAliveSuspendedForTrack=false;
+    keepAlivePending=false;
+    keepAliveError='';
+    const started=await startKeepAlive({persist:false,notify:false});
+    emitPublicState();
+    if(started)toast('success','已回到静音保活，播放歌曲时会自动让位');
+    else if(keepAlivePending)toast('warning','请再点击一次页面，启动静音保活');
+    else if(keepAliveError)toast('error',`回到保活失败：${keepAliveError}`);
     return publicState();
   }
   function resetPublicPosition(){
@@ -717,6 +735,7 @@
     setMenuEnabled:setPublicMenuEnabled,
     attachKeepAliveControl:attachPublicKeepAliveControl,
     setKeepAlive:setPublicKeepAlive,
+    returnToKeepAlive:returnPublicToKeepAlive,
     resetPosition:resetPublicPosition,
     resetWindow:resetPublicWindow,
   };
