@@ -2,8 +2,9 @@
   "display_name": "Selene 音乐播放器",
   "loading_order": 10,
   "js": "index.js",
+  "css": "style.css",
   "author": "Selene海莉",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "homePage": "https://github.com/soso454u/-",
   "auto_update": true,
   "hooks": {

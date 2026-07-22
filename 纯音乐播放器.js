@@ -8,7 +8,7 @@
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
   const GD_SOURCES = ['netease','joox','bilibili'];
-  const defaults = { enabled: true, autoLoad: true, theme: 'auto', skin: 'film', playerSize: 'm', playMode: 'loop', desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, windowPinned: false, immersive: false, miniMode: false, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'film', playerSize: 'm', playMode: 'loop', desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, windowPinned: false, immersive: false, miniMode: false, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   let settings;
   try { const saved=JSON.parse(ROOT.localStorage.getItem(KEY) || '{}');settings = { ...defaults, ...saved, position: { ...defaults.position, ...(saved.position || {}) }, mobilePosition: { ...defaults.mobilePosition, ...(saved.mobilePosition || {}) }, desktopPosition: { ...defaults.desktopPosition, ...(saved.desktopPosition || {}) }, mobileLyricsPosition: { ...defaults.mobileLyricsPosition, ...(saved.mobileLyricsPosition || {}) } }; if(!Number.isFinite(Number(settings.mobileLyricsPosition?.top)))settings.mobileLyricsPosition={left:Number(settings.mobileLyricsPosition?.left)||50,top:50}; } catch { settings = { ...defaults }; }
   const audio = new ROOT.Audio();
@@ -353,7 +353,7 @@
   }
   function bind(el){el.querySelector('.close').onclick=()=>{settings.enabled=false;save();el.classList.add('hidden');menu();};el.querySelector('.gear').onclick=settingsDialog;el.querySelector('form').onsubmit=e=>{e.preventDefault();search(el.querySelector('input').value);};el.querySelector('.actions').onclick=e=>{const a=e.target.dataset.a;if(a==='rec')recommendation(true);if(a==='queue')render(queue,'播放队列','queue');if(a==='fav')render(settings.favorites||[],'收藏歌曲','fav');if(a==='fav-queue'){const favorites=settings.favorites||[],known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(a==='mode'){settings.playMode={loop:'one',one:'shuffle',shuffle:'loop'}[settings.playMode]||'loop';updatePlayMode();save();}if(a==='lock'){settings.lyricsLocked=!settings.lyricsLocked;updateLyricsLock();paintTime();save();}if(a==='playlist'){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}};el.querySelector('.controls').onclick=e=>{const c=e.target.dataset.c;if(c==='play'&&current){if(audio.paused){if(!audio.currentSrc&&!audio.src)play(current);else audio.play().catch(error=>{if(isNotAllowed(error))setStatus('浏览器阻止播放，请再次点击播放按钮');});}else audio.pause();}if(c==='back'||c==='forward'){if(Number.isFinite(audio.duration))audio.currentTime=Math.max(0,Math.min(audio.duration,audio.currentTime+(c==='forward'?10:-10)));}if(c==='prev'||c==='next'){const song=nextSong(c==='next'?1:-1);if(song)play(song);}};el.querySelector('.progress').oninput=e=>{if(Number.isFinite(audio.duration)&&audio.duration>0)audio.currentTime=audio.duration*e.target.value/1000;};el.querySelector('.volume input').oninput=e=>{audio.volume=e.target.value/100;settings.volume=audio.volume;save();};let p;const head=el.querySelector('.head');head.style.touchAction='none';head.onpointerdown=e=>{if(e.target.closest('button')||(e.pointerType==='mouse'&&(e.button!==0||!e.isPrimary)))return;const rect=el.getBoundingClientRect();p={id:e.pointerId,x:e.clientX,y:e.clientY,l:rect.left,t:rect.top,mobile:isMobile()};head.setPointerCapture?.(e.pointerId);e.preventDefault();};head.onpointermove=e=>{if(!p||e.pointerId!==p.id||(e.pointerType==='mouse'&&(e.buttons&1)!==1))return;if(p.mobile){const width=ROOT.visualViewport?.width||ROOT.innerWidth,height=ROOT.visualViewport?.height||ROOT.innerHeight,left=Math.max(6,Math.min(width-el.offsetWidth-6,p.l+e.clientX-p.x)),top=Math.max(6,Math.min(height-el.offsetHeight-6,p.t+e.clientY-p.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}else{el.style.right=`${Math.max(0,parseFloat(el.style.right)-e.clientX+p.x)}px`;el.style.bottom=`${Math.max(0,parseFloat(el.style.bottom)-e.clientY+p.y)}px`;p.x=e.clientX;p.y=e.clientY;}};const finish=()=>{if(!p)return;if(p.mobile){const rect=el.getBoundingClientRect();settings.mobilePosition={left:Math.round(rect.left),top:Math.round(rect.top/(ROOT.visualViewport?.height||ROOT.innerHeight)*100)};}else settings.position={right:parseFloat(el.style.right),bottom:parseFloat(el.style.bottom)};save();p=null;};head.onpointerup=finish;head.onpointercancel=finish;head.onlostpointercapture=finish;}
   function menu(){
-    const add=()=>{menuAddTimer=0;if(disposed)return;const existing=DOC.getElementById(`${ID}-menu`);if(existing?.isConnected)return;existing?.remove();const host=['#extensionsMenu .list-group','#extensionsMenuList','#extensionsMenuDrawer .list-group','#extensionsMenuDrawer','#extensionsMenu .drawer-content','#extensionsMenu','[data-testid="extensions-menu"]'].map(x=>DOC.querySelector(x)).find(Boolean);if(!host)return;const x=DOC.createElement('div');x.id=`${ID}-menu`;x.className='list-group-item flex-container flexGap5 interactable';x.setAttribute('role','button');x.tabIndex=0;x.innerHTML=`<div class="fa-fw fa-solid fa-music extensionsMenuExtensionButton"></div><span>音乐播放器</span>`;const toggle=()=>{settings.enabled=!settings.enabled;save();DOC.getElementById(ID)?.classList.toggle('hidden',!settings.enabled);};x.onclick=toggle;x.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};host.appendChild(x);};
+    const add=()=>{menuAddTimer=0;const existing=DOC.getElementById(`${ID}-menu`);if(disposed||settings.menuEnabled===false){existing?.remove();return;}if(existing?.isConnected)return;existing?.remove();const host=['#extensionsMenu .list-group','#extensionsMenuList','#extensionsMenuDrawer .list-group','#extensionsMenuDrawer','#extensionsMenu .drawer-content','#extensionsMenu','[data-testid="extensions-menu"]'].map(x=>DOC.querySelector(x)).find(Boolean);if(!host)return;const x=DOC.createElement('div');x.id=`${ID}-menu`;x.className='list-group-item flex-container flexGap5 interactable';x.setAttribute('role','button');x.tabIndex=0;x.innerHTML=`<div class="fa-fw fa-solid fa-music extensionsMenuExtensionButton"></div><span>音乐播放器</span>`;const toggle=()=>{settings.enabled=!settings.enabled;save();DOC.getElementById(ID)?.classList.toggle('hidden',!settings.enabled);emitPublicState();};x.onclick=toggle;x.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};host.appendChild(x);};
     const btn=DOC.querySelector('#extensionsMenuButton,#extensions_menu_button,[data-testid="extensions-menu-button"]'),previous=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(previous&&previous.btn!==btn){previous.btn?.removeEventListener('click',previous.handler);previous.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}if(btn&&!ROOT.__SAFE_MUSIC_MENU_HANDLER__){const handler=()=>{if(menuAddTimer)ROOT.clearTimeout(menuAddTimer);menuAddTimer=ROOT.setTimeout(add,80);};ROOT.__SAFE_MUSIC_MENU_HANDLER__={btn,handler};btn.dataset.safeMusic='1';btn.addEventListener('click',handler);}add();
   }
   function hardenResizeInteractions(el){
@@ -462,4 +462,78 @@
   function bindTitleGesture(el){const title=el.querySelector('.head b'),activateMini=title.onclick,viewport=()=>({width:ROOT.visualViewport?.width||ROOT.innerWidth||390,height:ROOT.visualViewport?.height||ROOT.innerHeight||700});let gesture=null;title.onclick=e=>e?.preventDefault?.();title.onpointerdown=e=>{if(e.pointerType==='mouse'&&e.button!==0)return;const rect=el.getBoundingClientRect();gesture={id:e.pointerId,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,long:false,timer:ROOT.setTimeout(()=>{if(gesture)gesture.long=true;},240)};title.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};title.onpointermove=e=>{if(!gesture||e.pointerId!==gesture.id||!gesture.long||settings.windowPinned)return;const view=viewport(),left=Math.max(6,Math.min(view.width-el.offsetWidth-6,gesture.left+e.clientX-gesture.x)),top=Math.max(6,Math.min(view.height-el.offsetHeight-6,gesture.top+e.clientY-gesture.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');e.preventDefault();};title.onpointerup=e=>{if(!gesture)return;ROOT.clearTimeout(gesture.timer);const wasLong=gesture.long;gesture=null;if(!wasLong)activateMini?.call(title,{stopPropagation(){}});else save();};title.onpointercancel=()=>{if(gesture)ROOT.clearTimeout(gesture.timer);gesture=null;};}
   function bindListBatchActions(el){el.querySelector('[data-a="fav-queue"]')?.remove();const inject=kind=>{const box=el.querySelector('.list');if(!box||box.hidden)return;box.querySelector('.batch-bar')?.remove();const bar=DOC.createElement('div');bar.className='batch-bar';bar.innerHTML=`<b>${kind==='fav'?'收藏歌曲':'播放队列'}</b>${kind==='fav'?'<button data-batch-queue>收藏入队</button>':''}<button data-batch-play>一键播放</button>`;box.prepend(bar);bar.onclick=e=>{const favorites=settings.favorites||[];if(e.target.closest('[data-batch-queue]')){const known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(e.target.closest('[data-batch-play]')){if(kind==='fav'){queue=favorites.map(strip);count();}if(!queue.length){setStatus('没有可播放的歌曲');return;}queueIndex=0;play(queue[0]);}};};el.querySelector('.actions').addEventListener('click',e=>{const action=e.target.dataset.a;if(action==='fav'||action==='queue')ROOT.setTimeout(()=>inject(action),0);});}
   function bindListHeadingActions(el){el.querySelector('[data-a="fav-queue"]')?.remove();}
+  function publicState(){
+    const player=DOC.getElementById(ID);
+    return {
+      loaded:!!player,
+      visible:!!player&&!player.classList.contains('hidden'),
+      autoShow:settings.autoShow!==false,
+      menuEnabled:settings.menuEnabled!==false,
+      keepAlive:!!settings.keepAlive,
+      keepAliveActive:keepAliveActive(),
+    };
+  }
+  function emitPublicState(){
+    try{ROOT.dispatchEvent(new ROOT.CustomEvent('selene-music-player-state',{detail:publicState()}));}catch{}
+  }
+  function setPublicVisible(value,{persist=true}={}){
+    settings.enabled=!!value;
+    if(persist)save();
+    DOC.getElementById(ID)?.classList.toggle('hidden',!settings.enabled);
+    emitPublicState();
+    return publicState();
+  }
+  function setPublicAutoShow(value){settings.autoShow=!!value;save();emitPublicState();return publicState();}
+  function setPublicMenuEnabled(value){settings.menuEnabled=!!value;save();menu();emitPublicState();return publicState();}
+  async function setPublicKeepAlive(value){
+    if(value)await startKeepAlive({persist:true,notify:true});
+    else stopKeepAlive({persist:true,notify:true});
+    emitPublicState();
+    return publicState();
+  }
+  function resetPublicPosition(){
+    settings.position={...defaults.position};
+    settings.mobilePosition={...defaults.mobilePosition};
+    settings.windowPinned=false;
+    const player=DOC.getElementById(ID);
+    if(player){
+      player.classList.remove('pinned');
+      for(const key of ['left','top','right','bottom'])player.style.removeProperty(key);
+      if(isMobile())applyMobilePosition(player);
+      else{
+        player.style.setProperty('right',`${defaults.position.right}px`,'important');
+        player.style.setProperty('bottom',`${defaults.position.bottom}px`,'important');
+        player.style.setProperty('left','auto','important');
+        player.style.setProperty('top','auto','important');
+      }
+    }
+    save();emitPublicState();return publicState();
+  }
+  function resetPublicWindow(){
+    settings.windowSize=null;
+    settings.miniRestore=null;
+    settings.miniMode=false;
+    settings.immersive=false;
+    settings.windowPinned=false;
+    settings.playerSize='m';
+    const player=DOC.getElementById(ID);
+    if(player){
+      player.classList.remove('mini','immersive','pinned','ui-size-s','ui-size-l');
+      player.classList.add('ui-size-m');
+      for(const key of ['width','height','min-width','min-height','max-width','max-height'])player.style.removeProperty(key);
+      applyPlayerSize(player);
+      if(isMobile())applyMobilePosition(player);
+    }
+    save();emitPublicState();return publicState();
+  }
+  ROOT.__SELENE_MUSIC_PLAYER__={
+    getState:publicState,
+    setVisible:setPublicVisible,
+    setAutoShow:setPublicAutoShow,
+    setMenuEnabled:setPublicMenuEnabled,
+    setKeepAlive:setPublicKeepAlive,
+    resetPosition:resetPublicPosition,
+    resetWindow:resetPublicWindow,
+  };
+  emitPublicState();
 })();

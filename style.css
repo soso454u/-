@@ -1,0 +1,43 @@
+#selene-music-extension-settings .inline-drawer-content {
+  padding: 8px 10px 12px;
+}
+
+#selene-music-extension-settings .selene-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 4px 0 12px;
+}
+
+#selene-music-extension-settings .checkbox_label {
+  align-items: center;
+  margin: 0;
+}
+
+#selene-music-extension-settings .selene-setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#selene-music-extension-settings [data-selene-status],
+#selene-music-extension-settings .selene-keepalive-note {
+  display: block;
+  margin-top: 6px;
+  opacity: 0.82;
+}
+
+#selene-music-extension-settings [data-selene-status][data-state='visible'] {
+  color: #8fd19a;
+}
+
+#selene-music-extension-settings [data-selene-status][data-state='error'] {
+  color: #ee9b9b;
+}
+
+@media (max-width: 700px) {
+  #selene-music-extension-settings .selene-setting-grid {
+    grid-template-columns: 1fr;
+  }
+}
