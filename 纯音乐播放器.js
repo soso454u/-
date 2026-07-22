@@ -13,8 +13,10 @@
   try { const saved=JSON.parse(ROOT.localStorage.getItem(KEY) || '{}');settings = { ...defaults, ...saved, position: { ...defaults.position, ...(saved.position || {}) }, mobilePosition: { ...defaults.mobilePosition, ...(saved.mobilePosition || {}) }, desktopPosition: { ...defaults.desktopPosition, ...(saved.desktopPosition || {}) }, mobileLyricsPosition: { ...defaults.mobileLyricsPosition, ...(saved.mobileLyricsPosition || {}) } }; if(!Number.isFinite(Number(settings.mobileLyricsPosition?.top)))settings.mobileLyricsPosition={left:Number(settings.mobileLyricsPosition?.left)||50,top:50}; } catch { settings = { ...defaults }; }
   const audio = new ROOT.Audio();
   const keepAliveAudio = new ROOT.Audio();
+  keepAliveAudio.autoplay = true;
   keepAliveAudio.loop = true;
   keepAliveAudio.preload = 'auto';
+  keepAliveAudio.setAttribute('autoplay','');
   keepAliveAudio.playsInline = true;
   keepAliveAudio.setAttribute('playsinline','');
   keepAliveAudio.setAttribute('webkit-playsinline','');
@@ -42,7 +44,7 @@
     const panel=DOC.querySelector(`#${ID} .settings-panel`),state=panel?.querySelector('[data-keepalive-state]'),button=panel?.querySelector('[data-keepalive-toggle]'),card=panel?.querySelector('[data-keepalive-card]');
     if(!state||!button)return;
     const active=keepAliveActive(),pending=!!settings.keepAlive&&keepAlivePending;
-    state.textContent=active?'系统媒体已启动':keepAliveError?'启动失败':pending?'等待一次点击授权':'未启动';
+    state.textContent=active?'系统媒体已启动':keepAliveError?'启动失败':pending?'系统媒体尚未开始播放':'未启动';
     state.style.color=active?'#9fdda9':keepAliveError?'#ee9b9b':pending?'#f2cf70':'#b8b8c2';
     button.textContent=active?'■ 停止保活':settings.keepAlive?'▶ 重新启动保活':'▶ 启动保活';
     card?.classList.remove('active');
@@ -51,16 +53,14 @@
   function disarmKeepAliveGesture(){
     if(!keepAliveGestureArmed)return;
     keepAliveGestureArmed=false;
-    DOC.removeEventListener('pointerdown',resumeKeepAliveFromGesture,true);
+    DOC.removeEventListener('click',resumeKeepAliveFromGesture,true);
     DOC.removeEventListener('keydown',resumeKeepAliveFromGesture,true);
-    DOC.removeEventListener('touchend',resumeKeepAliveFromGesture,true);
   }
   function armKeepAliveGesture(){
     if(keepAliveGestureArmed||!settings.keepAlive)return;
     keepAliveGestureArmed=true;
-    DOC.addEventListener('pointerdown',resumeKeepAliveFromGesture,true);
+    DOC.addEventListener('click',resumeKeepAliveFromGesture,true);
     DOC.addEventListener('keydown',resumeKeepAliveFromGesture,true);
-    DOC.addEventListener('touchend',resumeKeepAliveFromGesture,true);
   }
   function resumeKeepAliveFromGesture(){
     disarmKeepAliveGesture();
@@ -89,7 +89,7 @@
       keepAliveError=keepAlivePending?'':String(error?.message||'媒体无法播放');
       if(keepAlivePending)armKeepAliveGesture();
       updateKeepAliveUI();
-      if(notify)toast(keepAlivePending?'warning':'error',keepAlivePending?'浏览器需要一次点击授权，请再点一次启动保活':`保活启动失败：${error?.message||'未知错误'}`);
+      if(notify)toast(keepAlivePending?'warning':'error',keepAlivePending?'系统媒体未能自动启动，请点击“重新启动保活”':`保活启动失败：${error?.message||'未知错误'}`);
       console.warn('[音乐播放器] 后台保活启动失败',error);
       return false;
     }

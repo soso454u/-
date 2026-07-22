@@ -41,16 +41,18 @@ function syncPanel() {
   $('#selene_menu_enabled').prop('checked', state.menuEnabled);
   $('#selene_keep_alive').prop('checked', state.keepAlive);
   const keepAliveStatus = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-status]`);
+  const keepAliveRetry = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-retry]`);
   if (keepAliveStatus) {
     keepAliveStatus.textContent = state.keepAliveActive
       ? '系统媒体已播放，可在手机后台控制'
       : state.keepAliveError
         ? `启动失败：${state.keepAliveError}`
       : state.keepAlive
-        ? '等待浏览器播放授权，请点击页面一次'
+        ? '系统媒体尚未开始播放'
         : '未启动';
     keepAliveStatus.dataset.state = state.keepAliveActive ? 'active' : state.keepAliveError ? 'error' : state.keepAlive ? 'pending' : 'off';
   }
+  if (keepAliveRetry) keepAliveRetry.hidden = !state.keepAlive || state.keepAliveActive;
   setStatus(state.visible ? '播放器窗口已显示' : '播放器窗口已隐藏', state.visible ? 'visible' : 'hidden');
 }
 
@@ -78,7 +80,7 @@ function mountPanel() {
   getContainer().append(`
     <div id="${PANEL_ID}" class="inline-drawer selene-music-drawer">
       <div class="inline-drawer-toggle inline-drawer-header">
-        <b><i class="fa-solid fa-music"></i> Selene 音乐播放器</b>
+        <b>Selene 音乐播放器</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
       <div class="inline-drawer-content">
@@ -102,11 +104,12 @@ function mountPanel() {
         </div>
         <small data-selene-keepalive-status data-state="off">未启动</small>
         <div class="selene-setting-actions">
+          <button type="button" class="menu_button" data-selene-keepalive-retry hidden>重试系统媒体</button>
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
           <button type="button" class="menu_button" data-selene-reset-window>重置窗口尺寸</button>
         </div>
         <small data-selene-status>正在检查播放器…</small>
-        <small class="selene-keepalive-note">启用后会播放本地长时静音媒体，让 iOS/Chrome 建立后台媒体会话；首次启用可能需要再点击一次页面授权。</small>
+        <small class="selene-keepalive-note">启用后会自动播放本地长时静音媒体，让 iOS/Chrome 建立后台媒体会话。</small>
       </div>
     </div>`);
 
@@ -115,6 +118,10 @@ function mountPanel() {
   bindSwitch('#selene_menu_enabled', (controls, value) => controls.setMenuEnabled(value));
   bindSwitch('#selene_keep_alive', (controls, value) => controls.setKeepAlive(value));
 
+  $(`#${PANEL_ID} [data-selene-keepalive-retry]`).on('click', async () => {
+    await api()?.setKeepAlive(true);
+    syncPanel();
+  });
   $(`#${PANEL_ID} [data-selene-reset-position]`).on('click', () => {
     api()?.resetPosition();
     syncPanel();
