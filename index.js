@@ -52,7 +52,7 @@ function bindSwitch(selector, setter) {
   });
 }
 
-jQuery(() => {
+function mountPanel() {
   if (DOC.getElementById(PANEL_ID)) return;
 
   const getContainer = () => $(
@@ -127,7 +127,38 @@ jQuery(() => {
     panelObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
   }
   syncPanel();
-});
+}
+
+async function ensurePlayer() {
+  if (DOC.getElementById('safe-music-player')) return;
+  const playerUrl = new URL('./纯音乐播放器.js', import.meta.url);
+  playerUrl.searchParams.set('reload', String(Date.now()));
+  await import(playerUrl.href);
+}
+
+async function activateImmediately({ announce = false } = {}) {
+  await ensurePlayer();
+  mountPanel();
+  api()?.setVisible(true);
+  syncPanel();
+  if (announce) ROOT.toastr?.success?.('Selene 音乐播放器已加载');
+}
+
+jQuery(mountPanel);
+
+export async function onInstall() {
+  await activateImmediately({ announce: true });
+}
+
+export async function onUpdate() {
+  await ensurePlayer();
+  mountPanel();
+  syncPanel();
+}
+
+export async function onEnable() {
+  await activateImmediately();
+}
 
 export function onDisable() {
   panelObserver?.disconnect();

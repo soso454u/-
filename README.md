@@ -27,6 +27,8 @@
 
 5. 点击安装，并按照 SillyTavern 的提示重新加载页面。
 
+在支持扩展生命周期钩子的新版 SillyTavern 中，安装完成后会立即加载并显示播放器，不需要手动刷新。如果旧版 SillyTavern 显示重新加载提示，请按客户端提示操作。
+
 > 请不要粘贴 `raw.githubusercontent.com` 文件链接、ZIP 下载链接或单个 JS 文件链接。SillyTavern 需要的是完整 Git 仓库链接。
 
 ## 使用说明
