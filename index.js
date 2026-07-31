@@ -38,6 +38,7 @@ function syncPanel() {
 
   const state = controls.getState();
   $('#selene_player_visible').prop('checked', state.visible);
+  $('#selene_companion_visible').prop('checked', state.companionVisible);
   $('#selene_auto_show').prop('checked', state.autoShow);
   $('#selene_menu_enabled').prop('checked', state.menuEnabled);
   $('#selene_keep_alive').prop('checked', state.keepAlive);
@@ -98,6 +99,10 @@ function mountPanel() {
             <input id="selene_auto_show" type="checkbox">
             <span>启动时自动显示</span>
           </label>
+          <label class="checkbox_label" for="selene_companion_visible">
+            <input id="selene_companion_visible" type="checkbox">
+            <span>显示角色陪听窗口</span>
+          </label>
           <label class="checkbox_label" for="selene_menu_enabled">
             <input id="selene_menu_enabled" type="checkbox">
             <span>显示扩展菜单入口</span>
@@ -120,6 +125,7 @@ function mountPanel() {
     </div>`);
 
   bindSwitch('#selene_player_visible', (controls, value) => controls.setVisible(value));
+  bindSwitch('#selene_companion_visible', (controls, value) => controls.setCompanionVisible(value));
   bindSwitch('#selene_auto_show', (controls, value) => controls.setAutoShow(value));
   bindSwitch('#selene_menu_enabled', (controls, value) => controls.setMenuEnabled(value));
   bindSwitch('#selene_keep_alive', (controls, value) => controls.setKeepAlive(value));
