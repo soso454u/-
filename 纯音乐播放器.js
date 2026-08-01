@@ -718,7 +718,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const button=el.querySelector('[data-a="world-rec"]');if(button)button.onclick=event=>{event.preventDefault();event.stopPropagation();readWorldRecommendations();};
     const favorites=el.querySelector('[data-a="favorites"]');if(favorites)favorites.onclick=event=>{event.preventDefault();event.stopPropagation();showPlaylistSongs(favoritePlaylist());};
   }
-  const PLAYLIST_SOURCE_LABELS={netease:'网易云音乐',tencent:'QQ 音乐',kugou:'酷狗音乐'};
+  const PLAYLIST_SOURCE_LABELS={netease:'网易云音乐',tencent:'QQ 音乐',kugou:'酷狗音乐'},PLAYLIST_IMPORT_LIMIT=1000;
   function favoritePlaylist(){settings.favorites=settings.favorites||[];return{id:'selene-favorites',name:'收藏歌单',songs:settings.favorites,isFavorites:true};}
   function playlistCatalog(){settings.playlists=settings.playlists||[];return[favoritePlaylist(),...settings.playlists];}
   function createPlaylist(name){
@@ -728,6 +728,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const existing=settings.playlists.find(item=>item.name===name);if(existing)return existing;
     const playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now()};
     settings.playlists.unshift(playlist);save();return playlist;
+  }
+  function renamePlaylist(playlist){
+    if(!playlist||playlist.isFavorites)return;
+    const answer=ROOT.prompt?.('请输入新的歌单名称',playlist.name);if(answer===null||answer===undefined)return;
+    const name=String(answer).trim();if(!name){setStatus('歌单名称不能为空');toast('warning','歌单名称不能为空');return;}
+    if(name==='收藏歌单'){setStatus('“收藏歌单”是系统保留名称');toast('warning','请换一个歌单名称');return;}
+    settings.playlists=settings.playlists||[];if(settings.playlists.some(item=>item!==playlist&&item.name===name)){setStatus(`已经有名为“${name}”的歌单`);toast('warning','歌单名称已存在');return;}
+    const oldName=playlist.name;playlist.name=name;playlist.updatedAt=Date.now();save();showPlaylists();setStatus(`已将“${oldName}”改名为“${name}”`);toast('success','歌单名称已更新');
   }
   function askForPlaylist(){
     const lists=playlistCatalog();
@@ -744,11 +752,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function showPlaylists(){
     const box=DOC.querySelector(`#${ID} .list`);if(!box)return;settings.playlists=settings.playlists||[];const lists=settings.playlists;box.hidden=false;
-    box.innerHTML=`<div class="row batch-heading feature-heading"><b style="margin-right:auto">我的歌单</b><button data-import-playlist>导入歌单</button><button data-new-playlist>＋ 新建</button></div>${lists.map((playlist,index)=>`<article class="row" data-playlist-index="${index}"><div class="playlist-summary"><div><b>${esc(playlist.name)}</b><span>${playlist.songs?.length||0} 首歌曲${playlist.importSource?` · ${esc(PLAYLIST_SOURCE_LABELS[playlist.importSource]||playlist.importSource)}`:''}</span></div><span class="row-tools"><button data-playlist-play title="播放歌单">▶</button><button data-playlist-open title="打开歌单">查看</button><button data-playlist-delete title="删除歌单">×</button></span></div></article>`).join('')||'<div class="row">还没有自建歌单，可以导入平台歌单或点击“＋ 新建”</div>'}`;
+    box.innerHTML=`<div class="row batch-heading feature-heading"><b style="margin-right:auto">我的歌单</b><button data-import-playlist>导入歌单</button><button data-new-playlist>＋ 新建</button></div>${lists.map((playlist,index)=>`<article class="row" data-playlist-index="${index}"><div class="playlist-summary"><div><b>${esc(playlist.name)}</b><span>${playlist.songs?.length||0} 首歌曲${playlist.importSource?` · ${esc(PLAYLIST_SOURCE_LABELS[playlist.importSource]||playlist.importSource)}`:''}</span></div><span class="row-tools"><button data-playlist-play title="播放歌单">▶</button><button data-playlist-open title="打开歌单">查看</button><button data-playlist-rename title="修改歌单名称">改名</button><button data-playlist-delete title="删除歌单">×</button></span></div></article>`).join('')||'<div class="row">还没有自建歌单，可以导入平台歌单或点击“＋ 新建”</div>'}`;
     box.onclick=e=>{
       if(e.target.closest('[data-import-playlist]')){promptPlaylistImport();return;}
       if(e.target.closest('[data-new-playlist]')){const name=ROOT.prompt?.('请输入新歌单名称');if(name){createPlaylist(name);showPlaylists();}return;}
       const row=e.target.closest('[data-playlist-index]');if(!row)return;const playlist=lists[Number(row.dataset.playlistIndex)];if(!playlist)return;
+      if(e.target.closest('[data-playlist-rename]')){renamePlaylist(playlist);return;}
       if(e.target.closest('[data-playlist-delete]')){if(!ROOT.confirm?.(`确定删除歌单“${playlist.name}”吗？歌单内的歌曲记录会一起删除。`))return;const index=settings.playlists.indexOf(playlist);if(index>=0)settings.playlists.splice(index,1);save();showPlaylists();setStatus(`已删除歌单：${playlist.name}`);return;}
       if(e.target.closest('[data-playlist-play]')){if(!playlist.songs?.length){setStatus('这个歌单还是空的');return;}queue=playlist.songs.map(strip);queueIndex=0;count();play(queue[0]);return;}
       showPlaylistSongs(playlist);
@@ -808,7 +817,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!playlist){const baseName=`${sourceLabel}歌单 ${id}`;let name=baseName,suffix=2;while(settings.playlists.some(item=>item.name===name))name=`${baseName} (${suffix++})`;playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now(),importSource:source,importSourceId:id,importUrl:u.href};settings.playlists.unshift(playlist);created=true;}
       playlist.songs=Array.isArray(playlist.songs)?playlist.songs:[];playlist.importSource=source;playlist.importSourceId=id;playlist.importUrl=u.href;playlist.updatedAt=Date.now();
       const known=new Set(playlist.songs.map(offlineKey));let added=0;
-      for(const x of rows.slice(0,200)){let mediaId='';try{mediaId=new URL(x.url||'').searchParams.get('id')||'';}catch{}const song={id:`${source}:${mediaId||x.title}:${x.author||''}`,mediaId,title:x.title||'',artist:x.author||'',cover:x.pic||'',audio:'',source},key=offlineKey(song);if(song.title&&key&&!known.has(key)){playlist.songs.push(strip(song));known.add(key);added++;}}
+      for(const x of rows.slice(0,PLAYLIST_IMPORT_LIMIT)){let mediaId='';try{mediaId=new URL(x.url||'').searchParams.get('id')||'';}catch{}const song={id:`${source}:${mediaId||x.title}:${x.author||''}`,mediaId,title:x.title||'',artist:x.author||'',cover:x.pic||'',audio:'',source},key=offlineKey(song);if(song.title&&key&&!known.has(key)){playlist.songs.push(strip(song));known.add(key);added++;}}
       save();showPlaylists();const message=added?`${created?'已创建':'已更新'}“${playlist.name}”，导入 ${added} 首`:`“${playlist.name}”中的歌曲已经全部存在`;setStatus(message);toast(added?'success':'info',message);
     }catch(error){setStatus(error.message);toast('error',error.message);}
   }
