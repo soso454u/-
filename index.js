@@ -118,6 +118,7 @@ function mountPanel() {
           <button type="button" class="menu_button" data-selene-return-keepalive>回到保活</button>
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
           <button type="button" class="menu_button" data-selene-reset-window>重置窗口尺寸</button>
+          <button type="button" class="menu_button" data-selene-reset-companion-position>重置角色陪听位置</button>
         </div>
         <small data-selene-status>正在检查播放器…</small>
         <small class="selene-keepalive-note">“回到保活”会让静音媒体手动接管；下次播放歌曲时会自动让位。</small>
@@ -149,6 +150,16 @@ function mountPanel() {
     api()?.resetWindow();
     syncPanel();
     ROOT.toastr?.success?.('已重置播放器窗口');
+  });
+  $(`#${PANEL_ID} [data-selene-reset-companion-position]`).on('click', () => {
+    const controls = api();
+    if (!controls?.resetCompanionPosition) {
+      setStatus('播放器版本过旧，请刷新页面', 'error');
+      return;
+    }
+    controls.resetCompanionPosition();
+    syncPanel();
+    ROOT.toastr?.success?.('已重置角色陪听窗口位置');
   });
 
   if (!ROOT.localStorage.getItem(FIRST_RUN_KEY)) {
