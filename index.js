@@ -39,6 +39,8 @@ function syncPanel() {
   }
 
   const state = controls.getState();
+  const versionOutput = DOC.querySelector(`#${PANEL_ID} [data-selene-version]`);
+  if (versionOutput && state.version) versionOutput.textContent = `v${state.version}`;
   $('#selene_player_visible').prop('checked', state.visible);
   $('#selene_companion_visible').prop('checked', state.companionVisible);
   $('#selene_auto_show').prop('checked', state.autoShow);
@@ -88,7 +90,7 @@ function mountPanel() {
   getContainer().append(`
     <div id="${PANEL_ID}" class="inline-drawer selene-music-drawer">
       <div class="inline-drawer-toggle inline-drawer-header">
-        <b>Selene 音乐播放器</b>
+        <b class="selene-drawer-title">Selene 音乐播放器 <small data-selene-version>版本加载中</small></b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
       <div class="inline-drawer-content">

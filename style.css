@@ -2,6 +2,24 @@
   padding: 8px 10px 12px;
 }
 
+#selene-music-extension-settings .selene-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#selene-music-extension-settings [data-selene-version] {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font: 600 0.58em/1.45 system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
 #selene-music-extension-settings .selene-setting-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

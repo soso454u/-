@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.7.6';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
@@ -943,6 +943,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;z-index:3;padding:14px;color:#eee;font:14px system-ui;overflow:auto"><button type="button" data-x style="float:right">×</button><h3 style="margin:0 0 4px">播放器设置</h3><div class="set-grid"><label class="set-card"><input type="checkbox" name="auto"> 自动读取推荐</label><div class="set-card" data-keepalive-card style="grid-column:1/-1"><b>系统媒体保活</b> · <small data-keepalive-state style="color:#b8b8c2">未启动</small><br><small style="color:${mediaSession?'#9fdda9':'#ee9b9b'}">媒体控制：${mediaSession?'已支持 Media Session':'浏览器不支持 Media Session'}</small><br><small style="color:${audioSession?'#9fdda9':'#f2cf70'}">音频策略：${audioSession?'已支持 Audio Session':'浏览器暂不支持 Audio Session，将使用兼容保活'}</small><br><button type="button" data-keepalive-toggle style="margin:8px 0 6px!important">▶ 开启自动保活</button><br><small style="color:#c8c1b0;line-height:1.5">尚未选中歌曲时自动运行静音媒体；一旦选中歌曲，无论正在播放还是暂停，都由当前歌曲独占锁屏与控制中心。</small></div><label class="set-card" style="grid-column:1/-1">与其他应用播放 <select name="audioSessionMode"><option value="priority">优先播放（推荐）</option><option value="mix">允许同时播放</option></select><br><small style="color:#c8c1b0;line-height:1.5">优先播放会请求系统独占音乐会话，并在意外中断后尝试恢复；允许同时播放会在支持 Audio Session 的浏览器中请求 ambient 混音。最终仍由手机系统和浏览器决定。</small></label><label class="set-card">播放器尺寸 <select name="playerSize"><option value="s">小巧</option><option value="m">标准</option><option value="l">宽屏</option></select></label><label class="set-card"><input type="checkbox" name="mobileLyrics"> 手机版悬浮歌词</label><label class="set-card">歌词主色 <input type="color" name="lyricColor"></label><label class="set-card"><input type="checkbox" name="gradient"> 启用渐变<br>渐变副色 <input type="color" name="gradientColor"></label><div class="set-card" style="grid-column:1/-1"><b>角色陪听模型</b><br><label>生成方式 <select name="companionMode" style="width:100%;margin:7px 0"><option value="custom">自定义 OpenAI 兼容 API（默认）</option><option value="sillytavern">SillyTavern 当前角色与当前模型</option></select></label><div data-companion-custom><label>API 地址 <input name="companionApiUrl" type="url" placeholder="https://api.example.com/v1" style="width:100%;margin:4px 0 7px;padding:7px"></label><label>模型名 <input name="companionModel" placeholder="例如 gpt-4o-mini" style="width:100%;margin:4px 0 7px;padding:7px"></label><label>API Key <input name="companionApiKey" type="password" autocomplete="off" placeholder="sk-…（允许无 Key 的本地接口留空）" style="width:100%;margin:4px 0 7px;padding:7px"></label></div><label>最大回复 token <input name="companionMaxTokens" type="number" min="32" max="4096" step="1" style="width:90px;margin:5px"></label><br><label><input name="companionAutoSong" type="checkbox"> 每次切歌后让角色自动说一句</label><br><small data-companion-help style="color:#c8c1b0;line-height:1.5">Key 只保存在当前浏览器的本地存储中。自定义 API 需要允许当前 SillyTavern 网页跨域访问。</small></div></div><button type="button" data-reset-lyrics>重置歌词位置和大小</button></form>`);
       f=host.querySelector('.settings-panel');
     }
+    if(!f.querySelector('[data-player-version]'))f.querySelector('h3')?.insertAdjacentHTML('beforeend',` <small data-player-version style="display:inline-flex;margin-left:6px;padding:2px 7px;border:1px solid #d7bc6f66;border-radius:999px;color:#f0d98c;font:600 11px/1.4 system-ui;vertical-align:2px">v${VERSION}</small>`);
     const oldCompanionCard=f.querySelector('[name="companionMode"]')?.closest('.set-card');if(oldCompanionCard){oldCompanionCard.hidden=true;oldCompanionCard.style.display='none';}
     f.style.display='block';
     updateKeepAliveUI();
@@ -1091,6 +1092,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function publicState(){
     const player=DOC.getElementById(ID);
     return {
+      version:VERSION,
       loaded:!!player,
       visible:!!player&&!player.classList.contains('hidden'),
       companionVisible:!!DOC.getElementById(`${ID}-companion`)&&!DOC.getElementById(`${ID}-companion`).hidden,
