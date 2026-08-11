@@ -9,10 +9,17 @@ const ROOT = (() => {
 
 // Give the player an extension-relative, cache-safe URL before its module starts.
 // A real long-form AAC track is required for iOS/Chrome to create a system media session.
+const PLAYER_MODULE_VERSION = '2.7.7';
+const extensionAsset = file => new URL(file, import.meta.url);
+const playerModuleUrl = () => {
+  const url = extensionAsset('纯音乐播放器.js');
+  url.searchParams.set('v', PLAYER_MODULE_VERSION);
+  return url;
+};
 ROOT.__SELENE_EXTENSION_MODE__ = true;
-ROOT.__SELENE_KEEPALIVE_URL__ = new URL('./keepalive.m4a', import.meta.url).href;
-ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ = new URL('./keepalive-cover.png', import.meta.url).href;
-const initialPlayerLoad = import('./纯音乐播放器.js');
+ROOT.__SELENE_KEEPALIVE_URL__ = extensionAsset('keepalive.m4a').href;
+ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ = extensionAsset('keepalive-cover.png').href;
+const initialPlayerLoad = import(playerModuleUrl().href);
 
 const DOC = ROOT.document;
 const PANEL_ID = 'selene-music-extension-settings';
@@ -90,7 +97,7 @@ function mountPanel() {
   getContainer().append(`
     <div id="${PANEL_ID}" class="inline-drawer selene-music-drawer">
       <div class="inline-drawer-toggle inline-drawer-header">
-        <b class="selene-drawer-title">Selene 音乐播放器 <small data-selene-version>版本加载中</small></b>
+        <b>Selene 音乐播放器</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
       <div class="inline-drawer-content">
@@ -126,6 +133,7 @@ function mountPanel() {
         </div>
         <small data-selene-status>正在检查播放器…</small>
         <small class="selene-keepalive-note">“回到保活”会让静音媒体手动接管；下次播放歌曲时会自动让位。</small>
+        <small class="selene-version-footer" data-selene-version>版本加载中</small>
       </div>
     </div>`);
 
@@ -195,44 +203,50 @@ async function ensurePlayer() {
   ROOT.__SELENE_EXTENSION_MODE__ = true;
   await initialPlayerLoad;
   if (DOC.getElementById('safe-music-player')) return;
-  const playerUrl = new URL('./纯音乐播放器.js', import.meta.url);
+  const playerUrl = playerModuleUrl();
   playerUrl.searchParams.set('reload', String(Date.now()));
   await import(playerUrl.href);
 }
 
-async function activateImmediately({ announce = false } = {}) {
+async function activateRuntime({ announce = false, forceVisible = false } = {}) {
   await ensurePlayer();
   mountPanel();
-  api()?.setVisible(true);
+  if (forceVisible) api()?.setVisible(true);
   syncPanel();
   if (announce) ROOT.toastr?.success?.('Selene 音乐播放器已加载');
 }
 
-jQuery(async () => {
-  await initialPlayerLoad;
-  mountPanel();
-});
+jQuery(() => void activateRuntime());
 
 export async function onInstall() {
-  await activateImmediately({ announce: true });
+  await activateRuntime({ announce: true, forceVisible: true });
 }
 
 export async function onUpdate() {
-  await ensurePlayer();
-  mountPanel();
-  syncPanel();
+  await activateRuntime();
 }
 
 export async function onEnable() {
-  await activateImmediately();
+  await activateRuntime({ forceVisible: true });
+}
+
+export async function onActivate() {
+  await activateRuntime();
 }
 
 export function onDisable() {
   panelObserver?.disconnect();
+  panelObserver = undefined;
   ROOT.removeEventListener('selene-music-player-state', syncPanel);
   ROOT.__SAFE_MUSIC_CLEANUP__?.();
   DOC.getElementById(PANEL_ID)?.remove();
   delete ROOT.__SELENE_EXTENSION_MODE__;
+  delete ROOT.__SELENE_KEEPALIVE_URL__;
+  delete ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__;
+}
+
+export function onHotUnload() {
+  onDisable();
 }
 
 export function onDelete() {

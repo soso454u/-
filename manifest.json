@@ -4,14 +4,16 @@
   "js": "index.js",
   "css": "style.css",
   "author": "Selene海莉",
-  "version": "2.7.6",
+  "version": "2.7.7",
   "homePage": "https://github.com/soso454u/-",
   "auto_update": true,
   "hooks": {
     "install": "onInstall",
     "update": "onUpdate",
+    "activate": "onActivate",
     "enable": "onEnable",
     "disable": "onDisable",
+    "hot_reload": "onHotUnload",
     "delete": "onDelete"
   }
 }

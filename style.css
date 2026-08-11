@@ -1,22 +1,16 @@
 #selene-music-extension-settings .inline-drawer-content {
-  padding: 8px 10px 12px;
+  position: relative;
+  padding: 8px 10px 30px;
 }
 
-#selene-music-extension-settings .selene-drawer-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#selene-music-extension-settings [data-selene-version] {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font: 600 0.58em/1.45 system-ui, sans-serif;
-  letter-spacing: 0.02em;
-  opacity: 0.72;
+#selene-music-extension-settings .selene-version-footer {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: currentColor;
+  font: 500 11px/1.4 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  opacity: 0.46;
   white-space: nowrap;
 }
 
