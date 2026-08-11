@@ -9,6 +9,7 @@ const ROOT = (() => {
 
 // Give the player an extension-relative, cache-safe URL before its module starts.
 // A real long-form AAC track is required for iOS/Chrome to create a system media session.
+ROOT.__SELENE_EXTENSION_MODE__ = true;
 ROOT.__SELENE_KEEPALIVE_URL__ = new URL('./keepalive.m4a', import.meta.url).href;
 ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ = new URL('./keepalive-cover.png', import.meta.url).href;
 const initialPlayerLoad = import('./纯音乐播放器.js');
@@ -16,6 +17,7 @@ const initialPlayerLoad = import('./纯音乐播放器.js');
 const DOC = ROOT.document;
 const PANEL_ID = 'selene-music-extension-settings';
 const FIRST_RUN_KEY = 'selene-music-extension-first-run-v1';
+const MENU_DEFAULT_KEY = 'selene-music-extension-menu-default-v1';
 let panelObserver;
 
 function api() {
@@ -162,6 +164,13 @@ function mountPanel() {
     ROOT.toastr?.success?.('已重置角色陪听窗口位置');
   });
 
+  // Repair the old hidden-menu state once while still allowing extension users
+  // to change the preference afterwards. Fresh installs therefore start on.
+  if (!ROOT.localStorage.getItem(MENU_DEFAULT_KEY)) {
+    ROOT.localStorage.setItem(MENU_DEFAULT_KEY, '1');
+    api()?.setMenuEnabled(true);
+  }
+
   if (!ROOT.localStorage.getItem(FIRST_RUN_KEY)) {
     ROOT.localStorage.setItem(FIRST_RUN_KEY, '1');
     api()?.setVisible(true);
@@ -181,6 +190,7 @@ function mountPanel() {
 }
 
 async function ensurePlayer() {
+  ROOT.__SELENE_EXTENSION_MODE__ = true;
   await initialPlayerLoad;
   if (DOC.getElementById('safe-music-player')) return;
   const playerUrl = new URL('./纯音乐播放器.js', import.meta.url);
@@ -220,6 +230,7 @@ export function onDisable() {
   ROOT.removeEventListener('selene-music-player-state', syncPanel);
   ROOT.__SAFE_MUSIC_CLEANUP__?.();
   DOC.getElementById(PANEL_ID)?.remove();
+  delete ROOT.__SELENE_EXTENSION_MODE__;
 }
 
 export function onDelete() {
