@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.9.0';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.9.1';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
@@ -410,6 +410,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(error instanceof TypeError||/failed to fetch|load failed|networkerror/i.test(String(error?.message||'')))return'跨域 CORS 或网络限制';
     return String(error?.message||'下载失败').slice(0,80);
   }
+  const isExpiredAudioError=error=>[403,404,410].includes(Number(error?.status));
   async function fetchCacheBlob(candidate){
     const controller=new AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),45000);
     try{
@@ -428,20 +429,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(!song?.title)return false;
     try{
       const existing=await getOfflineSong(song);if(existing?.blob?.size){if(!quiet){setStatus(`${song.title} 已有离线缓存`);toast('info','这首歌已经缓存');}return true;}
-      const failures=[],seenUrls=new Set(),sources=[...new Set([song.source,...GD_SOURCES].filter(Boolean))],savedAudio=/^https?:/i.test(String(song.audio||''))?{...song,downloadLabel:'当前播放源'}:null;
-      const attempts=[];if(savedAudio)attempts.push(()=>Promise.resolve([savedAudio]));for(const source of sources)attempts.push(()=>resolveGdSourceTracks(song,source));
-      for(let index=0;index<attempts.length;index++){
-        for(const candidate of await attempts[index]()){if(!candidate?.audio||seenUrls.has(candidate.audio))continue;seenUrls.add(candidate.audio);
-          const baseLabel=candidate.downloadLabel||GD_SOURCE_LABELS[candidate.source]||candidate.source||`音源 ${index+1}`,label=candidate.bitrate?`${baseLabel} ${candidate.bitrate}k` :baseLabel;setStatus(`正在尝试${label}缓存：${song.title}`);
-          try{
-            const blob=await fetchCacheBlob(candidate),savedSong=strip({...song,...candidate,audio:''});
-            try{await putOfflineSong({key:offlineKey(savedSong),song:savedSong,blob,size:blob.size,type:blob.type||'audio/mpeg',cachedAt:Date.now(),downloadSource:candidate.source||'saved'});}catch(error){if(error?.name==='QuotaExceededError'||/quota|storage.*full|空间/i.test(String(error?.message||'')))throw Error('浏览器离线存储空间不足，请先删除部分缓存');throw error;}
-            ROOT.navigator?.storage?.persist?.().catch?.(()=>{});setStatus(`已缓存 ${song.title} · ${formatBytes(blob.size)} · ${label}`);if(!quiet)toast('success',`已缓存，可离线播放（${formatBytes(blob.size)} · ${label}）`);return true;
-          }catch(error){const detail=cacheDownloadError(error);failures.push(`${label}：${detail}`);console.warn(`[音乐播放器] ${label} 缓存源不可用`,error);if(/存储空间不足/.test(String(error?.message||'')))throw error;}
-        }
-      }
-      if(!seenUrls.size)throw Error('没有找到严格匹配的可下载音源');
-      throw Error(`所有下载源均失败（${failures.slice(0,5).join('；')}${failures.length>5?'；更多源也不可用':''}）`);
+      const failures=[],attempted=new Set(),uniqueUrls=new Set(),sources=[...new Set([song.source,...GD_SOURCES].filter(Boolean))];let expiredFailures=0,attemptNumber=0;
+      const tryCandidate=async(candidate,phase)=>{if(!candidate?.audio)return false;const attemptKey=`${phase}:${candidate.audio}`;if(attempted.has(attemptKey))return false;attempted.add(attemptKey);uniqueUrls.add(candidate.audio);attemptNumber++;const sourceLabel=candidate.downloadLabel||GD_SOURCE_LABELS[candidate.source]||candidate.source||`音源 ${attemptNumber}`,baseLabel=candidate.refreshed?`${sourceLabel}刷新源`:sourceLabel,label=candidate.bitrate?`${baseLabel} ${candidate.bitrate}k`:baseLabel;setStatus(`正在尝试${label}缓存：${song.title}`);try{const blob=await fetchCacheBlob(candidate),savedSong=strip({...song,...candidate,audio:''});try{await putOfflineSong({key:offlineKey(savedSong),song:savedSong,blob,size:blob.size,type:blob.type||'audio/mpeg',cachedAt:Date.now(),downloadSource:candidate.source||'saved'});}catch(error){if(error?.name==='QuotaExceededError'||/quota|storage.*full|空间/i.test(String(error?.message||'')))throw Error('浏览器离线存储空间不足，请先删除部分缓存');throw error;}ROOT.navigator?.storage?.persist?.().catch?.(()=>{});setStatus(`已缓存 ${song.title} · ${formatBytes(blob.size)} · ${label}`);if(!quiet)toast('success',`已缓存，可离线播放（${formatBytes(blob.size)} · ${label}）`);return true;}catch(error){const detail=cacheDownloadError(error);failures.push(`${label}：${detail}`);if(isExpiredAudioError(error))expiredFailures++;console.warn(`[音乐播放器] ${label} 缓存源不可用`,error);if(/存储空间不足/.test(String(error?.message||'')))throw error;return false;}};
+      const sameCurrent=!!current&&offlineKey(current)===offlineKey(song),liveAudio=sameCurrent&&audio.readyState>=2&&/^https?:/i.test(String(audio.currentSrc||''))?{...song,audio:audio.currentSrc,downloadLabel:'当前实际播放源'}:null,savedAudio=/^https?:/i.test(String(song.audio||''))?{...song,downloadLabel:sameCurrent?'当前播放源':'已保存播放源'}:null;
+      for(const candidate of[liveAudio,savedAudio])if(candidate&&await tryCandidate(candidate,'live'))return true;
+      for(const source of sources)for(const candidate of await resolveGdSourceTracks(song,source))if(await tryCandidate(candidate,'normal'))return true;
+      if(expiredFailures){setStatus(`当前音频地址已失效，正在强制刷新下载地址：${song.title}`);const nonce=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;for(const source of sources)for(const candidate of await resolveGdSourceTracks(song,source,true,{fresh:true,nonce:`${nonce}-${source}`}))if(await tryCandidate(candidate,'fresh'))return true;}
+      if(!uniqueUrls.size)throw Error('没有找到严格匹配的可下载音源');
+      throw Error(`所有下载源均失败（${failures.slice(-5).join('；')}${failures.length>5?'；此前候选也不可用':''}）`);
     }catch(error){console.warn('[音乐播放器] 歌曲缓存失败',error);setStatus(`缓存失败：${error.message}`);if(!quiet)toast('error',`缓存失败：${error.message}`);return false;}
   }
 
@@ -675,15 +670,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   const getResponseUrl = data => data?.url||data?.data?.url||data?.data?.[0]?.url||data?.pic||'';
   async function gdCover(s){try{const source=s.source||'netease',picId=String(s.coverId||'').trim();if(s.cover&&/^https?:\/\//i.test(s.cover))return s.cover;if(!picId){console.warn('[音乐播放器] 没有 pic_id，无法获取 GD 封面',s);return '';}if(source==='bilibili'){if(picId.startsWith('//'))return `https:${picId}`;if(/^https?:\/\//i.test(picId))return picId;}const u=new URL(GD_API);u.searchParams.set('types','pic');u.searchParams.set('source',source);u.searchParams.set('id',picId);u.searchParams.set('size','500');console.log('[GD封面请求]',source,picId);const response=await fetch(u);if(!response.ok)throw Error(`GD 封面请求失败：${response.status}`);const data=await response.json(),coverUrl=getResponseUrl(data);console.log('[GD封面响应]',data);console.log('[GD最终封面URL]',coverUrl);return coverUrl;}catch(error){console.warn('[音乐播放器] GD 封面获取失败',error);return '';}}
   function playUrl(url, label = '音源', isolated = false){return new Promise((resolve,reject)=>{const player=isolated?new ROOT.Audio():audio;if(!isolated)releaseOfflineObjectUrl(url);let done=false;const finish=err=>{if(done)return;done=true;clearTimeout(timer);events.forEach(([n,f])=>player.removeEventListener(n,f));err?reject(err):resolve();};const log=name=>()=>console.info('[音乐播放器]',name,{url,src:player.src,currentSrc:player.currentSrc,errorCode:player.error?.code,errorMessage:player.error?.message,networkState:player.networkState,readyState:player.readyState});const bad=()=>{const err=new Error(mediaText(player.error?.code));err.media={code:player.error?.code,message:player.error?.message,currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};console.error('[音乐播放器] Audio 错误',err.media);finish(err);};const good=()=>{console.info('[音乐播放器]',label,'开始播放',{url,currentSrc:player.currentSrc});finish();};const events=[['loadstart',log('loadstart')],['loadedmetadata',log('loadedmetadata')],['loadeddata',log('loadeddata')],['canplay',log('canplay')],['play',good],['playing',good],['stalled',log('stalled')],['suspend',log('suspend')],['abort',log('abort')],['error',bad]];events.forEach(([n,f])=>player.addEventListener(n,f));const timer=ROOT.setTimeout(()=>{if(!player.paused&&player.readyState>=2){good();return;}const err=new Error('音源响应超时');err.media={currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};finish(err);},15000);player.preload='auto';player.src=url;const playPromise=player.play();if(playPromise?.then)playPromise.then(good).catch(err=>{if(isNotAllowed(err))finish(err);else if(!player.error){const failure=new Error(err?.message||'浏览器无法开始播放');failure.media={currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};finish(failure);}});});}
-  async function resolveGdSourceTracks(s,source,allBitrates=true){
+  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce=''}={}){
     const results=[];
     try{
       const search=new URL(GD_API);search.searchParams.set('types','search');search.searchParams.set('source',source);search.searchParams.set('name',`${s.title} ${s.artist}`);search.searchParams.set('count','20');search.searchParams.set('pages','1');
-      const response=await fetch(search);if(!response.ok)return[];const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]),hit=bestSongHit(rows,s);if(!hit?.id)return[];
+      if(fresh)search.searchParams.set('_selene',`${nonce||Date.now()}-search`);const requestOptions=fresh?{cache:'no-store',credentials:'omit'}:undefined;
+      const response=await fetch(search,requestOptions);if(!response.ok)return[];const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]),hit=bestSongHit(rows,s);if(!hit?.id)return[];
       for(const bitrate of ['320','192','128']){
         const url=new URL(GD_API);url.searchParams.set('types','url');url.searchParams.set('source',source);url.searchParams.set('id',String(hit.id));url.searchParams.set('br',bitrate);
-        const linkResponse=await fetch(url);if(!linkResponse.ok)continue;const info=await linkResponse.json(),audioUrl=info?.url||info?.data?.url||info?.data?.[0]?.url||'';if(!/^https?:/i.test(String(audioUrl||'')))continue;
-        const lyricId=String(hit.lyric_id||hit.id||''),coverId=String(hit.pic_id||hit.album?.pic_id||hit.album?.picId||hit.al?.pic_str||hit.al?.pic||'');results.push({...s,id:`${source}:${hit.id}`,mediaId:String(hit.id),source,lyricId,gdSource:source,gdLyricId:lyricId,coverId,cover:s.cover||'',audio:audioUrl,bitrate});if(!allBitrates)return results;
+        if(fresh)url.searchParams.set('_selene',`${nonce||Date.now()}-${bitrate}`);const linkResponse=await fetch(url,requestOptions);if(!linkResponse.ok)continue;const info=await linkResponse.json(),audioUrl=info?.url||info?.data?.url||info?.data?.[0]?.url||'';if(!/^https?:/i.test(String(audioUrl||'')))continue;
+        const lyricId=String(hit.lyric_id||hit.id||''),coverId=String(hit.pic_id||hit.album?.pic_id||hit.album?.picId||hit.al?.pic_str||hit.al?.pic||'');results.push({...s,id:`${source}:${hit.id}`,mediaId:String(hit.id),source,lyricId,gdSource:source,gdLyricId:lyricId,coverId,cover:s.cover||'',audio:audioUrl,bitrate,refreshed:!!fresh});if(!allBitrates)return results;
       }
     }catch(error){console.warn(`[音乐播放器] ${source} 严格匹配失败`,error);}
     return results;
