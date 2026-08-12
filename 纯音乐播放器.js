@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.8.0';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.8.1';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
@@ -838,30 +838,35 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){box.innerHTML=`<div class="row">离线缓存不可用：${esc(error.message)}</div>`;setStatus(`离线缓存不可用：${error.message}`);}
   }
   function playlistLinkInfo(link){
-    const u=new URL(String(link||'').trim()),host=u.hostname.toLowerCase(),source=/music\.163\.com$/.test(host)?'netease':/(^|\.)qq\.com$/.test(host)?'tencent':/(^|\.)kugou\.com$/.test(host)?'kugou':'';
+    const u=new URL(String(link||'').trim()),host=u.hostname.toLowerCase(),source=/(?:music\.163\.com|163cn\.tv)$/.test(host)?'netease':/(^|\.)qq\.com$/.test(host)?'tencent':/(^|\.)kugou\.com$/.test(host)?'kugou':'';
     const hashQuery=u.hash.includes('?')?new URLSearchParams(u.hash.slice(u.hash.indexOf('?')+1)):new URLSearchParams(),pathId=`${u.pathname}${u.hash}`.match(/(?:playlist|detail|songlist|plist\/list)\/(?:gcid_)?([\w-]+)/i)?.[1];
-    const rawId=u.searchParams.get('id')||u.searchParams.get('disstid')||u.searchParams.get('dissid')||u.searchParams.get('playlist')||u.searchParams.get('specialid')||u.searchParams.get('global_collection_id')||hashQuery.get('id')||hashQuery.get('disstid')||hashQuery.get('dissid')||hashQuery.get('playlist')||pathId||'';
+    const rawId=u.searchParams.get('id')||u.searchParams.get('disstid')||u.searchParams.get('dissid')||u.searchParams.get('playlist')||u.searchParams.get('global_specialid')||u.searchParams.get('specialid')||u.searchParams.get('global_collection_id')||hashQuery.get('id')||hashQuery.get('disstid')||hashQuery.get('dissid')||hashQuery.get('playlist')||pathId||'';
     const id=String(rawId).replace(/^(?:collection_|gcid_)/i,'');return{u,source,rawId,id,sourceLabel:PLAYLIST_SOURCE_LABELS[source]||''};
   }
-  function isQqPlaylistShareLink(url){return/(^|\.)qq\.com$/i.test(url.hostname)&&/^\/base\/fcgi-bin\/u\/?$/i.test(url.pathname)&&url.searchParams.has('__');}
-  function qqPlaylistUrlFromText(text){
-    const source=String(text||'').replace(/&amp;/gi,'&').replace(/\\\//g,'/'),patterns=[/https?:\/\/[^"'<>\s]+(?:playlist\/\d+|[?&](?:id|disstid|dissid)=\d+)[^"'<>\s]*/ig,/(?:location(?:\.href)?\s*=\s*|url\s*=\s*)["']([^"']+)["']/ig];
-    for(const pattern of patterns){for(const match of source.matchAll(pattern)){let value=match[1]||match[0];try{value=decodeURIComponent(value);}catch{}try{const info=playlistLinkInfo(value);if(info.source==='tencent'&&info.id)return info.u.href;}catch{}}}
+  function playlistShareSource(url){const info=playlistLinkInfo(url.href);if(info.id)return'';const host=url.hostname.toLowerCase();if(/(^|\.)163cn\.tv$/.test(host))return'netease';if(/(^|\.)t1\.kugou\.com$/.test(host))return'kugou';if(/(^|\.)qq\.com$/.test(host)&&/^\/base\/fcgi-bin\/u\/?$/i.test(url.pathname)&&url.searchParams.has('__'))return'tencent';return'';}
+  function playlistUrlFromText(text,wantedSource=''){
+    const source=String(text||'').replace(/&amp;/gi,'&').replace(/\\u0026/gi,'&').replace(/\\u002f/gi,'/').replace(/\\\//g,'/'),patterns=[/https?:\/\/[^"'<>\s]+/ig,/(?:location(?:\.href)?\s*=\s*|url\s*=\s*|href\s*=\s*)["']([^"']+)["']/ig];
+    for(const pattern of patterns)for(const match of source.matchAll(pattern)){let value=(match[1]||match[0]).replace(/[),.;]+$/,'');try{value=decodeURIComponent(value);}catch{}try{const info=playlistLinkInfo(value);if(info.id&&(!wantedSource||info.source===wantedSource))return info.u.href;}catch{}}
+    if(wantedSource==='kugou'){const raw=source.match(/(?:global_specialid|global_collection_id|specialid)\s*[=:"']+\s*((?:collection_|gcid_)?[\w-]+)/i)?.[1];if(raw&&!/^-?2147483648$/.test(raw))return`https://activity.kugou.com/share/?global_specialid=${encodeURIComponent(raw)}`;}
     return'';
   }
   async function resolvePlaylistShareLink(link){
-    const original=new URL(String(link||'').trim());if(!isQqPlaylistShareLink(original))return original.href;
-    setStatus('正在解析 QQ 音乐分享短链…');let lastError=null;
+    const original=new URL(String(link||'').trim()),source=playlistShareSource(original);if(!source)return original.href;const sourceLabel=PLAYLIST_SOURCE_LABELS[source]||'音乐平台';
+    setStatus(`正在解析${sourceLabel}分享短链…`);let lastError=null;
     const candidates=[original.href,`/proxy/${original.href}`];
     for(const target of candidates)try{
       const response=await fetch(target,{method:'GET',redirect:'follow',cache:'no-store',credentials:'omit'}),body=await response.text();
       if(!response.ok)throw Error(`HTTP ${response.status}`);
-      const direct=target===original.href?response.url:'',resolved=qqPlaylistUrlFromText(`${direct}\n${body}`);
+      const direct=target===original.href?response.url:'',resolved=playlistUrlFromText(`${direct}\n${body}`,source);
       if(resolved)return resolved;
-      if(direct&&direct!==original.href){const info=playlistLinkInfo(direct);if(info.source==='tencent'&&info.id)return direct;}
+      if(direct&&direct!==original.href){const info=playlistLinkInfo(direct);if(info.source===source&&info.id)return direct;}
       throw Error('跳转页面里没有找到歌单 ID');
-    }catch(error){lastError=error;console.warn(`[音乐播放器] QQ 分享短链解析失败：${target}`,error);}
-    throw Error(`QQ 分享短链解析失败：${lastError?.message||'链接已失效'}。可检查 SillyTavern 的 CORS 代理设置，或稍后重试。`);
+    }catch(error){lastError=error;console.warn(`[音乐播放器] ${sourceLabel}分享短链解析失败：${target}`,error);}
+    if(source==='kugou'){
+      const resolver=new URL('https://api.urlresolver.com/resolve');resolver.searchParams.set('url',original.href);
+      for(const target of[resolver.href,`/proxy/${resolver.href}`])try{const response=await fetch(target,{cache:'no-store',credentials:'omit'}),body=await response.text();if(!response.ok)throw Error(`HTTP ${response.status}`);let expanded='';try{expanded=JSON.parse(body)?.resolved_url||'';}catch{}const resolved=playlistUrlFromText(`${expanded}\n${body}`,'kugou');if(resolved)return resolved;throw Error('展开结果没有酷狗歌单 ID');}catch(error){lastError=error;console.warn(`[音乐播放器] 酷狗短链展开服务失败：${target}`,error);}
+    }
+    throw Error(`${sourceLabel}分享短链解析失败：${lastError?.message||'链接已失效'}。可检查 SillyTavern 的 CORS 代理设置，或稍后重试。`);
   }
   function promptPlaylistImport(){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}
   async function importPlaylist(link){
