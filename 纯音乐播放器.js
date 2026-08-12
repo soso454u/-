@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.3';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.4';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://selene-meting-api.onrender.com/api','https://api.i-meto.com/meting/api'];
@@ -477,7 +477,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}:not(.immersive) .controls,#${ID}:not(.immersive) .volume{display:flex!important}
       #${ID}:not(.immersive) .time{display:block!important}
       @container(max-height:280px){
-        #${ID}:not(.immersive)>.body>form,#${ID}:not(.immersive) .actions,#${ID}:not(.immersive) .list{display:none!important}
+        #${ID}:not(.immersive)>.body>form,#${ID}:not(.immersive) .actions-toggle,#${ID}:not(.immersive) .actions,#${ID}:not(.immersive) .list{display:none!important}
         #${ID}:not(.immersive)>.body{padding:6px!important}
         #${ID}:not(.immersive) .now{display:flex!important;align-items:center!important;min-height:52px!important;margin:0!important;padding:4px!important;overflow:hidden!important}
         #${ID}:not(.immersive)>.body .now img{width:44px!important;height:44px!important;flex:0 0 44px!important;border-radius:9px!important}
@@ -540,7 +540,6 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         #${ID}:not(.mini){height:min(620px,72dvh)!important;max-height:calc(100dvh - 12px)!important;overflow:hidden!important}
         #${ID}:not(.immersive)>.body{height:calc(100% - 45px)!important;overflow:hidden!important}
       }
-      @container(max-height:560px){#${ID}:not(.immersive) .actions-toggle,#${ID}:not(.immersive) .actions{display:none!important}}
       @media(prefers-reduced-motion:reduce){#${ID},#${ID} *,#${ID}:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
     </style>`);
     el.querySelector('.skin').insertAdjacentHTML('beforebegin','<button class="pin" title="固定窗口，禁止移动和缩放">📌</button>');
