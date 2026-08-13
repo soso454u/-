@@ -9,7 +9,7 @@ const ROOT = (() => {
 
 // Give the player an extension-relative, cache-safe URL before its module starts.
 // A real long-form AAC track is required for iOS/Chrome to create a system media session.
-const PLAYER_MODULE_VERSION = '2.10.6';
+const PLAYER_MODULE_VERSION = '2.10.7';
 const extensionAsset = file => new URL(file, import.meta.url);
 const playerModuleUrl = () => {
   const url = extensionAsset('纯音乐播放器.js');
