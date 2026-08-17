@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.10';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.11';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -910,26 +910,30 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return'';
   }
   function cleanResolvedPlaylistTitle(value){return String(value||'').replace(/\s*[-–—]\s*歌单(?:\s*[-–—].*)?$/i,'').trim();}
+  function playlistSameOriginHeaders(){try{return context()?.getRequestHeaders?.()||ROOT.getRequestHeaders?.()||{};}catch{return{};}}
+  async function fetchPlaylistPage(target,options={}){const local=/^\//.test(String(target)),controller=typeof ROOT.AbortController==='function'?new ROOT.AbortController():null,timer=controller?ROOT.setTimeout(()=>controller.abort(),15000):0;try{return await fetch(target,{cache:'no-store',credentials:local?'same-origin':'omit',headers:local?playlistSameOriginHeaders():undefined,...options,...(controller?{signal:controller.signal}:{})});}finally{if(timer)ROOT.clearTimeout(timer);}}
   async function resolvePlaylistShareLink(link){
     const original=playlistLinkInfo(link).u,source=playlistShareSource(original);if(!source)return{url:original.href,title:''};const sourceLabel=PLAYLIST_SOURCE_LABELS[source]||'音乐平台';
-    setStatus(`正在解析${sourceLabel}分享短链…`);let lastError=null;
+    setStatus(`正在解析${sourceLabel}分享短链…`);const errors=[];
     const resolver=new URL('https://api.urlresolver.com/resolve');resolver.searchParams.set('url',original.href);
-    for(const target of[resolver.href,`/proxy/${resolver.href}`])try{const response=await fetch(target,{cache:'no-store',credentials:'omit'}),body=await response.text();if(!response.ok)throw Error(`HTTP ${response.status}`);let data={};try{data=JSON.parse(body)||{};}catch{}const resolved=playlistUrlFromText(`${data.resolved_url||''}\n${body}`,source);if(resolved)return{url:resolved,title:cleanResolvedPlaylistTitle(data.title)};throw Error('展开结果没有歌单 ID');}catch(error){lastError=error;console.warn(`[音乐播放器] ${sourceLabel}短链展开服务失败：${target}`,error);}
+    for(const target of[resolver.href,`/proxy/${resolver.href}`])try{const response=await fetchPlaylistPage(target),body=await response.text();if(!response.ok)throw Error(`HTTP ${response.status}`);let data={};try{data=JSON.parse(body)||{};}catch{}const resolved=playlistUrlFromText([data.resolved_url,...(Array.isArray(data.intermediate_urls)?data.intermediate_urls:[]),body].join('\n'),source);if(resolved)return{url:resolved,title:cleanResolvedPlaylistTitle(data.title)};throw Error('展开结果没有歌单 ID');}catch(error){errors.push(error);console.warn(`[音乐播放器] ${sourceLabel}短链展开服务失败：${target}`,error);}
     const candidates=[original.href,`/proxy/${original.href}`];
     for(const target of candidates)try{
-      const response=await fetch(target,{method:'GET',redirect:'follow',cache:'no-store',credentials:'omit'}),body=await response.text();
+      const response=await fetchPlaylistPage(target,{method:'GET',redirect:'follow'}),body=await response.text();
       if(!response.ok)throw Error(`HTTP ${response.status}`);
       const direct=target===original.href?response.url:'',resolved=playlistUrlFromText(`${direct}\n${body}`,source);
       if(resolved)return{url:resolved,title:''};
       if(direct&&direct!==original.href){const info=playlistLinkInfo(direct);if(info.source===source&&info.id)return{url:direct,title:''};}
       throw Error('跳转页面里没有找到歌单 ID');
-    }catch(error){lastError=error;console.warn(`[音乐播放器] ${sourceLabel}分享短链解析失败：${target}`,error);}
-    throw Error(`${sourceLabel}分享短链解析失败：${lastError?.message||'链接已失效'}。已自动尝试短链服务和 SillyTavern 代理。`);
+    }catch(error){errors.push(error);console.warn(`[音乐播放器] ${sourceLabel}分享短链解析失败：${target}`,error);}
+    const useful=errors.find(error=>!/HTTP 401|HTTP 404|Failed to fetch/i.test(error?.message||''))||errors[0];throw Error(`${sourceLabel}分享短链解析失败：${useful?.name==='AbortError'?'请求超时':useful?.message||'链接已失效'}。已自动尝试短链服务和 SillyTavern 代理。`);
   }
+  function playlistMatchesImport(item,source,id){if(!item)return false;if(item.importSource===source&&String(item.importSourceId||'')===String(id))return true;for(const link of[item.importUrl,item.importShareUrl])try{const info=playlistLinkInfo(link||'');if(info.source===source&&String(info.id||'')===String(id))return true;}catch{}return false;}
+  function playlistSongsFromRows(rows,source){const songs=[],known=new Set();for(const x of(rows||[]).slice(0,PLAYLIST_IMPORT_LIMIT)){let mediaId='';try{mediaId=new URL(x.url||'').searchParams.get('id')||'';}catch{}const song={id:`${source}:${mediaId||x.title}:${x.author||''}`,mediaId,title:String(x.title||'').trim(),artist:String(x.author||'').trim(),cover:x.pic||'',audio:'',source},key=offlineKey(song);if(song.title&&key&&!known.has(key)){songs.push(strip(song));known.add(key);}}return songs;}
   function promptPlaylistImport(){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}
   async function importPlaylist(link){
     try{
-      const resolved=await resolvePlaylistShareLink(link);link=resolved.url;
+      const sharedUrl=playlistInputUrl(link),resolved=await resolvePlaylistShareLink(link);link=resolved.url;
       const {u,source,rawId,id,sourceLabel}=playlistLinkInfo(link);
       if(!source||!id)throw Error('仅支持网易云、QQ 音乐或酷狗歌单链接');
       setStatus(`正在识别并导入${sourceLabel}歌单…`);
@@ -942,13 +946,13 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         rows=data;break outer;
       }catch(error){lastError=error;console.warn(`[音乐播放器] 歌单接口失败，尝试备用接口：${base}`,error);}
       if(!rows)throw Error(`歌单读取失败：${lastError?.message||'所有接口均不可用'}`);
-      settings.playlists=settings.playlists||[];
-      let playlist=settings.playlists.find(item=>item.importSource===source&&String(item.importSourceId||'')===id),created=false;
+      settings.playlists=settings.playlists||[];const matches=settings.playlists.filter(item=>playlistMatchesImport(item,source,id));
+      let playlist=matches[0],created=false,duplicates=Math.max(0,matches.length-1);
+      if(duplicates)settings.playlists=settings.playlists.filter(item=>item===playlist||!matches.includes(item));
       if(!playlist){const baseName=resolved.title||`${sourceLabel}歌单`,sameName=settings.playlists.some(item=>item.name===baseName),name=sameName?`${baseName} ${id}`:baseName;playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now()};settings.playlists.unshift(playlist);created=true;}
-      playlist.songs=Array.isArray(playlist.songs)?playlist.songs:[];playlist.importSource=source;playlist.importSourceId=id;playlist.importUrl=u.href;playlist.updatedAt=Date.now();
-      const known=new Set(playlist.songs.map(offlineKey));let added=0;
-      for(const x of rows.slice(0,PLAYLIST_IMPORT_LIMIT)){let mediaId='';try{mediaId=new URL(x.url||'').searchParams.get('id')||'';}catch{}const song={id:`${source}:${mediaId||x.title}:${x.author||''}`,mediaId,title:x.title||'',artist:x.author||'',cover:x.pic||'',audio:'',source},key=offlineKey(song);if(song.title&&key&&!known.has(key)){playlist.songs.push(strip(song));known.add(key);added++;}}
-      save();showPlaylists();const message=added?`${created?'已创建':'已更新'}“${playlist.name}”，导入 ${added} 首`:`“${playlist.name}”中的歌曲已经全部存在`;setStatus(message);toast(added?'success':'info',message);
+      const previous=Array.isArray(playlist.songs)?playlist.songs:[],previousKeys=new Set(previous.map(offlineKey)),fresh=playlistSongsFromRows(rows,source),freshKeys=new Set(fresh.map(offlineKey)),added=fresh.filter(song=>!previousKeys.has(offlineKey(song))).length,removed=previous.filter(song=>!freshKeys.has(offlineKey(song))).length;
+      playlist.songs=fresh;playlist.importSource=source;playlist.importSourceId=id;playlist.importUrl=u.href;playlist.importShareUrl=sharedUrl;playlist.updatedAt=Date.now();playlist.importVersion=2;
+      save();showPlaylists();const details=created?`导入 ${fresh.length} 首`:`同步 ${fresh.length} 首${added?`，新增 ${added} 首`:''}${removed?`，清理旧版 ${removed} 首`:''}${duplicates?`，合并 ${duplicates} 个重复歌单`:''}`,message=`${created?'已创建':'已刷新'}“${playlist.name}”，${details}`;setStatus(message);toast('success',message);
     }catch(error){setStatus(error.message);toast('error',error.message);}
   }
   let activeCompanionWorldText='',activeCompanionMood='',activeCompanionMoodKey='',activeCompanionMentionIds=[];
