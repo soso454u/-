@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.8';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.9';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -891,7 +891,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       };
     }catch(error){box.innerHTML=`<div class="row">离线缓存不可用：${esc(error.message)}</div>`;setStatus(`离线缓存不可用：${error.message}`);}
   }
-  function playlistInputUrl(value){const text=String(value||'').trim().replace(/&amp;/gi,'&'),match=text.match(/https?:\/\/[^\s<>"']+/i);if(!match)throw Error('没有识别到歌单链接，请粘贴平台分享文案或 https 链接');return match[0].replace(/[\])】）。，,;；]+$/g,'');}
+  function playlistInputUrl(value){
+    const text=String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/&amp;/gi,'&').trim(),patterns=[/\]\(\s*(https?:\/\/[^\s<>")']+)/ig,/<a\b[^>]*\bhref\s*=\s*["'](https?:\/\/[^"']+)["']/ig,/https?:\/\/[^\s<>"'()[\]{}（）【】]+/ig];
+    for(const pattern of patterns)for(const match of text.matchAll(pattern)){const candidate=String(match[1]||match[0]).trim().replace(/[\])】）。，,;:：；!?！？]+$/g,'');try{const url=new URL(candidate);if(/^https?:$/.test(url.protocol))return url.href;}catch{}}
+    throw Error('没有识别到有效的歌单链接，请粘贴平台分享文案或 https 链接');
+  }
   function playlistLinkInfo(link){
     const u=new URL(playlistInputUrl(link)),host=u.hostname.toLowerCase(),source=/(?:music\.163\.com|163cn\.tv)$/.test(host)?'netease':/(^|\.)qq\.com$/.test(host)?'tencent':/(^|\.)kugou\.com$/.test(host)?'kugou':'';
     const hashQuery=u.hash.includes('?')?new URLSearchParams(u.hash.slice(u.hash.indexOf('?')+1)):new URLSearchParams(),pathId=`${u.pathname}${u.hash}`.match(/(?:playlist|detail|songlist|plist\/list)\/(?:gcid_)?([\w-]+)/i)?.[1];
