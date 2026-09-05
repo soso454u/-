@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.18';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.19';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -898,7 +898,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){box.innerHTML=`<div class="row">离线缓存不可用：${esc(error.message)}</div>`;setStatus(`离线缓存不可用：${error.message}`);}
   }
   function playlistInputUrl(value){
-    const text=String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/&amp;/gi,'&').trim(),patterns=[/\]\(\s*(https?:\/\/[^\s<>")']+)/ig,/<a\b[^>]*\bhref\s*=\s*["'](https?:\/\/[^"']+)["']/ig,/https?:\/\/[^\s<>"'()[\]{}（）【】]+/ig];
+    const text=String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/&amp;/gi,'&').replace(/\\([&=?#])/g,'$1').trim(),patterns=[/\]\(\s*(https?:\/\/[^\s<>")']+)/ig,/<a\b[^>]*\bhref\s*=\s*["'](https?:\/\/[^"']+)["']/ig,/https?:\/\/[^\s<>"'()[\]{}（）【】]+/ig];
     for(const pattern of patterns)for(const match of text.matchAll(pattern)){const candidate=String(match[1]||match[0]).trim().replace(/[\])】）。，,;:：；!?！？]+$/g,'');try{const url=new URL(candidate);if(/^https?:$/.test(url.protocol))return url.href;}catch{}}
     throw Error('没有识别到有效的歌单链接，请粘贴平台分享文案或 https 链接');
   }
@@ -951,7 +951,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         const data=await r.json();if(!Array.isArray(data)||!data.length)throw Error('接口没有返回歌曲');
         rows=data;break outer;
       }catch(error){lastError=error;console.warn(`[音乐播放器] 歌单接口失败，尝试备用接口：${base}`,error);}
-      if(!rows)throw Error(`歌单读取失败：${lastError?.message||'所有接口均不可用'}`);
+      if(!rows)throw Error(`歌单读取失败：${lastError?.message||'所有接口均不可用'}${source==='netease'?'；如果这是私人歌单，请先在网易云设为公开':''}`);
       settings.playlists=settings.playlists||[];const matches=settings.playlists.filter(item=>playlistMatchesImport(item,source,id));
       let playlist=matches[0],created=false,duplicates=Math.max(0,matches.length-1);
       if(duplicates)settings.playlists=settings.playlists.filter(item=>item===playlist||!matches.includes(item));
