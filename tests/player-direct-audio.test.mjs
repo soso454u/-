@@ -56,7 +56,7 @@ test('replacing and clearing manual audio updates saved copies without losing pl
 
 const fallbackSource = section('async function gdFallback', 'async function gdMetadata');
 function fallback({ gd, meting = async () => null, play, sources = ['netease', 'joox', 'bilibili'] }) {
-  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'resolveMetingSourceTrack', 'playUrl', 'isNotAllowed', 'console', 'songDuration', `${fallbackSource};return gdFallback;`)(sources, {}, gd, meting, play, error => error.name === 'NotAllowedError', { warn() {} }, song => Number(song.duration)||0);
+  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'resolveMetingSourceTrack', 'playUrl', 'isNotAllowed', 'console', 'songDuration', 'sourceBitrates', `${fallbackSource};return gdFallback;`)(sources, {}, gd, meting, play, error => error.name === 'NotAllowedError', { warn() {} }, song => Number(song.duration)||0, source => source==='joox'?['320','192','128','999']:['320','128']);
 }
 
 test('unplayable 320k and duplicate candidates do not prevent lower bitrate playback', async () => {

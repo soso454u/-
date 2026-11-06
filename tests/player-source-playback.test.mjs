@@ -82,16 +82,16 @@ class FakeAudio extends EventTarget{
   pause(){this.paused=true;}
   emit(event){this.dispatchEvent(new Event(event));}
 }
-function playback(){
+function playback({userAgent,fetchBlob=async()=>{throw Error('unexpected blob retry');}}={}){
   const player=new FakeAudio(),doc=new EventTarget(),callbacks=new Map(),statuses=[],recoveries=[];doc.visibilityState='visible';
   let now=0,next=0;
-  const ROOT={Audio:FakeAudio,setInterval:cb=>{callbacks.set(++next,cb);return next;},clearInterval:id=>callbacks.delete(id)};
-  const api=new Function('ROOT','DOC','audio','Date','setStatus','recoverStuckPlayback','releaseOfflineObjectUrl','updatePlayButton','console',`
-    let cancelPlaybackProbe=null,audioPriming=false,playbackPhase='idle',companionListeningAwaitingPlay=true;
+  const ROOT={Audio:FakeAudio,navigator:{userAgent},URL:{createObjectURL:()=> 'blob:safari-transport'},setInterval:cb=>{callbacks.set(++next,cb);return next;},clearInterval:id=>callbacks.delete(id)};
+  const api=new Function('ROOT','DOC','audio','Date','setStatus','recoverStuckPlayback','releaseOfflineObjectUrl','updatePlayButton','console','fetchCacheBlob',`
+    let cancelPlaybackProbe=null,audioPriming=false,playbackPhase='idle',companionListeningAwaitingPlay=true,safariBlobRetryUsed=false,currentCacheObjectUrl='';
     const failedPlaybackUrls=new Set(),isNotAllowed=e=>e.name==='NotAllowedError',mediaText=()=> '解码错误';
     ${section('function playUrl(','async function resolveGdSourceTracks')}
     return {playUrl,cancel:()=>cancelPlaybackProbe?.(),phase:()=>playbackPhase,failed:()=>failedPlaybackUrls};
-  `)(ROOT,doc,player,{now:()=>now},x=>statuses.push(x),(error,url)=>recoveries.push({error,url}),()=>{},()=>{},{info(){}});
+  `)(ROOT,doc,player,{now:()=>now},x=>statuses.push(x),(error,url)=>recoveries.push({error,url}),()=>{},()=>{},{info(){}},fetchBlob);
   return {...api,player,doc,statuses,recoveries,tick(ms=250,time=player.currentTime){now+=ms;player.currentTime=time;for(const cb of [...callbacks.values()])cb();},timers:callbacks};
 }
 async function flush(){await Promise.resolve();await Promise.resolve();}
@@ -145,11 +145,12 @@ test('a short preview with correct metadata is rejected using the actual audio d
   const api=playback(),pending=api.playUrl('https://cdn.test/preview.mp3','预览',false,{expectedDuration:299});
   api.player.duration=30;api.tick(250,.25);await assert.rejects(pending,/时长/);assert.equal(api.timers.size,0);
 });
-test('Safari gesture priming calls play synchronously on the same main audio element',async()=>{
-  const player=new FakeAudio();let called=false;
-  player.play=()=>{called=true;return Promise.resolve();};
-  const prime=new Function('ROOT','audio','ensureKeepAliveUrl',`let disposed=false,audioPriming=false,playbackPhase='idle';${section('function primeAudioFromGesture','function recoverStuckPlayback')};return primeAudioFromGesture;`)({navigator:{userActivation:{isActive:true}}},player,()=> 'blob:silent');
-  prime();assert.equal(called,true);assert.equal(player.src,'blob:silent');assert.equal(player.muted,false);await flush();assert.equal(player.paused,true);
+test('Safari priming grants play synchronously using a 100ms PCM clip, not the ten-hour keepalive',async()=>{
+  const player=new FakeAudio();let called=false,blob;
+  player.play=()=>{called=true;player.paused=false;return Promise.resolve();};
+  const prime=new Function('ROOT','audio',`let disposed=false,audioPriming=false,audioPrimeUrl='',playbackPhase='idle';${section('function primeAudioFromGesture','function clearFailedPlayback')};return primeAudioFromGesture;`)({navigator:{userActivation:{isActive:true}},Blob,URL:{createObjectURL:value=>{blob=value;return 'blob:short-prime';}}},player);
+  prime();assert.equal(called,true);assert.equal(player.src,'blob:short-prime');assert.equal(player.muted,false);assert.equal(player.loads,1);
+  const view=new DataView(await blob.arrayBuffer());assert.equal(view.getUint32(24,true),44100);assert.equal(view.getUint32(40,true)/2/44100,.1);await flush();assert.equal(player.paused,false);
 });
 test('post-start recovery is bounded to one source-resolution pass per user selection',()=>{
   let resolutions=0,pauses=0;const statuses=[];
@@ -181,4 +182,11 @@ test('title-only discovery includes later sources without guessing who the origi
   const cover={title:'夜曲',artist:'翻唱歌手',id:'N1',source:'netease'},other={title:'夜曲',artist:'周杰伦',id:'J1',source:'joox'};
   const api=searchHarness({netease:[cover],joox:[other]});await api.search('夜曲');
   assert.deepEqual(api.calls,['netease','joox','bilibili']);assert.deepEqual(api.results(),[cover,other]);
+});
+
+test('Safari stalled direct media gets only one CORS-permitted Blob transport retry per selection',async()=>{
+  let fetched=0;const api=playback({userAgent:'Version/26.0 Safari/605.1.15',fetchBlob:async()=>{fetched++;return new Blob(['audio data']);}});
+  const pending=api.playUrl('https://cdn.test/remote.mp3');api.player.error={code:2};api.player.emit('error');await flush();await flush();
+  assert.equal(api.player.src,'blob:safari-transport');api.player.error=null;api.tick(250,.25);api.tick(250,.5);await pending;assert.equal(fetched,1);api.cancel();
+  const next=api.playUrl('https://cdn.test/another.mp3');api.player.error={code:2};api.player.emit('error');await assert.rejects(next);assert.equal(fetched,1);
 });

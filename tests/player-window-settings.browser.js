@@ -53,3 +53,26 @@ async function runSeleneWindowSettingsRegression(){
   lyrics.querySelector('[data-lyrics-close]').click();assert(lyrics.hidden,'lyrics panel closes normally');
   return {passed:checks.length,viewport:`${innerWidth}x${innerHeight}`};
 }
+
+// Run only in an isolated fixture; exercises repeated opening, cross-menu switching and hide/reopen.
+async function runSeleneRepairUiRegression(){
+  const player=document.getElementById('safe-music-player'),word=player.querySelector('.desktop-lyric-toggle'),lock=player.querySelector('.quick-lyrics-lock'),menu=document.getElementById('safe-music-player-lyrics-float'),skin=player.querySelector('.skin'),checks=[];
+  const assert=(ok,message)=>{if(!ok)throw Error(message);checks.push(message);};
+  const close=menu.querySelector('[data-lyrics-close]');
+  assert(!document.querySelector('.lyric-resize'),'floating lyric resize corner is removed');
+  assert(player.querySelector('.lyrics-tools').querySelectorAll('button').length===2,'the lyric pill has two independent buttons');
+  if(!menu.hidden)close.click();
+  for(let i=0;i<6;i++){
+    word.click();assert(!menu.hidden&&getComputedStyle(menu).display!=='none',`lyric settings open on repeat ${i+1}`);
+    const rect=word.getBoundingClientRect(),hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+    assert(word.contains(hit),`floating panel leaves its toolbar button reachable ${i+1}`);
+    close.click();
+  }
+  word.click();skin.click();assert(menu.hidden,'skin menu closes the lyric panel even for keyboard/programmatic clicks');
+  word.click();assert(document.getElementById('safe-music-player-skin-float').classList.contains('hidden')&&!menu.hidden,'lyric settings close the skin menu');
+  lock.click();assert(lock.getAttribute('aria-pressed')===String(menu.querySelector('[name=lyricsLocked]').checked),'quick lock stays in sync with lyric settings');lock.click();
+  window.__SELENE_MUSIC_PLAYER__.setVisible(false,{persist:false});assert(menu.hidden,'closing the player hides lyrics using the same state');
+  window.__SELENE_MUSIC_PLAYER__.setVisible(true,{persist:false});word.click();
+  assert(!menu.hidden&&getComputedStyle(menu).display!=='none','closing and reopening the player cannot strand the lyric panel hidden');
+  close.click();return {passed:checks.length,viewport:`${innerWidth}x${innerHeight}`};
+}

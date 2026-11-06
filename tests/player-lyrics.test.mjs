@@ -8,16 +8,16 @@ function section(start, end) {
   assert.ok(first >= 0 && last > first);
   return source.slice(first, last);
 }
-function lyrics(fetch = async () => { throw Error('unexpected request'); }, rate = { times: [], until: 0 }) {
+function lyrics(fetch = async () => { throw Error('unexpected request'); }, rate = { times: [], until: 0 }, meting = []) {
   const ROOT = { __SELENE_GD_RATE__: rate, AbortController, setTimeout, clearTimeout };
-  return new Function('ROOT', 'fetch', 'URL', `
+  return new Function('ROOT', 'fetch', 'URL', 'METING_COVER_APIS', `
     const GD_API='https://music-api.gdstudio.xyz/api.php', audio={duration:240};
     let disposed=false,lyricTimeline=[];const lyricCache=new Map(),lyricRequests=new Map();
     ${section('function normalizeSongText', 'function activeLyricIndex')}
     ${section('function activeLyricIndex', 'function renderImmersiveLyrics')}
     return {parseLrcGroups,mergeLyricTimeline,scoreLyricHit,lyricFitsAudio,lyricTimelinesMatch,resolveLyrics,gdFetch,lyricJson,
       index:(rows,time)=>{lyricTimeline=rows;return activeLyricIndex(time);}};
-  `)(ROOT, fetch, URL);
+  `)(ROOT, fetch, URL, meting);
 }
 const ok = value => ({ ok: true, status: 200, json: async () => value });
 const song = { title: 'Song', artist: 'Singer', source: 'netease', lyricId: 'lyric-7', mediaId: 'track-1', duration: 240 };
@@ -95,7 +95,7 @@ test('missing primary lyrics use only a verified cross-source candidate; failure
   const failed = lyrics(async () => { failures++; throw Error('offline'); });
   await assert.rejects(failed.resolveLyrics(song), /offline/);
   await assert.rejects(failed.resolveLyrics(song), /offline/);
-  assert.equal(failures, 1);
+  assert.equal(failures, 2);
 });
 
 test('cancelled track stops fallback and GD 429/global request budget prevents more network traffic', async () => {
@@ -106,7 +106,7 @@ test('cancelled track stops fallback and GD 429/global request budget prevents m
   const limited = lyrics(async () => { count++; return { status: 429, headers: { get: () => '300' } }; }, rate);
   await assert.rejects(limited.resolveLyrics(song), /限流/);
   await assert.rejects(limited.resolveLyrics({ ...song, lyricId: 'other' }), /限流/);
-  assert.equal(count, 2);
+  assert.equal(count, 3);
   let sent = 0;
   const budget = lyrics(async () => { sent++; return ok({}); }, { times: Array(50).fill(Date.now()), until: 0 });
   await assert.rejects(budget.gdFetch('https://music-api.gdstudio.xyz/api.php'), /限流/);
@@ -120,4 +120,37 @@ test('immersive empty/error/instrumental states replace loading text without a n
   for (const state of ['加载歌词…', '暂无歌词', '纯音乐 · 请欣赏', '歌词暂时加载失败']) {
     render(state);assert.equal(box.textContent, state);
   }
+});
+
+test('GD rate limiting uses independent timed lyrics without requesting another GD source',async()=>{
+  const calls=[];
+  const api=lyrics(async(url,options)=>{
+    const u=new URL(url);calls.push(u);
+    if(u.hostname==='music-api.gdstudio.xyz')return {status:429,headers:{get:()=> '300'}};
+    assert.equal(u.hostname,'lrclib.net');assert.match(options.headers['Lrclib-Client'],/Selene Music/);
+    return ok([{id:44,trackName:'Song',artistName:'Singer',albumName:'Album',duration:240,syncedLyrics:'[00:01]correct backup'}]);
+  });
+  const resolved=await api.resolveLyrics({...song,source:'joox'});assert.equal(resolved.source,'lrclib');assert.equal(resolved.id,'44');
+  assert.equal(calls.length,2);assert.equal(calls.filter(url=>url.hostname==='music-api.gdstudio.xyz').length,1);
+  await api.resolveLyrics({...song,source:'joox'});assert.equal(calls.length,2,'cached backup and GD errors prevent repeated requests');
+});
+test('independent lyrics reject covers, other versions, and a mismatched measured duration',async()=>{
+  for(const change of [{artistName:'Cover Singer'},{trackName:'Song (Live)'},{duration:280}]){
+    const api=lyrics(async url=>new URL(url).hostname==='music-api.gdstudio.xyz'?{status:429,headers:{get:()=> '300'}}:ok([{id:44,trackName:'Song',artistName:'Singer',duration:240,syncedLyrics:'[00:01]wrong',...change}]));
+    await assert.rejects(api.resolveLyrics({...song,source:'joox'}),/限流/);
+  }
+});
+test('Meting backup uses the exact provider and track ID, not an unverified search result',async()=>{
+  const calls=[];
+  const api=lyrics(async url=>{
+    const u=new URL(url);calls.push(u);
+    if(u.hostname==='music-api.gdstudio.xyz')return {status:429,headers:{get:()=> '300'}};
+    assert.equal(u.searchParams.get('server'),'netease');assert.equal(u.searchParams.get('id'),'track-1');assert.equal(u.searchParams.get('type'),'lrc');
+    return {ok:true,text:async()=> '[00:01]same track'};
+  },{times:[],until:0},['https://meting.test/api']);
+  const resolved=await api.resolveLyrics(song);assert.equal(resolved.original,'[00:01]same track');assert.equal(calls.length,2);
+});
+test('lyric requests can use the full shared GD budget; artwork reservation does not fake a 40-request limit',async()=>{
+  let calls=0;const api=lyrics(async()=>{calls++;return ok({lyric:'[00:01]available'});},{times:Array(40).fill(Date.now()),until:0});
+  const result=await api.resolveLyrics(song);assert.equal(calls,1);assert.equal(result.original,'[00:01]available');
 });
