@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.34';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.35';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -751,7 +751,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function metingMediaId(row){for(const value of[row?.url,row?.lrc,row?.pic])try{const id=new URL(String(value||'')).searchParams.get('id');if(id)return id;}catch{}return'';}
   async function searchMetingSource(source,word){let lastError=null;for(const base of METING_COVER_APIS)try{const u=new URL(base);u.searchParams.set('server',source);u.searchParams.set('type','search');u.searchParams.set('id',word);const response=await fetch(u,{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error(`HTTP ${response.status}`);const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]);if(!rows.length)continue;return rows.slice(0,20).map((x,i)=>{const mediaId=metingMediaId(x)||String(i);return{id:`${source}:${mediaId}`,mediaId,title:getSongTitle(x),artist:getSongArtist(x),album:String(x.album?.name||x.album||''),cover:x.pic||x.picUrl||x.album?.picUrl||'',coverId:'',lyricId:mediaId,duration:songDuration(x),audio:typeof x.url==='string'?x.url:'',source};});}catch(error){lastError=error;console.warn(`[音乐播放器] ${source} Meting 搜索备用失败：${base}`,error);}if(lastError)throw lastError;return[];}
   function gdSong(source,x){
-    const mediaId=String(x.mediaId||x.id||'').replace(new RegExp(`^${source}:`),'');
+    const mediaId=String(x.mediaId??x.id??'');
     return {id:`${source}:${mediaId}`,mediaId,title:getSongTitle(x),artist:getSongArtist(x),album:getSongAlbum(x),version:String(x.version||''),cover:x.pic||x.picUrl||x.album?.picUrl||x.cover||'',coverId:String(x.pic_id||x.coverId||''),lyricId:String(x.lyric_id||x.lyricId||mediaId),duration:songDuration(x),audio:'',source,gdSource:source,gdLyricId:String(x.lyric_id||x.lyricId||mediaId)};
   }
   async function searchSource(source,word){
@@ -1101,7 +1101,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(Array.isArray(data)){for(const value of data){const url=getResponseUrl(value,depth+1);if(url)return url;}return '';}
     return getResponseUrl(data.url,depth+1)||getResponseUrl(data.data,depth+1)||getResponseUrl(data.pic,depth+1);
   }
-  function sourceBitrates(source){return source==='joox'?['320','192','128','999']:['320','128'];}
+  function sourceBitrates(source){return source==='joox'?['320','192','128','740','999']:['320','128'];}
+  function playbackSourceOrder(song,selected='auto'){
+    // A manual source is a deliberate choice. Automatic mode starts with the clicked result.
+    if(GD_SOURCES.includes(selected))return [selected];
+    return [...new Set([song?.source,...GD_SOURCES].filter(source=>GD_SOURCES.includes(source)))];
+  }
 
   async function gdCover(s){
     try{
@@ -1200,11 +1205,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         hit=bestSongHit(rows,s);if(hit)break;
       }
     }
-    if(!hit)return[];
-    const identity=gdSong(source,hit),tracks=[];
+    if(!hit){const empty=[];empty.reason='no-match';return empty;}
+    const identity=gdSong(source,hit),tracks=[];tracks.reason='empty-url';
     for(const br of allBitrates?sourceBitrates(source):[bitrate]){
       const info=await gdJson({types:'url',source,id:identity.mediaId,br},{fresh,nonce}),url=getResponseUrl(info);
-      if(!/^https?:\/\//i.test(String(url||''))||tracks.some(track=>track.audio===url))continue;
+      if(!/^https?:\/\//i.test(String(url||''))){const detail=info?.message||info?.msg||info?.error;if(typeof detail==='string')tracks.responseMessage=detail.slice(0,100);continue;}if(tracks.some(track=>track.audio===url))continue;
       tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),refreshed:!!fresh});
     }
     return tracks;
@@ -1215,26 +1220,34 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return hit?.audio?{...s,...hit,gdSource:source,gdLyricId:hit.lyricId||hit.mediaId,source}:null;
   }
   async function resolveGdTrack(s){for(const source of GD_SOURCES){const resolved=await resolveGdSourceTrack(s,source);if(resolved)return resolved;}return null;}
-  async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set(),sources=GD_SOURCES){
-    const tried=new Set(excluded);let lastError=null;
+  async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set(),sources=playbackSourceOrder(s),onSource=()=>{}){
+    const tried=new Set(excluded),failures=new Map();
+    const note=(source,reason,priority=0)=>{if(!failures.has(source)||priority>failures.get(source).priority)failures.set(source,{source,reason,priority});};
+    const failure=error=>{
+      const details=[...failures.values()],message=details.map(item=>`${GD_SOURCE_LABELS[item.source]||item.source}：${item.reason}`).join('；');
+      return Object.assign(Error(message||error?.message||'没有找到可播放音源'),{failures:details,...(error?.retryAt?{retryAt:error.retryAt}:{})});
+    };
     for(const source of sources){
+      if(!isActive())return null;onSource(source);
       for(const bitrate of sourceBitrates(source)){
         if(!isActive())return null;
         let tracks;
         try{tracks=await resolveGdSourceTracks(s,source,false,{bitrate});}
-        catch(error){if(error.retryAt)throw error;lastError=error;continue;}
+        catch(error){note(source,String(error.message||'请求失败').slice(0,100),2);if(error.retryAt)throw failure(error);continue;}
         if(!isActive())return null;
-        if(!tracks.length)lastError=Error(`${GD_SOURCE_LABELS[source]||source} 未返回匹配的可播放地址`);
+        if(!tracks.length){
+          if(tracks.reason==='no-match'){note(source,'未找到同歌手、同版本的歌曲');break;}
+          note(source,tracks.responseMessage?`取播放地址失败：${tracks.responseMessage}`:'接口未返回播放地址',1);continue;
+        }
         for(const track of tracks){
           if(!track.audio||tried.has(track.audio))continue;
           tried.add(track.audio);
           try{await playUrl(track.audio,`${GD_SOURCE_LABELS[source]||source}音源`,false,{isActive,expectedDuration:songDuration(s)||songDuration(track)});return isActive()?{...track,offline:false}:null;}
-          catch(error){if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;lastError=error;}
+          catch(error){if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;note(source,String(error.message||'音频无法播放').slice(0,100),3);}
         }
-        // Search results and identities are cached; only request the next quality on failure.
       }
     }
-    if(lastError)throw lastError;return null;
+    if(failures.size)throw failure();return null;
   }
   async function gdMetadata(s){return{...s,gdSource:s.gdSource||s.source,gdLyricId:s.gdLyricId||s.lyricId||s.mediaId};}
 
@@ -1278,7 +1291,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!isActive())return;
       if(!played&&s.source!=='direct'){
         setStatus('正在逐一验证备用音源…');
-        try{played=await gdFallback(s,0,isActive,failedPlaybackUrls,GD_SOURCES.includes(settings.searchSource)?[settings.searchSource,...GD_SOURCES.filter(source=>source!==settings.searchSource)]:GD_SOURCES);}
+        try{played=await gdFallback(s,0,isActive,failedPlaybackUrls,playbackSourceOrder(s,settings.searchSource),source=>setStatus(`正在验证${GD_SOURCE_LABELS[source]||source}音源…`));}
         catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
       }
       if(played){
@@ -2262,7 +2275,7 @@ ${latest}
       host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;overflow:auto">
         <div class="settings-heading"><h3>播放器设置 <small data-player-version>v${VERSION}</small></h3><button type="button" data-x aria-label="关闭设置">×</button></div>
         <div class="set-grid">
-          <label class="set-card setting-field"><span>搜索音源</span><select name="searchSource"><option value="auto">自动 · 网易云 → JOOX → 哔哩哔哩</option>${GD_SOURCES.map(source=>`<option value="${source}">${GD_SOURCE_LABELS[source]}</option>`).join('')}</select><small>可直接选择 JOOX 搜索周杰伦等歌手。自动模式按顺序补充候选，播放仍严格匹配你选中的版本。</small></label>
+          <label class="set-card setting-field"><span>搜索音源</span><select name="searchSource"><option value="auto">自动 · 网易云 → JOOX → 哔哩哔哩</option>${GD_SOURCES.map(source=>`<option value="${source}">${GD_SOURCE_LABELS[source]}</option>`).join('')}</select><small>手动选择后只使用该音源；自动模式会先播放你点击的来源，失败后再严格匹配备用源。</small></label>
           <label class="set-card setting-toggle"><span>自动读取推荐</span><input type="checkbox" name="auto"></label>
           <div class="set-card setting-field" data-keepalive-card><div class="setting-row"><b>系统媒体保活</b><small data-keepalive-state>未启动</small></div><small>未选歌时运行静音保活；选歌后由当前歌曲接管锁屏与控制中心。</small><button type="button" data-keepalive-toggle>开启自动保活</button></div>
           <label class="set-card setting-field"><span>与其他应用播放</span><select name="audioSessionMode"><option value="priority">优先播放（推荐）</option><option value="mix">允许同时播放</option></select><small>同时播放的实际效果由系统与浏览器决定。</small></label>
