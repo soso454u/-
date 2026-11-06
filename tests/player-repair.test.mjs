@@ -44,7 +44,7 @@ test('clearing caches aborts stale requests and cannot reset the shared GD quota
   const requests=[],offline=[],rate={times:Array(50).fill(Date.now()),until:Date.now()+300000},manual='https://manual.test/custom.mp3';
   const settings={favorites:[{title:'Saved',source:'joox',audio:'https://expired.test/file',customAudio:manual}],playlists:[{songs:[{title:'Playlist',source:'netease',audio:'https://expired.test/other'}]}],companionApiKey:'test-key',companionConversations:{keep:[{content:'keep'}]}};
   const api=new Function('ROOT','gdFetch','settings','offlineRequest',`
-    const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate=ROOT.__SELENE_GD_RATE__,lyricCache=new Map(),lyricRequests=new Map(),failedPlaybackUrls=new Set();
+    const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate=ROOT.__SELENE_GD_RATE__,lyricCache=new Map(),lyricRequests=new Map(),coverResponses=new Map(),coverRequests=new Map(),failedPlaybackUrls=new Set();
     let current=null,queue=[],results=[],searchRequest=0,safariBlobRetryUsed=false;const audioSession=null,DOC={querySelector:()=>null},ID='test',stopPlayback=()=>{},save=()=>{},paintTime=()=>{},setStatus=()=>{},toast=()=>{};
     ${section('const gdResponses=','async function gdFetch')};
     ${section('async function clearPlayerCaches','function resetPlayerDefaults')};
@@ -89,4 +89,74 @@ test('a final Bilibili miss cannot overwrite an earlier JOOX playback error',asy
     assert.match(error.message,/^JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同歌手/);assert.deepEqual(error.failures.map(x=>x.source),['joox','netease','bilibili']);return true;
   });
   assert.equal(calls[0],'joox');assert.equal(calls.filter(x=>x==='bilibili').length,1,'a missing identity stops quality requests for that source');
+});
+
+test('artist aliases and collaborator formatting are tolerant while identity remains explicit',()=>{
+  const api=new Function(`${matching};return {scoreSongHit,scoreLyricHit,getSongArtist};`)();
+  const song={title:'夜曲',artist:'周杰伦',duration:226,album:'十一月的萧邦'};
+  for(const artist of ['周杰倫 (Jay Chou)','Jay Chou（周杰倫）','周杰倫 / Jay Chou','周杰倫 Jay Chou'])assert.ok(Number.isFinite(api.scoreSongHit({...song,artist},song)),artist);
+  assert.equal(api.getSongArtist({singer:{name:'周杰倫'}}),'周杰倫');
+  assert.ok(Number.isFinite(api.scoreSongHit({...song,artist:'周杰倫 + 合作歌手',duration:230},song)));
+  for(const artist of ['周杰伦翻唱团','翻唱者','Jay Chou Tribute','周杰倫 (Cover)','Cover (周杰伦)'])assert.equal(api.scoreSongHit({...song,artist},song),-Infinity);
+  assert.equal(api.scoreSongHit({...song,artist:'周杰倫/合作歌手',duration:0},song),-Infinity,'additional credits need duration evidence');
+  assert.equal(api.scoreLyricHit({...song,artist:'周杰倫/合作歌手'},song),-Infinity,'audio tolerance does not mix cross-version lyrics');
+  assert.equal(api.scoreLyricHit({...song,duration:235},song),-Infinity);
+});
+
+test('a dead selected JOOX record tries another matched release before leaving JOOX',async()=>{
+  const calls=[],played=[];
+  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
+    calls.push(params);
+    if(params.types==='search')return [
+      {id:'wrong',name:'夜曲',artist:['翻唱者']},
+      {id:'dead',name:'夜曲',artist:['周杰倫'],lyric_id:'old-lyrics'},
+      {id:'working',name:'夜曲',artist:['周杰倫 (Jay Chou)'],lyric_id:'new-lyrics',pic_id:'new-cover'}
+    ];
+    return {url:params.id==='working'?'https://cdn.test/working.mp3':''};
+  },async url=>played.push(url));
+  const song=await fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'dead'},0,()=>true,new Set(),['joox']);
+  assert.equal(song.mediaId,'working');assert.equal(song.lyricId,'new-lyrics');assert.equal(song.coverId,'new-cover');
+  assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=8);assert.deepEqual(played,['https://cdn.test/working.mp3']);
+});
+
+test('all unavailable same-source releases are bounded to three identities',async()=>{
+  const ids=[];
+  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['joox'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
+    if(params.types==='search')return Array.from({length:10},(_,i)=>({id:String(i),name:'夜曲',artist:['周杰倫']}));
+    ids.push(params.id);return {url:''};
+  },async()=>assert.fail('empty URLs cannot be played'));
+  await assert.rejects(fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'0'}),/JOOX/);
+  assert.deepEqual([...new Set(ids)],['0','1','2']);assert.equal(ids.length,7);
+});
+
+test('an API transport error does not fan out into more qualities of the same provider',async()=>{
+  let calls=0;
+  const fallback=new Function('resolveGdSourceTracks',`const GD_SOURCES=['joox'],GD_SOURCE_LABELS={joox:'JOOX'};${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return gdFallback;`)(async()=>{calls++;throw Error('HTTP 403');});
+  await assert.rejects(fallback({source:'joox'}),/JOOX：HTTP 403/);assert.equal(calls,1);
+});
+
+test('empty playback URL responses expire quickly without bypassing the GD quota',async()=>{
+  let now=10000,calls=0;
+  const get=new Function('ROOT','gdFetch','Date',`const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate={times:[],until:0};${urlHelpers};${section('const gdResponses=','async function gdFetch')};return gdJson;`)({AbortController,setTimeout,clearTimeout},async()=>{calls++;return {ok:true,json:async()=>({url:''})};},{now:()=>now});
+  const params={types:'url',source:'joox',id:'same',br:'320'};
+  await get(params);await get(params);assert.equal(calls,1);now+=3001;await get(params);assert.equal(calls,2);
+});
+
+test('broken platform artwork uses verified backup artwork without altering track or lyric IDs',async()=>{
+  const song={title:'夜曲',artist:'周杰伦',album:'十一月的萧邦',duration:226,source:'joox',mediaId:'J',lyricId:'L',cover:'https://broken.test/old.jpg'},calls=[];
+  const resolve=new Function('gdCover','coverSearch','imageLoads',`${matching};${urlHelpers};const METING_COVER_APIS=['https://backup.test/api'];${section('async function metingCover','function imageLoads')};${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>{calls.push('gd');return 'https://broken.test/gd.jpg';},async()=>[
+    {name:'夜曲',artist:'翻唱者',album:song.album,pic:'https://good.test/wrong-artist.jpg'},
+    {name:'夜曲',artist:'周杰倫',album:'不同专辑',pic:'https://good.test/wrong-album.jpg'},
+    {name:'夜曲 (Live)',artist:'周杰倫',album:song.album,pic:'https://good.test/live.jpg'},
+    {name:'夜曲',artist:'周杰倫 (Jay Chou)',album:song.album,pic:'https://good.test/original.jpg'}
+  ],async url=>url.startsWith('https://good.test/'));
+  assert.equal(await resolve(song),'https://good.test/original.jpg');assert.equal(song.mediaId,'J');assert.equal(song.lyricId,'L');assert.equal(song.cover,'https://broken.test/old.jpg');assert.deepEqual(calls,['gd']);
+});
+
+test('healthy artwork avoids all backup requests and failed backup searches are deduplicated',async()=>{
+  const resolve=new Function('imageLoads','gdCover','metingCover',`${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>true,()=>assert.fail('unnecessary GD call'),()=>assert.fail('unnecessary backup call'));
+  assert.equal(await resolve({cover:'https://good.test/cover.jpg'}),'https://good.test/cover.jpg');
+  let calls=0;
+  const search=new Function('ROOT','fetch',`let dataCacheGeneration=0;const coverResponses=new Map(),coverRequests=new Map(),dataRequestControllers=new Set();${section('async function coverSearch','async function metingCover')};return coverSearch;`)({AbortController,setTimeout,clearTimeout},async()=>{calls++;return {ok:false,status:503};});
+  await Promise.all([search('https://backup.test/api'),search('https://backup.test/api')]);await search('https://backup.test/api');assert.equal(calls,1);
 });

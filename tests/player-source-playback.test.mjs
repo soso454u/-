@@ -160,7 +160,7 @@ test('post-start recovery is bounded to one source-resolution pass per user sele
 
 test('late result artwork cannot overwrite the identity of a track that switched source',async()=>{
   const song={...jay,source:'netease',mediaId:'N-1',cover:''},rows=[song];let complete;
-  const hydrate=new Function('rows','gdCover',`let results=rows;const coverDelay=async()=>{},render=()=>{};${section('async function hydrateResultCovers','function render(')};return hydrateResultCovers;`)(rows,()=>new Promise(resolve=>complete=resolve));
+  const hydrate=new Function('rows','resolveCover',`let results=rows;const coverDelay=async()=>{},render=()=>{};${section('async function hydrateResultCovers','function render(')};return hydrateResultCovers;`)(rows,()=>new Promise(resolve=>complete=resolve));
   const pending=hydrate(rows);Object.assign(song,{source:'joox',mediaId:'J-7',cover:''});complete('https://old.test/N.jpg');await pending;assert.equal(song.cover,'');
 });
 test('resuming a cancelled selection resolves that selection instead of playing an older source',async()=>{
