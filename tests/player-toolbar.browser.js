@@ -22,7 +22,7 @@ async function runSeleneToolbarRegression() {
       assert(button.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)), `${button.textContent} receives pointer input`);
     }
   };
-  for (const skin of ['film', 'white', 'red', 'black', 'blue', 'green', 'cream', 'albumglass']) {
+  for (const skin of ['film', 'white', 'red', 'black', 'blue', 'green', 'cream', 'albumglass', 'orbit']) {
     head.querySelector('.skin').click();
     document.querySelector(`#safe-music-player-skin-float [data-skin="${skin}"]`).click();
     for (const size of ['s', 'm', 'l']) {
