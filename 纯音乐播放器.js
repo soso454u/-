@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.38';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.39';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -953,25 +953,52 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   // Share the GD budget with search, artwork and playback requests, including script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
+  function gdDiagnostic(entry){
+    const logs=ROOT.__SELENE_GD_DIAGNOSTICS__||(ROOT.__SELENE_GD_DIAGNOSTICS__=[]);
+    logs.push({time:Date.now(),...entry});if(logs.length>80)logs.splice(0,logs.length-80);
+  }
   async function gdJson(params,{fresh=false,nonce=''}={}){
     const url=new URL(GD_API);for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
-    const key=url.href,cached=gdResponses.get(key),generation=dataCacheGeneration;
+    const key=url.href,cached=gdResponses.get(key),generation=dataCacheGeneration,temporary=params.types==='url';
     if(params.types==='pic'&&(Date.now()<gdRate.until||gdRate.times.filter(time=>Date.now()-time<300000).length>=40))return {url:''};
-    if(!fresh&&cached&&cached.until>Date.now())return cached.value;
-    if(gdRequests.has(key))return gdRequests.get(key);
+    if(!temporary&&!fresh&&cached&&cached.until>Date.now())return cached.value;
+    const requestKey=fresh?`${key}#fresh`:key;
+    if(gdRequests.has(requestKey))return gdRequests.get(requestKey);
     if(fresh)url.searchParams.set('_selene',String(nonce||Date.now()));
     const pending=(async()=>{
       const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),12000);dataRequestControllers.add(controller);
-      try{const response=await gdFetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'});if(!response.ok)throw Error(`GD 请求失败：${response.status}`);const value=await response.json(),ttl=params.types==='url'&&!getResponseUrl(value)?3000:60000;if(generation===dataCacheGeneration)gdResponses.set(key,{value,until:Date.now()+ttl});while(gdResponses.size>100)gdResponses.delete(gdResponses.keys().next().value);return value;}
-      finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);if(gdRequests.get(key)===pending)gdRequests.delete(key);}
-    })();gdRequests.set(key,pending);return pending;
+      let status,body='';
+      try{
+        const response=await gdFetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'});status=response.status;
+        // Keep the actual error body, including non-JSON gateway responses.
+        let value;
+        if(typeof response.text==='function'){body=await response.text();if(response.ok)try{value=JSON.parse(body);}catch(cause){throw Object.assign(Error('GD 接口返回非 JSON 响应'),{kind:'invalid-response',cause});}}
+        else if(response.ok)value=await response.json();
+        if(!response.ok)throw Object.assign(Error(`GD 请求失败：HTTP ${status}`),{kind:'http'});
+        const message=value?.message||value?.msg||value?.error,code=Number(value?.code??value?.status);
+        if(code===429||typeof message==='string'&&/限流|请求过于频繁|too many requests|rate.?limit/i.test(message)){
+          gdRate.until=Math.max(gdRate.until,Date.now()+30000);
+          throw Object.assign(Error(`GD 音乐台请求限流：${message||code}`),{kind:'rate-limit',retryAt:gdRate.until});
+        }
+        if((code>=400||value?.error)&&!getResponseUrl(value))throw Object.assign(Error(`GD 接口错误：${message||code}`),{kind:'api',response:value});
+        gdDiagnostic({params:{...params},fresh,status,kind:temporary&&!getResponseUrl(value)?'empty-url':'ok',body:body.slice(0,1600)});
+        // Signed URLs and empty URL responses are never reused after this request settles.
+        if(!temporary&&generation===dataCacheGeneration)gdResponses.set(key,{value,until:Date.now()+60000});
+        while(gdResponses.size>100)gdResponses.delete(gdResponses.keys().next().value);return value;
+      }catch(error){
+        const kind=error.kind||(error.retryAt?'rate-limit':controller.signal.aborted?'timeout':'network');
+        Object.assign(error,{kind,params:{...params},status:error.status??status,body:error.body||body.slice(0,1600),requestUrl:url.href});
+        gdDiagnostic({params:{...params},fresh,status:error.status,kind,name:error.name,message:error.message,body:error.body,retryAt:error.retryAt});
+        console.warn('[音乐播放器] GD 请求失败',error);throw error;
+      }finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);if(gdRequests.get(requestKey)===pending)gdRequests.delete(requestKey);}
+    })();gdRequests.set(requestKey,pending);return pending;
   }
   async function gdFetch(url,options={},lyric=false){
     const now=Date.now();gdRate.times=gdRate.times.filter(time=>now-time<300000);
-    if(now<gdRate.until||gdRate.times.length>=50)throw Object.assign(Error('GD 音乐台请求限流，请稍后再试'),{retryAt:Math.max(gdRate.until,(gdRate.times[0]||now)+300000)});
+    if(now<gdRate.until||gdRate.times.length>=50)throw Object.assign(Error('GD 音乐台请求限流，请稍后再试'),{kind:'rate-limit',retryAt:Math.max(gdRate.until,(gdRate.times[0]||now)+300000)});
     gdRate.times.push(now);
     const response=await fetch(url,options);
-    if(response.status===429){const retry=response.headers?.get('Retry-After'),seconds=Number(retry);gdRate.until=Math.max(Date.now()+30000,retry?(Number.isFinite(seconds)?Date.now()+seconds*1000:Date.parse(retry)||0):Date.now()+300000);throw Object.assign(Error('GD 音乐台请求限流，请稍后再试'),{retryAt:gdRate.until});}
+    if(response.status===429){const retry=response.headers?.get('Retry-After'),seconds=Number(retry);gdRate.until=Math.max(Date.now()+30000,retry?(Number.isFinite(seconds)?Date.now()+seconds*1000:Date.parse(retry)||0):Date.now()+300000);const body=await response.text?.().catch(()=>'')||'';throw Object.assign(Error('GD 音乐台请求限流，请稍后再试'),{kind:'rate-limit',status:429,body:body.slice(0,1600),retryAt:gdRate.until});}
     return response;
   }
   async function lyricJson(params,isActive=()=>true){
@@ -1215,22 +1242,26 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }catch(fallbackError){if(isNotAllowed(fallbackError)||fallbackError.name==='AbortError')throw fallbackError;throw error;}
     });
   }
-  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set()}={}){
+  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set(),isActive=()=>true}={}){
     // Reuse a selected identity; cross-source lookup must pass strict matching first.
-    let hit=!fresh&&s.source===source&&s.mediaId&&s.gdSource===source&&!excludeIds.has(String(s.mediaId))?s:null;
+    let hit=s.source===source&&s.mediaId&&s.gdSource===source&&!excludeIds.has(String(s.mediaId))?s:null;
     if(!hit){
       const queries=[`${s.title} ${s.artist||''}`.trim(),s.title].filter((value,index,list)=>list.indexOf(value)===index);
       for(const name of queries){
-        const data=await gdJson({types:'search',source,name,count:'20',pages:'1'},{fresh,nonce}),rows=Array.isArray(data)?data:(data?.data||[]);
+        if(!isActive())return [];
+        const data=await gdJson({types:'search',source,name,count:'20',pages:'1'}),rows=Array.isArray(data)?data:(data?.data||[]);
+        if(!Array.isArray(rows))throw Object.assign(Error('GD 搜索返回异常数据'),{kind:'invalid-response',response:data});
         hit=bestSongHit(rows.filter(row=>!excludeIds.has(String(row.mediaId??row.id??''))),s);if(hit)break;
       }
     }
     if(!hit){const empty=[];empty.reason='no-match';return empty;}
     const identity=gdSong(source,hit),tracks=[];tracks.reason='empty-url';tracks.identity=identity;
     for(const br of allBitrates?sourceBitrates(source):[bitrate]){
+      if(!isActive())return [];
       const info=await gdJson({types:'url',source,id:identity.mediaId,br},{fresh,nonce}),url=getResponseUrl(info);
-      if(!/^https?:\/\//i.test(String(url||''))){const detail=info?.message||info?.msg||info?.error;if(typeof detail==='string')tracks.responseMessage=detail.slice(0,100);continue;}if(tracks.some(track=>track.audio===url))continue;
+      if(!/^https?:\/\//i.test(String(url||''))){const detail=info?.message||info?.msg||info?.error;if(typeof detail==='string')tracks.responseMessage=detail.slice(0,100);continue;}
       tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),refreshed:!!fresh});
+      break;
     }
     return tracks;
   }
@@ -1242,34 +1273,48 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   async function resolveGdTrack(s){for(const source of GD_SOURCES){const resolved=await resolveGdSourceTrack(s,source);if(resolved)return resolved;}return null;}
   async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set(),sources=playbackSourceOrder(s),onSource=()=>{}){
     const tried=new Set(excluded),failures=new Map();
-    const note=(source,reason,priority=0)=>{if(!failures.has(source)||priority>failures.get(source).priority)failures.set(source,{source,reason,priority});};
+    const note=(source,reason,priority=0,evidence={})=>{
+      let detail=failures.get(source);if(!detail){detail={source,reason,priority,attempts:[]};failures.set(source,detail);}
+      if(priority>detail.priority)Object.assign(detail,{reason,priority});detail.attempts.push(evidence);
+    };
     const failure=error=>{
       const details=[...failures.values()],message=details.map(item=>`${GD_SOURCE_LABELS[item.source]||item.source}：${item.reason}`).join('；');
       return Object.assign(Error(message||error?.message||'没有找到可播放音源'),{failures:details,...(error?.retryAt?{retryAt:error.retryAt}:{})});
     };
     for(const source of sources){
       if(!isActive())return null;onSource(source);
-      const excludeIds=new Set();
+      const excludeIds=new Set();let refreshed=false;
       // One selected record plus at most two other matching releases, never an unbounded retry.
       for(let candidate=0;candidate<3;candidate++){
-        let identity=null,noMatch=false;
-        for(const bitrate of candidate===0?sourceBitrates(source):['320']){
+        let identity=null,noMatch=false,target=s,refreshable=false;
+        const qualities=(candidate===0||source==='joox'?sourceBitrates(source):['320']).map(bitrate=>({bitrate,fresh:false}));
+        for(let index=0;index<qualities.length;index++){
+          const {bitrate,fresh}=qualities[index];
           if(!isActive())return null;
           let tracks;
-          try{tracks=await resolveGdSourceTracks(s,source,false,{bitrate,...(excludeIds.size?{excludeIds}: {})});}
-          catch(error){note(source,String(error.message||'请求失败').slice(0,100),2);if(error.retryAt)throw failure(error);noMatch=true;break;}
+          try{tracks=await resolveGdSourceTracks(target,source,false,{bitrate,fresh,excludeIds,isActive});}
+          catch(error){note(source,String(error.message||'请求失败').slice(0,100),2,{kind:error.kind||'request',bitrate,fresh,error});if(error.retryAt)throw failure(error);noMatch=true;break;}
           if(!isActive())return null;
           identity=tracks.identity||identity;
+          if(identity)target={...s,...identity};
           if(!tracks.length){
-            if(tracks.reason==='no-match'){note(source,'未找到同歌手、同版本的歌曲');noMatch=true;break;}
-            note(source,tracks.responseMessage?`取播放地址失败：${tracks.responseMessage}`:'接口未返回播放地址',1);continue;
+            if(tracks.reason==='no-match'){note(source,'未找到同歌手、同版本的歌曲',0,{kind:'no-match'});noMatch=true;break;}
+            note(source,tracks.responseMessage?`取播放地址失败：${tracks.responseMessage}`:'接口未返回播放地址',1,{kind:'empty-url',id:identity?.mediaId,bitrate,fresh,message:tracks.responseMessage});refreshable=true;
           }
           for(const track of tracks){
             if(!track.audio||tried.has(track.audio))continue;
             tried.add(track.audio);
             try{await playUrl(track.audio,`${GD_SOURCE_LABELS[source]||source}音源`,false,{isActive,expectedDuration:songDuration(s)||songDuration(track)});return isActive()?{...track,offline:false}:null;}
-            catch(error){if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;note(source,String(error.message||'音频无法播放').slice(0,100),3);}
+            catch(error){
+              if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;
+              const evidence={kind:'media',id:track.mediaId,bitrate,fresh,url:track.audio,media:error.media,error};
+              note(source,String(error.message||'音频无法播放').slice(0,100),3,evidence);console.warn('[音乐播放器] 音源候选失败',evidence);
+              // A network/unsupported URL may have expired; the media element cannot prove expiry.
+              if([2,4].includes(error.media?.code)||/无播放进度|network|load failed/i.test(error.message))refreshable=true;
+            }
           }
+          // One cache-busting refresh for this JOOX source, only after its ordinary qualities fail.
+          if(source==='joox'&&candidate===0&&index===qualities.length-1&&identity?.mediaId&&refreshable&&!refreshed){refreshed=true;qualities.push({bitrate:sourceBitrates(source)[0],fresh:true});}
         }
         if(noMatch||!identity?.mediaId)break;excludeIds.add(String(identity.mediaId));
       }
@@ -1317,7 +1362,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){if(!isActive())return;lyricState=error.retryAt?'歌词请求限流，请稍后再试':'歌词暂时加载失败';console.warn('[音乐播放器] 歌词加载失败',error);}
     paintTime();
   }
-  async function play(s,recovering=false){
+  let pendingPlay=null;
+  function play(s,recovering=false){
+    const key=JSON.stringify([s.source,s.mediaId||s.id,s.title,s.artist,s.version,s.customAudio,playbackSourceChoice(s)]);
+    if(!recovering&&pendingPlay?.key===key&&pendingPlay.request===playRequest&&playbackWanted)return pendingPlay.promise;
+    const pending={key,request:playRequest+1,promise:null};pendingPlay=pending;
+    pending.promise=performPlay(s,recovering).finally(()=>{if(pendingPlay===pending)pendingPlay=null;});return pending.promise;
+  }
+  async function performPlay(s,recovering=false){
     const selectedSource=playbackSourceChoice(s);
     cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;safariBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
     const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
@@ -1353,6 +1405,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       lastError=lastError||Error('没有找到可播放音源');
     }catch(error){if(error.name==='AbortError')return;if(isNotAllowed(error)){if(isActive()){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();updatePlayButton();show(s);setStatus('浏览器阻止播放，请再次点击播放按钮');}return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
     if(!isActive())return;
+    console.warn('[音乐播放器] 本轮播放失败',{request,song:{title:s.title,artist:s.artist,source:s.source,mediaId:s.mediaId},error:lastError});
     clearFailedPlayback();const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;setStatus(detail);toast('warning',detail);
   }
   function parse(text){const b=String(text||'').match(/<music_recommend>([\s\S]*?)<\/music_recommend>/i);if(!b)return null;const tag=n=>b[1].match(new RegExp(`<${n}>\\s*([\\s\\S]*?)\\s*<\\/${n}>`,'i'))?.[1]?.trim()||'';const x={title:tag('title'),artist:tag('artist'),reason:tag('reason')};return x.title?x:null;}

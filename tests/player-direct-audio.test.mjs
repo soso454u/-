@@ -95,7 +95,7 @@ test('fallback starts at the default quality without forced refresh rounds', asy
   const options = [];
   const gdFallback = fallback({ gd: async (_, source, all, opts) => { options.push(opts); return [{ source, audio: 'good' }]; }, play: async () => {} });
   await gdFallback({ source: 'netease' }, 1);
-  assert.deepEqual(options,[{bitrate:'320'}]);
+  assert.equal(options.length,1);assert.equal(options[0].bitrate,'320');assert.equal(options[0].fresh,false);
 });
 
 const importSource = section('function playlistSongsFromRows', 'let activeCompanionWorldText');

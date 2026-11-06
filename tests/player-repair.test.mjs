@@ -119,7 +119,7 @@ test('a dead selected JOOX record tries another matched release before leaving J
   },async url=>played.push(url));
   const song=await fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'dead'},0,()=>true,new Set(),['joox']);
   assert.equal(song.mediaId,'working');assert.equal(song.lyricId,'new-lyrics');assert.equal(song.coverId,'new-cover');
-  assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=8);assert.deepEqual(played,['https://cdn.test/working.mp3']);
+  assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=9);assert.deepEqual(played,['https://cdn.test/working.mp3']);
 });
 
 test('all unavailable same-source releases are bounded to three identities',async()=>{
@@ -129,7 +129,7 @@ test('all unavailable same-source releases are bounded to three identities',asyn
     ids.push(params.id);return {url:''};
   },async()=>assert.fail('empty URLs cannot be played'));
   await assert.rejects(fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'0'}),/JOOX/);
-  assert.deepEqual([...new Set(ids)],['0','1','2']);assert.equal(ids.length,7);
+  assert.deepEqual([...new Set(ids)],['0','1','2']);assert.equal(ids.length,16,'five qualities per identity plus one source-wide refresh');
 });
 
 test('an API transport error does not fan out into more qualities of the same provider',async()=>{
@@ -138,11 +138,11 @@ test('an API transport error does not fan out into more qualities of the same pr
   await assert.rejects(fallback({source:'joox'}),/JOOX：HTTP 403/);assert.equal(calls,1);
 });
 
-test('empty playback URL responses expire quickly without bypassing the GD quota',async()=>{
+test('empty playback URL responses are not cached between settled requests',async()=>{
   let now=10000,calls=0;
   const get=new Function('ROOT','gdFetch','Date',`const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate={times:[],until:0};${urlHelpers};${section('const gdResponses=','async function gdFetch')};return gdJson;`)({AbortController,setTimeout,clearTimeout},async()=>{calls++;return {ok:true,json:async()=>({url:''})};},{now:()=>now});
   const params={types:'url',source:'joox',id:'same',br:'320'};
-  await get(params);await get(params);assert.equal(calls,1);now+=3001;await get(params);assert.equal(calls,2);
+  await get(params);await get(params);assert.equal(calls,2);now+=3001;await get(params);assert.equal(calls,3);
 });
 
 test('broken platform artwork uses verified backup artwork without altering track or lyric IDs',async()=>{
