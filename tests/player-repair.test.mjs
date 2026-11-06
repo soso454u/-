@@ -64,11 +64,14 @@ test('GD extra_data duration participates in strict version and lyric matching',
   assert.equal(duration({extra_data:{duration:226}}),226);
 });
 
-test('automatic playback starts with the clicked JOOX source; an explicit source stays exclusive',()=>{
-  const order=new Function(`const GD_SOURCES=['netease','joox','bilibili'];${urlHelpers};return playbackSourceOrder;`)();
-  assert.deepEqual(order({source:'joox'}),['joox','netease','bilibili']);
+test('playback defaults to automatic fallback independently of search; per-song overrides remain exclusive',()=>{
+  const {order,choices}=new Function(`const GD_SOURCES=['netease','joox','bilibili'],playbackSources=new WeakMap(),settings={searchSource:'joox'};${urlHelpers};return {order:song=>playbackSourceOrder(song,playbackSourceChoice(song)),choices:playbackSources};`)();
+  const song={source:'joox'};
+  assert.deepEqual(order(song),['joox','netease','bilibili']);
   assert.deepEqual(order({source:'netease'}),['netease','joox','bilibili']);
-  assert.deepEqual(order({source:'joox'},'joox'),['joox']);
+  choices.set(song,'joox');assert.deepEqual(order(song),['joox']);
+  choices.set(song,'netease');assert.deepEqual(order(song),['netease']);
+  choices.set(song,'auto');assert.deepEqual(order(song),['joox','netease','bilibili']);
 });
 test('GD opaque track IDs are preserved verbatim and deprecated url_id never replaces them',async()=>{
   const id='joox:opaque+/==#',calls=[];

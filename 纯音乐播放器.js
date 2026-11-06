@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.36';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.37';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -636,6 +636,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID} .immersive-line:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
       #${ID}.skin-orbit.immersive .cover-glass{display:none!important}
       #${ID}.skin-orbit.immersive>.body>.immersive-view{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important;text-align:center!important;padding-top:clamp(14px,4cqh,30px)!important}
+      #${ID}.skin-orbit.immersive .immersive-info h2{margin:0 38px 5px!important;text-align:center!important}
+      #${ID}.skin-orbit.immersive .immersive-info p{margin:0 38px!important;text-align:center!important}
       #${ID}.immersive .immersive-close{position:absolute;right:0;top:8px;z-index:3;display:flex!important;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;padding:0!important;border:0!important;border-radius:50%!important;background:#ffffff0d!important;color:#f6f4f1!important;font-size:0!important;line-height:0!important;cursor:pointer}
       #${ID} .immersive-return{display:none!important}
       #${ID}.immersive>.body>.controls{position:relative;z-index:2;display:grid!important;flex:0 0 auto!important;grid-template-columns:1fr 40px 48px 40px 1fr!important;grid-template-rows:48px 16px!important;align-items:center!important;column-gap:12px!important;row-gap:3px!important;width:100%;margin:6px 0 0!important;padding:0!important;background:none!important}
@@ -1119,6 +1121,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return getResponseUrl(data.url,depth+1)||getResponseUrl(data.data,depth+1)||getResponseUrl(data.pic,depth+1);
   }
   function sourceBitrates(source){return source==='joox'?['320','192','128','740','999']:['320','128'];}
+  function playbackSourceChoice(song){return playbackSources.get(song)??'auto';}
   function playbackSourceOrder(song,selected='auto'){
     // A manual source is a deliberate choice. Automatic mode starts with the clicked result.
     if(GD_SOURCES.includes(selected))return [selected];
@@ -1315,7 +1318,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     paintTime();
   }
   async function play(s,recovering=false){
-    const selectedSource=playbackSources.get(s)??settings.searchSource;
+    const selectedSource=playbackSourceChoice(s);
     cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;safariBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
     const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
     try{
@@ -2320,7 +2323,7 @@ ${latest}
       host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;overflow:auto">
         <div class="settings-heading"><h3>播放器设置 <small data-player-version>v${VERSION}</small></h3><button type="button" data-x aria-label="关闭设置">×</button></div>
         <div class="set-grid">
-          <label class="set-card setting-field"><span>搜索音源</span><select name="searchSource"><option value="auto">自动 · 网易云 → JOOX → 哔哩哔哩</option>${GD_SOURCES.map(source=>`<option value="${source}">${GD_SOURCE_LABELS[source]}</option>`).join('')}</select><small>手动选择用于搜索与默认播放。当前歌曲可通过播放键左侧“换源”单独选择；自动模式先尝试点击结果的来源，再匹配备用源。</small></label>
+          <label class="set-card setting-field"><span>搜索音源</span><select name="searchSource"><option value="auto">自动 · 网易云 → JOOX → 哔哩哔哩</option>${GD_SOURCES.map(source=>`<option value="${source}">${GD_SOURCE_LABELS[source]}</option>`).join('')}</select><small>此处只选择搜索来源。播放默认自动回退；播放键左侧的双箭头图标可单独切换当前歌曲音源。</small></label>
           <label class="set-card setting-toggle"><span>自动读取推荐</span><input type="checkbox" name="auto"></label>
           <div class="set-card setting-field" data-keepalive-card><div class="setting-row"><b>系统媒体保活</b><small data-keepalive-state>未启动</small></div><small>未选歌时运行静音保活；选歌后由当前歌曲接管锁屏与控制中心。</small><button type="button" data-keepalive-toggle>开启自动保活</button></div>
           <label class="set-card setting-field"><span>与其他应用播放</span><select name="audioSessionMode"><option value="priority">优先播放（推荐）</option><option value="mix">允许同时播放</option></select><small>同时播放的实际效果由系统与浏览器决定。</small></label>
@@ -2822,14 +2825,14 @@ ${latest}
   }
   function bindPlaybackSources(el){
     const controls=el.querySelector('.controls');
-    controls.insertAdjacentHTML('afterbegin','<button type="button" data-c="source" title="切换当前歌曲播放源" aria-label="切换当前歌曲播放源" aria-expanded="false" disabled>换源</button>');
+    controls.insertAdjacentHTML('afterbegin',`<button type="button" data-c="source" title="切换当前歌曲播放源" aria-label="切换当前歌曲播放源" aria-haspopup="dialog" aria-expanded="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></svg></button>`);
     const button=controls.querySelector('[data-c=source]'),panel=DOC.createElement('section');
     panel.id=`${ID}-source-float`;panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-label','切换播放源');DOC.body.append(panel);
     const close=()=>{panel.hidden=true;button.setAttribute('aria-expanded','false');};
     bindReliableTap(button,()=>{
       if(!panel.hidden){close();return;}if(!current)return;
-      const choice=playbackSources.get(current)??settings.searchSource??'auto';
-      panel.innerHTML=`<b>当前歌曲播放源</b><small>${esc(current.title)} · ${esc(current.artist)}<br>当前：${esc(current.offline?'离线缓存':current.customAudio?'手动音源':GD_SOURCE_LABELS[current.source]||'自动')}</small><div>${['auto',...GD_SOURCES].map(source=>`<button type="button" data-playback-source="${source}" aria-pressed="${choice===source}">${source==='auto'?'自动回退':GD_SOURCE_LABELS[source]}</button>`).join('')}</div><small>选择后重新获取地址；离线缓存、手动音源仍优先。自动回退会尝试同歌手、同版本的备用源。</small><button type="button" data-source-close>关闭</button>`;
+      const choice=playbackSourceChoice(current);
+      panel.innerHTML=`<div class="source-heading"><b>播放源</b><button type="button" data-source-close aria-label="关闭播放源选择">×</button></div><small>当前：${esc(current.offline?'离线缓存':current.customAudio?'手动音源':GD_SOURCE_LABELS[current.source]||'自动')} · 仅本曲生效</small><div class="source-options">${['auto',...GD_SOURCES].map(source=>`<button type="button" data-playback-source="${source}" aria-pressed="${choice===source}">${source==='auto'?'自动回退':GD_SOURCE_LABELS[source]}</button>`).join('')}</div><small class="source-hint">离线缓存、手动音源优先</small>`;
       panel.querySelector('[data-source-close]').onclick=close;
       panel.querySelectorAll('[data-playback-source]').forEach(option=>bindReliableTap(option,()=>{
         const song=current,source=option.dataset.playbackSource;if(!song)return;close();playbackSources.set(song,source);
@@ -2837,19 +2840,22 @@ ${latest}
         for(const key of gdResponses.keys()){const url=new URL(key);if(url.searchParams.get('types')==='url'&&(source==='auto'||url.searchParams.get('source')===source))gdResponses.delete(key);}
         if(song.source!=='direct')song.audio='';void play(song);
       }));
-      panel.hidden=false;button.setAttribute('aria-expanded','true');placeFloatingPanel(panel,button,280);
+      panel.hidden=false;button.setAttribute('aria-expanded','true');placeFloatingPanel(panel,button,220);
     });
-    const outside=e=>{if(!panel.contains(e.target)&&!button.contains(e.target))close();},escape=e=>{if(e.key==='Escape')close();},reposition=()=>{if(!panel.hidden)placeFloatingPanel(panel,button,280);};
+    const outside=e=>{if(!panel.contains(e.target)&&!button.contains(e.target))close();},escape=e=>{if(e.key==='Escape')close();},reposition=()=>{if(!panel.hidden)placeFloatingPanel(panel,button,220);};
     DOC.addEventListener('pointerdown',outside,true);DOC.addEventListener('keydown',escape);ROOT.addEventListener('resize',reposition);ROOT.visualViewport?.addEventListener('resize',reposition);ROOT.visualViewport?.addEventListener('scroll',reposition);
     sourceMenuCleanup=()=>{DOC.removeEventListener('pointerdown',outside,true);DOC.removeEventListener('keydown',escape);ROOT.removeEventListener('resize',reposition);ROOT.visualViewport?.removeEventListener('resize',reposition);ROOT.visualViewport?.removeEventListener('scroll',reposition);};
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-source-style">
-      #${ID}:not(.mini) .controls [data-c=source]{grid-column:1!important;justify-self:start!important;width:40px!important;min-width:40px!important;font:11px/1.3 system-ui!important;border-radius:12px!important;color:inherit!important}
+      #${ID}:not(.mini) .controls [data-c=source]{grid-column:1!important;justify-self:start!important;display:flex!important;align-items:center!important;justify-content:center!important;width:32px!important;min-width:32px!important;height:32px!important;padding:0!important;border-radius:50%!important;color:inherit!important;opacity:.72}
+      #${ID} .controls [data-c=source]>svg{display:block!important;flex:none!important;width:20px!important;height:20px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
       #${ID}.immersive .controls [data-c=source]:before{display:none!important}
-      #${ID}-source-float{position:fixed;z-index:2147483647;box-sizing:border-box;padding:16px;border:1px solid #ffffff26;border-radius:20px;background:#20212af5;color:#f5f4f7;box-shadow:0 16px 48px #0006;font:13px/1.6 system-ui;overflow:auto;overscroll-behavior:contain}
-      #${ID}-source-float[hidden]{display:none!important}#${ID}-source-float b,#${ID}-source-float small{display:block;margin-bottom:10px}#${ID}-source-float small{font-size:11px;color:#b9bac8}
-      #${ID}-source-float>div{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-      #${ID}-source-float button{padding:10px;border:1px solid #ffffff26;border-radius:12px;background:#ffffff0d;color:inherit;font:inherit;cursor:pointer}
-      #${ID}-source-float [aria-pressed=true]{border-color:#a8d9ce;background:#a8d9ce22}#${ID}-source-float [data-source-close]{width:100%}
+      #${ID}-source-float{position:fixed;z-index:2147483647;box-sizing:border-box;padding:12px!important;border:1px solid #ffffff26;border-radius:16px;background:#20212afa;color:#f5f4f7;box-shadow:0 12px 36px #0005;font:12px/1.4 system-ui!important;overflow:auto;overscroll-behavior:contain}
+      #${ID}-source-float[hidden]{display:none!important}#${ID}-source-float>.source-heading{display:flex!important;align-items:center;justify-content:space-between;margin:0 0 5px!important;padding:0!important;height:auto!important;background:none!important}
+      #${ID}-source-float b{font:600 12px/1.4 system-ui!important}#${ID}-source-float small{display:block;margin:0 0 10px;font:10px/1.5 system-ui!important;color:#b9bac8}
+      #${ID}-source-float>.source-options{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+      #${ID}-source-float button{min-width:0!important;min-height:32px!important;padding:6px 8px!important;border:1px solid #ffffff26;border-radius:9px;background:#ffffff0d;color:inherit;font:11px/1.4 system-ui!important;cursor:pointer}
+      #${ID}-source-float [aria-pressed=true]{border-color:#a8d9ce;background:#a8d9ce22}#${ID}-source-float [data-source-close]{width:24px!important;height:24px!important;min-height:24px!important;padding:0!important;border:0;background:transparent;font-size:18px!important}
+      #${ID}-source-float .source-hint{margin:0!important;font-size:9px!important}
     </style>`);
   }
   function updateQuickLyricsButton(el=DOC.getElementById(ID)){
