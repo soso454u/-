@@ -10,7 +10,7 @@ function fixture({transport=async()=>new Response('{"data":[{"id":"ark-code-late
   const ROOT={AbortController,setTimeout,clearTimeout,fetch:async(...args)=>{calls.push(args);return transport(...args);}};
   if(hasST){ROOT.SillyTavern={};ROOT.getRequestHeaders=()=>headers;}
   const context=()=>ctx;
-  const api=new Function('ROOT','settings','context','Headers','fetch',`${section('function companionApiBase','function casualizeCompanionPunctuation')};return{companionApiBase,companionEndpoint,companionModelsEndpoint,requestCompanionApi,companionModelIds};`)(ROOT,settings,context,Headers,direct||(()=>{throw Error('unexpected browser direct request');}));
+  const api=new Function('ROOT','settings','context','Headers','fetch',`${section('function companionApiBase','function casualizeCompanionPunctuation')};return{companionApiBase,companionEndpoint,companionModelsEndpoint,requestCompanionApi,companionModelIds,companionCompletionPayload,companionResponseText,companionEmptyReplyError};`)(ROOT,settings,context,Headers,direct||(()=>{throw Error('unexpected browser direct request');}));
   return{...api,ROOT,settings,calls};
 }
 
@@ -90,4 +90,39 @@ test('missing model-list support keeps manual selection available and restores t
   );
   await fetchModels();assert.equal(button.disabled,false);assert.equal(saved,false);
   assert.match(status.textContent,/手动填写 ark-code-latest/);
+});
+
+test('Ark DeepSeek V4/V4.1 requests disable thinking while preserving the chosen reply budget',()=>{
+  const api=fixture();
+  for(const model of ['deepseek-v4-1-flash-260910','deepseek-v4-1-flash-261017','deepseek-v4-1-flash-economy-261017','deepseek-v4-flash-ga-260731','deepseek-v4-pro-260425','deepseek-v4-pro-ga-260813']){
+    const payload=api.companionCompletionPayload(model,[]);
+    assert.deepEqual(payload.thinking,{type:'disabled'});assert.equal(payload.max_tokens,300);
+  }
+  assert.equal(api.companionCompletionPayload('other-model',[]).thinking,undefined);
+  api.settings.companionApiUrl='https://other-provider.test/v1';
+  assert.equal(api.companionCompletionPayload('deepseek-v4-pro',[]).thinking,undefined);
+});
+
+test('thinking reaches the upstream ST custom body rather than being dropped as an unknown ST field',async()=>{
+  const api=fixture(),payload=api.companionCompletionPayload('deepseek-v4-1-flash-261017',[]);
+  await api.requestCompanionApi('completion',payload);
+  const body=JSON.parse(api.calls[0][1].body),extras=JSON.parse(body.custom_include_body);
+  assert.deepEqual(extras,{thinking:{type:'disabled'}});
+  assert.equal(body.max_tokens,300);assert.equal(extras.max_tokens,undefined);
+});
+
+test('structured response text ignores reasoning and can read a nonempty fallback after empty content',()=>{
+  const api=fixture();
+  assert.equal(api.companionResponseText({choices:[{message:{content:[{type:'reasoning',text:'private thoughts'},{type:'text',text:'hello'},{type:'text',text:{value:' world'}}]}}]}),'hello world');
+  assert.equal(api.companionResponseText({choices:[{message:{content:'',reasoning_content:'private thoughts'}}],output_text:'visible answer'}),'visible answer');
+  assert.equal(api.companionResponseText({choices:[{message:{content:null,reasoning_content:'private thoughts'}}]}),'');
+  assert.equal(api.companionResponseText({output:[{type:'reasoning',content:'hidden'},{type:'message',role:'assistant',content:[{type:'output_text',text:'visible'}]}]}),'visible');
+});
+
+test('empty output distinguishes reasoning budget exhaustion, filtering and tool calls',()=>{
+  const api=fixture();
+  const error=api.companionEmptyReplyError({choices:[{finish_reason:'length',message:{content:'',reasoning_content:'private thoughts'}}]});
+  assert.match(error.message,/思考阶段.*上限/);assert.doesNotMatch(error.message,/private thoughts/);
+  assert.match(api.companionEmptyReplyError({choices:[{finish_reason:'content_filter'}]}).message,/过滤/);
+  assert.match(api.companionEmptyReplyError({choices:[{finish_reason:'tool_calls'}]}).message,/工具调用/);
 });

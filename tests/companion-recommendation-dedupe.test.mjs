@@ -161,3 +161,14 @@ test('a song explicitly named by the user may be replayed', async () => {
   assert.equal(result.song.title, '稻香');
   assert.deepEqual(played, ['稻香']);
 });
+
+test('recommendations use the current contact card and the actual group participants',()=>{
+  const start=player.indexOf('function companionRecommendationTask'),end=player.indexOf('function rankCompanionResults',start);
+  const prompt=new Function('current','companionCharacter','companionLatestRoundText','companionPickedPrompt','companionRoleCardText','companionGroupCardText','companionMood',`${player.slice(start,end)};return companionRecommendationTask;`)(
+    null,()=>({}),()=>'',()=>'',info=>`selected-card:${info.selected?.name||info.name}`,info=>`group-cards:${info.targetMembers.map(member=>member.name).join(',')}`,()=>'',
+  );
+  const single=prompt({info:{isMulti:true,selected:{name:'独立联系人'},character:{name:'主角色'}}});
+  assert.match(single,/selected-card:独立联系人/);assert.doesNotMatch(single,/selected-card:主角色/);
+  const group=prompt({info:{isGroup:true,targetMembers:[{name:'甲'},{name:'乙'}]}});
+  assert.match(group,/group-cards:甲,乙/);assert.match(group,/SELENE_SONG: 官方歌名 \| 官方歌手或作曲者/);
+});

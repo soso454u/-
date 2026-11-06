@@ -18,7 +18,7 @@ function loadSettings(saved, { extension = false, failWrite = false } = {}) {
     },
     toastr: { warning: message => notices.push(message) },
   };
-  return new Function('ROOT', 'KEY', 'defaults', 'DEFAULT_COMPANION_PRESET', 'LEGACY_COMPANION_PRESET_V2', 'EXTENSION_MODE', 'console', `${section('let settings,storageWriteWarningShown', 'const audio = new ROOT.Audio')};return {settings,persistSettings,notices:ROOT.toastr};`)(ROOT, 'test', { enabled: true, menuEnabled: true }, 'new preset', 'old preset', extension, { warn() {} });
+  return new Function('ROOT', 'KEY', 'defaults', 'DEFAULT_COMPANION_PRESET', 'LEGACY_COMPANION_PRESET_V2', 'LEGACY_COMPANION_PRESET_V3', 'EXTENSION_MODE', 'console', `${section('let settings,storageWriteWarningShown', 'const audio = new ROOT.Audio')};return {settings,persistSettings,notices:ROOT.toastr};`)(ROOT, 'test', { enabled: true, menuEnabled: true }, 'new preset', 'old preset', 'v3 preset', extension, { warn() {} });
 }
 
 test('explicitly enabling the standalone script reveals a previously closed player and repairs its menu', () => {
@@ -40,7 +40,7 @@ test('failed preset migration writes cannot discard existing songs and playlists
   const { settings, persistSettings } = loadSettings({ favorites, playlists, companionPresetVersion: 2 }, { failWrite: true });
   assert.deepEqual(settings.favorites, favorites);
   assert.deepEqual(settings.playlists, playlists);
-  assert.equal(settings.companionPresetVersion, 3);
+  assert.equal(settings.companionPresetVersion, 4);
   assert.equal(persistSettings(), false);
 });
 
@@ -91,4 +91,11 @@ test('pagehide unloads the owning runtime while a browser back-forward cache tra
 test('a stale runtime cleanup cannot remove a newer player instance', () => {
   const staleCleanup = new Function('ROOT', `let disposed=false;${section('function cleanupPlayer', 'function handlePlayerPageHide')};return cleanupPlayer;`)({ __SAFE_MUSIC_CLEANUP__: () => {} });
   assert.doesNotThrow(() => staleCleanup());
+});
+
+test('unchanged built-in preset upgrades automatically while a customized preset is preserved',()=>{
+  const upgraded=loadSettings({companionPresetVersion:3,companionPreset:'v3 preset'}).settings;
+  assert.equal(upgraded.companionPreset,'new preset');assert.equal(upgraded.companionPresetVersion,4);
+  const custom=loadSettings({companionPresetVersion:3,companionPreset:'My own character prompt'}).settings;
+  assert.equal(custom.companionPreset,'My own character prompt');assert.equal(custom.companionPresetVersion,4);
 });
