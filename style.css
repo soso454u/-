@@ -34,6 +34,34 @@
   margin-bottom: 10px;
 }
 
+#selene-music-extension-settings .selene-audio-policy {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+
+#selene-music-extension-settings .selene-audio-policy select {
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 12px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  font: inherit;
+}
+
+#selene-music-extension-settings .selene-audio-policy-note {
+  display: block;
+  margin: 6px 0 14px;
+  opacity: .7;
+  line-height: 1.5;
+}
+
 #selene-music-extension-settings .selene-setting-actions .menu_button {
   display: inline-flex;
   flex: 0 0 auto;
@@ -46,6 +74,12 @@
   word-break: keep-all !important;
   overflow-wrap: normal !important;
   writing-mode: horizontal-tb !important;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent) !important;
+  border-radius: 12px !important;
+  background: color-mix(in srgb, currentColor 6%, transparent) !important;
+  box-shadow: none !important;
 }
 
 #selene-music-extension-settings .selene-keepalive-native {
@@ -90,4 +124,46 @@
   #selene-music-extension-settings .selene-setting-grid {
     grid-template-columns: 1fr;
   }
+}
+
+#selene-music-extension-settings .selene-setting-actions .menu_button {
+  color: inherit !important;
+}
+
+#selene-music-extension-settings .selene-setting-grid input[type='checkbox'] {
+  appearance: none;
+  position: relative;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 20px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+#selene-music-extension-settings .selene-setting-grid input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  inset: 3px auto auto 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px #0003;
+}
+
+#selene-music-extension-settings .selene-setting-grid input[type='checkbox']:checked {
+  background: #638d7c;
+}
+
+#selene-music-extension-settings .selene-setting-grid input[type='checkbox']:checked::before {
+  left: 15px;
+}
+
+#selene-music-extension-settings .selene-setting-grid input[type='checkbox']:focus-visible {
+  outline: 2px solid #70b7ff;
+  outline-offset: 3px;
 }

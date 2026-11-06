@@ -9,7 +9,7 @@ const ROOT = (() => {
 
 // Give the player an extension-relative, cache-safe URL before its module starts.
 // A real long-form AAC track is required for iOS/Chrome to create a system media session.
-const PLAYER_MODULE_VERSION = '2.10.21';
+const PLAYER_MODULE_VERSION = '2.10.23';
 const extensionAsset = file => new URL(file, import.meta.url);
 const playerModuleUrl = () => {
   const url = extensionAsset('纯音乐播放器.js');
@@ -53,6 +53,11 @@ function syncPanel() {
   $('#selene_auto_show').prop('checked', state.autoShow);
   $('#selene_menu_enabled').prop('checked', state.menuEnabled);
   $('#selene_keep_alive').prop('checked', state.keepAlive);
+  $('#selene_audio_session_mode').val(state.audioSessionMode || 'priority');
+  const audioPolicyNote = DOC.querySelector(`#${PANEL_ID} [data-selene-audio-policy-note]`);
+  if (audioPolicyNote) audioPolicyNote.textContent = state.audioSessionSupported
+    ? '允许同时播放会请求与其他应用混音，实际效果由系统与浏览器决定。'
+    : '当前浏览器未提供 Audio Session；已保存偏好，同时播放效果由系统与浏览器决定。';
   const keepAliveStatus = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-status]`);
   const keepAliveNative = DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`);
   if (keepAliveStatus) {
@@ -125,6 +130,14 @@ function mountPanel() {
         </div>
         <small data-selene-keepalive-status data-state="off">未启动</small>
         <div class="selene-keepalive-native" data-selene-keepalive-native hidden></div>
+        <label class="selene-audio-policy" for="selene_audio_session_mode">
+          <span>与其他应用播放</span>
+          <select id="selene_audio_session_mode">
+            <option value="priority">优先播放（推荐）</option>
+            <option value="mix">允许同时播放</option>
+          </select>
+        </label>
+        <small class="selene-audio-policy-note" data-selene-audio-policy-note></small>
         <div class="selene-setting-actions">
           <button type="button" class="menu_button" data-selene-return-keepalive>回到保活</button>
           <button type="button" class="menu_button" data-selene-reset-position>重置播放器位置</button>
@@ -142,6 +155,10 @@ function mountPanel() {
   bindSwitch('#selene_auto_show', (controls, value) => controls.setAutoShow(value));
   bindSwitch('#selene_menu_enabled', (controls, value) => controls.setMenuEnabled(value));
   bindSwitch('#selene_keep_alive', (controls, value) => controls.setKeepAlive(value));
+  $('#selene_audio_session_mode').on('change', function () {
+    api()?.setAudioSessionMode?.(this.value);
+    syncPanel();
+  });
 
   api()?.attachKeepAliveControl?.(DOC.querySelector(`#${PANEL_ID} [data-selene-keepalive-native]`));
   $(`#${PANEL_ID} [data-selene-return-keepalive]`).on('click', async () => {

@@ -14,6 +14,9 @@ function createHarness(companionMini = false) {
   const moves = [];
   const persisted = [];
   const timers = [];
+  const frames = new Map();
+  const transforms = [];
+  let frameId = 0;
   const pointerHandle = () => ({
     captured: null,
     released: null,
@@ -24,23 +27,34 @@ function createHarness(companionMini = false) {
   const avatar = pointerHandle();
   const dialog = {
     dataset: {},
+    classList: { add() {}, remove() {} },
+    style: { setProperty: (key, value) => transforms.push({ key, value }), removeProperty() {} },
     querySelector(selector) { return selector === '.companion-head' ? head : avatar; },
-    getBoundingClientRect() { return { left: 100, top: 200 }; },
+    getBoundingClientRect() { return { left: 100, top: 200, width: 300, height: 400 }; },
   };
   const api = new Function(
     'settings',
     'placeCompanion',
     'persistCompanionPosition',
+    'fitCompanionToViewport',
+    'companionViewport',
     'ROOT',
-    `let companionDragged=false;${source.slice(start, end)};return {bindCompanionDragging,get dragged(){return companionDragged;}};`,
+    `let companionDragged=false;${source.slice(source.indexOf('function optimizeWindowInteractions'), source.indexOf('function handleAudioPlay'))};${source.slice(start, end)};return {bindCompanionDragging,get dragged(){return companionDragged;}};`,
   )(
     settings,
     (_dialog, left, top) => moves.push({ left, top }),
     (_dialog, mini) => persisted.push(mini),
-    { setTimeout(callback) { timers.push(callback); } },
+    () => {},
+    () => ({ left: 0, top: 0, width: 1200, height: 900 }),
+    {
+      requestAnimationFrame(callback) { frames.set(++frameId, callback); return frameId; },
+      cancelAnimationFrame(id) { frames.delete(id); },
+      setTimeout(callback) { timers.push(callback); }, clearTimeout() {},
+    },
   );
   api.bindCompanionDragging(dialog);
-  return { api, avatar, dialog, head, moves, persisted, settings, timers };
+  const flushFrames = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); };
+  return { api, avatar, dialog, head, moves, persisted, settings, timers, frames, transforms, flushFrames };
 }
 
 const pointerEvent = ({ id = 7, x = 0, y = 0, target = 'plain' } = {}) => ({
@@ -48,7 +62,8 @@ const pointerEvent = ({ id = 7, x = 0, y = 0, target = 'plain' } = {}) => ({
   pointerType: 'touch',
   clientX: x,
   clientY: y,
-  preventDefault() {},
+  cancelable: true,
+  preventDefault() { this.defaultPrevented = true; },
   stopPropagation() {},
   target: {
     closest(selector) {
@@ -63,12 +78,16 @@ test('the full companion window drags from its header and persists its position'
   const harness = createHarness(false);
   harness.head.onpointerdown(pointerEvent({ x: 20, y: 30 }));
   harness.head.onpointermove(pointerEvent({ x: 22, y: 32 }));
+  harness.flushFrames();
   assert.equal(harness.moves.length, 0, 'tiny movement should remain a click');
 
   harness.head.onpointermove(pointerEvent({ x: 50, y: 70 }));
-  assert.deepEqual(harness.moves.at(-1), { left: 130, top: 240 });
+  harness.flushFrames();
+  assert.equal(harness.moves.length, 0, 'dragging should not repeatedly change layout');
+  assert.deepEqual(harness.transforms.at(-1), { key: 'transform', value: 'translate3d(30px,40px,0)' });
   assert.equal(harness.api.dragged, true);
   harness.head.onpointerup(pointerEvent({ x: 50, y: 70 }));
+  assert.deepEqual(harness.moves.at(-1), { left: 130, top: 240 });
   assert.deepEqual(harness.persisted, [false]);
   harness.timers.splice(0).forEach(callback => callback());
   assert.equal(harness.api.dragged, false);
@@ -101,4 +120,43 @@ test('the mini companion avatar remains independently draggable', () => {
 
   assert.deepEqual(harness.moves.at(-1), { left: 120, top: 230 });
   assert.deepEqual(harness.persisted, [true]);
+});
+
+test('a burst of pointer moves paints once per frame and release commits the latest position', () => {
+  const harness = createHarness();
+  harness.head.onpointerdown(pointerEvent({ x: 10, y: 10 }));
+  for (let step = 1; step <= 100; step++) harness.head.onpointermove(pointerEvent({ x: 10 + step, y: 10 + step }));
+  assert.equal(harness.frames.size, 1);
+  assert.equal(harness.transforms.length, 0);
+  harness.flushFrames();
+  assert.equal(harness.transforms.length, 1);
+  harness.head.onpointermove(pointerEvent({ x: 140, y: 150 }));
+  harness.head.onpointerup(pointerEvent({ x: 140, y: 150 }));
+  assert.deepEqual(harness.moves, [{ left: 230, top: 340 }]);
+  assert.deepEqual(harness.persisted, [false]);
+  assert.equal(harness.frames.size, 0);
+});
+
+test('a second finger and late capture-loss event cannot move or save the window again', () => {
+  const harness = createHarness();
+  harness.head.onpointerdown(pointerEvent({ x: 10, y: 10 }));
+  harness.head.onpointermove(pointerEvent({ id: 8, x: 500, y: 500 }));
+  harness.head.onpointerup(pointerEvent({ id: 8 }));
+  assert.equal(harness.frames.size, 0);
+  harness.head.onpointermove(pointerEvent({ x: 30, y: 40 }));
+  harness.head.onpointerup(pointerEvent({ x: 30, y: 40 }));
+  harness.head.onlostpointercapture(pointerEvent());
+  assert.deepEqual(harness.moves, [{ left: 120, top: 230 }]);
+  assert.deepEqual(harness.persisted, [false]);
+});
+
+test('cancel discards an unpainted move and leaves no delayed work', () => {
+  const harness = createHarness();
+  harness.head.onpointerdown(pointerEvent({ x: 10, y: 10 }));
+  harness.head.onpointermove(pointerEvent({ x: 90, y: 90 }));
+  harness.head.onpointercancel(pointerEvent());
+  harness.flushFrames();
+  assert.equal(harness.transforms.length, 0);
+  assert.equal(harness.moves.length, 0);
+  assert.equal(harness.persisted.length, 0);
 });
