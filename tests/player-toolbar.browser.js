@@ -14,7 +14,7 @@ async function runSeleneToolbarRegression() {
     const rect = head.getBoundingClientRect();
     assert(Math.abs(rect.height - 45) < 1, 'toolbar retains its height under a conflicting host theme');
     const buttons = [...head.querySelectorAll('button')];
-    assert(buttons.length === 6, 'all six toolbar controls exist');
+    assert(buttons.length === 5, 'all five toolbar controls exist without the retired size button');
     for (const button of buttons) {
       const box = button.getBoundingClientRect(), style = getComputedStyle(button);
       assert(style.visibility === 'visible' && style.display !== 'none' && Number(style.opacity) > 0, `${button.textContent} remains visible`);
