@@ -4,7 +4,7 @@
   "js": "index.js",
   "css": "style.css",
   "author": "Selene海莉",
-  "version": "2.10.24",
+  "version": "2.10.25",
   "homePage": "https://github.com/soso454u/-",
   "auto_update": true,
   "hooks": {
@@ -15,5 +15,8 @@
     "disable": "onDisable",
     "hot_reload": "onHotUnload",
     "delete": "onDelete"
+  },
+  "extension_hot_reload": {
+    "self_managed_modules": true
   }
 }

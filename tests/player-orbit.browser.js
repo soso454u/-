@@ -1,11 +1,17 @@
 // Run after loading the player in an isolated browser page, at each target viewport.
 async function runSeleneOrbitRegression() {
   const player = document.getElementById('safe-music-player');
+  window.__SELENE_MUSIC_PLAYER__.resetPosition();
   const checks = [];
   const assert = (ok, message) => { if (!ok) throw Error(message); checks.push(message); };
   const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const skin = async value => {
     player.querySelector('.skin').click();
+    await frame();
+    const menu = document.getElementById('safe-music-player-skin-float');
+    const box = menu.getBoundingClientRect();
+    assert(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, 'appearance picker fits within the viewport');
+    assert(menu.querySelector('[data-skin]').dataset.skin === 'albumglass', 'default album glass is the first appearance');
     document.querySelector(`#safe-music-player-skin-float [data-skin="${value}"]`).click();
     await frame();
   };
@@ -18,6 +24,7 @@ async function runSeleneOrbitRegression() {
   await skin('orbit');
   assert(JSON.parse(localStorage.getItem('safe-music-player-v1')).skin === 'orbit', 'record style persists');
   assert(visible(player.querySelector('.now')), 'record view shows current song');
+  assert([...player.querySelectorAll('.actions [data-a]')].map(button => button.dataset.a).join(',') === 'rec,world-rec,offline,lock', 'more functions contain no duplicate library or cache-current entries');
   const disc = player.querySelector('.selene-orbit-disc');
   const cover = disc.querySelector('img');
   const artwork = cover.hasAttribute('src') ? cover : disc.querySelector('.selene-orbit-placeholder');
@@ -64,6 +71,11 @@ async function runSeleneOrbitPlaybackRegression() {
   const motion = () => getComputedStyle(player.querySelector('.now img')).animationPlayState;
   await audio.play(); await frame();
   assert(player.classList.contains('orbit-playing') && motion() === 'running', 'native playback starts the cover animation');
+  const cover = player.querySelector('.now img'), disc = player.querySelector('.selene-orbit-disc');
+  assert(getComputedStyle(cover).borderRadius === '50%' && getComputedStyle(cover).clipPath === 'circle(50%)', 'record cover is cropped to a true circle');
+  const layers = () => [getComputedStyle(disc, '::before').transform, getComputedStyle(disc, '::after').transform, getComputedStyle(player.querySelector('.selene-orbit-energy')).transform];
+  const first = layers(); await new Promise(resolve => setTimeout(resolve, 400));
+  assert(layers().every((value, index) => value !== first[index]), 'breathing grooves and both flowing light layers animate');
   player.querySelector('[data-c=play]').click();
   await new Promise(resolve => setTimeout(resolve, 1400));
   assert(audio.paused && !player.classList.contains('orbit-playing') && motion() === 'paused', 'user pause keeps the cover frozen');
@@ -78,5 +90,5 @@ async function runSeleneOrbitPlaybackRegression() {
   player.querySelector('.immersive-close').click(); await frame();
   assert(!player.classList.contains('immersive'), 'immersive view returns to the record');
   player.querySelector('[data-c=play]').click();
-  return { passed: 7 };
+  return { passed: 9 };
 }
