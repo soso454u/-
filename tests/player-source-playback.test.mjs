@@ -43,6 +43,24 @@ test('search stops at correct Netease result; wrong singer falls through to JOOX
   await fallback.search('七里香 周杰伦',true);assert.deepEqual(fallback.calls,['netease','joox']);assert.equal(fallback.played().source,'joox');
 });
 
+test('manual artist-only search displays the provider song list without requiring a title',async()=>{
+  const songs=[{...jay,title:'七里香'},{...jay,title:'晴天'},{...jay,title:'稻香 (Live)'}];
+  const api=searchHarness({netease:songs});
+  await api.search('周杰伦');assert.deepEqual(api.results(),songs);assert.deepEqual(api.calls,['netease']);assert.equal(api.played(),undefined);
+});
+test('manual partial or remembered titles retain relevant provider candidates and alternate versions',async()=>{
+  const songs=[{title:'今天你要嫁给我',artist:'陶喆/蔡依林'},{title:'今天我要嫁给你',artist:'冯小慈'},{title:'今天你要嫁给我 (Live)',artist:'陶喆/蔡依林'}];
+  for(const query of ['今天你就要嫁给我','今天我要','嫁给我']){
+    const api=searchHarness({netease:songs});await api.search(query);assert.deepEqual(api.results(),songs);assert.equal(api.played(),undefined);
+  }
+});
+test('empty manual results fall back sequentially; structured automatic picks remain strict',async()=>{
+  const songs=[{...jay,source:'joox'}];
+  const manual=searchHarness({joox:songs});await manual.search('周杰伦');assert.deepEqual(manual.calls,['netease','joox']);assert.deepEqual(manual.results(),songs);
+  const auto=searchHarness({netease:[{...jay,artist:'翻唱者'}],joox:songs});
+  await auto.search('七里香 周杰伦',true,true,'',false,jay);assert.deepEqual(auto.calls,['netease','joox']);assert.equal(auto.played().artist,'周杰伦');
+});
+
 function resolver(){
   const calls=[];
   const resolve=new Function('gdJson',`${matching};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function resolveGdSourceTrack(')};const getResponseUrl=x=>x.url;return resolveGdSourceTracks;`)(async params=>{

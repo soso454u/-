@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.31';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.32';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
@@ -764,9 +764,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function search(word,autoPlayFirst=false,showList=true,heading='',quiet=false,preferredSong=null){
     word=String(word||'').trim();if(!word)return;
-    const request=++searchRequest;setStatus('正在搜索…');let found=[],lastError;
+    const request=++searchRequest,strict=autoPlayFirst||!!preferredSong;setStatus('正在搜索…');let found=[],lastError;
     for(const source of GD_SOURCES){
-      try{const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;found=querySongHits(rows,word,preferredSong);if(found.length)break;}
+      // Manual search accepts artist names, partial titles and fuzzy provider results.
+      // Automatic picks still require the requested identity before starting playback.
+      try{const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;found=strict?querySongHits(rows,word,preferredSong):rows;if(found.length)break;}
       catch(error){lastError=error;if(error.retryAt)break;}
     }
     if(request!==searchRequest||disposed)return;
@@ -774,10 +776,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const listBox=DOC.querySelector(`#${ID} .list`);
     if(showList)render(results,heading,'results',false);else if(listBox){listBox.hidden=true;listBox.innerHTML='';}
     if(results.length){
-      setStatus(`${results.length} 个匹配结果`);
+      setStatus(`${results.length} 个${strict?'匹配':'搜索'}结果`);
       if(autoPlayFirst)await play(results[0]);
       if(showList)ROOT.setTimeout(()=>{if(request===searchRequest)hydrateResultCovers(results,heading);},0);
-    }else{const message=lastError?.message||'没有找到符合歌名、歌手及版本的歌曲';setStatus(message);if(!quiet)toast('warning',message);}
+    }else{const message=lastError?.message||(strict?'没有找到符合歌名、歌手及版本的歌曲':'没有找到歌曲，试试歌手、部分歌名或其他关键词');setStatus(message);if(!quiet)toast('warning',message);}
   }
 
   const coverDelay=ms=>new Promise(resolve=>ROOT.setTimeout(resolve,ms));
