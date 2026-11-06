@@ -4,11 +4,11 @@
 (() => {
   'use strict';
   const ROOT = (() => { try { return window.parent?.document ? window.parent : window; } catch { return window; } })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.30';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.31';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const METING_COVER_APIS = ['https://api.i-meto.com/meting/api','https://selene-meting-api.onrender.com/api'];
-  const GD_SOURCES = ['netease','tencent','kugou','kuwo','migu','joox','bilibili'];
+  const GD_SOURCES = ['netease','joox','bilibili'];
   const LEGACY_COMPANION_PRESET_V2 = `[CHARACTER]
 ANCHOR: Lock this character's want, fear, pride, defense, self-interest, attachment, resentment, current task, and hard limit. Caring about the user does not automatically mean choosing the user. Do not give the user a halo and do not assume default goodness.
 FILTER: The same trigger must pass through this character's old wounds, pride, interests, habits, and current relationship. If another character could react in the same way, rewrite from this character's specific logic.
@@ -299,6 +299,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   keepAliveAudio.addEventListener('error',()=>{if(settings.keepAlive&&!keepAliveSuspendedForTrack)keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lastRecommendationChat = null, lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, menuObserver = null, progressSeeking = false, pendingProgressValue = 0, currentCacheObjectUrl = '', playbackWanted = false, interruptionRetryTimer = 0, interruptionRetryCount = 0, companionBusy = false, companionRequest = 0, companionAutoSongKey = '', companionAutoCount = 0, companionMidSongDone = false, companionDragged = false, companionQueueDraining = false, companionListeningClock = null, companionListeningSavedAt = 0, companionListeningAwaitingPlay = false; const companionMessageQueue=[],lyricCache = new Map(),lyricRequests=new Map();
   let lyricState='暂无歌词',immersiveLyricsObserver=null;
+  let cancelPlaybackProbe=null,playbackPhase='idle',audioPriming=false,playbackRecoveryCount=0,pendingPlaybackSelection=false;
+  const failedPlaybackUrls=new Set();
+  let searchRequest=0;
   const mediaSession=ROOT.navigator?.mediaSession||null;
   const audioSession=ROOT.navigator?.audioSession||null;
   const mediaActions=['play','pause','stop','previoustrack','nexttrack','seekbackward','seekforward','seekto'];
@@ -311,7 +314,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function scheduleInterruptionRecovery(delay=900){
     clearInterruptionRetry();
     if(settings.audioSessionMode!=='priority'||!playbackWanted||!current||disposed)return;
-    interruptionRetryTimer=ROOT.setTimeout(async()=>{interruptionRetryTimer=0;if(!playbackWanted||!current||!audio.paused)return;interruptionRetryCount++;try{applyAudioSessionMode();await audio.play();interruptionRetryCount=0;setStatus('已恢复被其他媒体打断的播放');}catch(error){console.info('[音乐播放器] 系统暂未允许恢复播放',error);if(interruptionRetryCount<5)scheduleInterruptionRecovery(Math.min(5000,900*interruptionRetryCount));else setStatus('系统仍在占用媒体焦点，返回播放器点播放可再次恢复');}},delay);
+    interruptionRetryTimer=ROOT.setTimeout(async()=>{interruptionRetryTimer=0;if(!playbackWanted||!current||!audio.paused)return;interruptionRetryCount++;try{applyAudioSessionMode();await resumeMainAudioFromMediaSession();}catch(error){console.info('[音乐播放器] 系统暂未允许恢复播放',error);if(interruptionRetryCount<5)scheduleInterruptionRecovery(Math.min(5000,900*interruptionRetryCount));else setStatus('系统仍在占用媒体焦点，返回播放器点播放可再次恢复');}},delay);
   }
   function handleAudioSessionState(){
     if(audioSession?.state==='interrupted'){
@@ -332,7 +335,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function updateMediaPlaybackState(forcePosition=false){
     if(!mediaSession)return;
-    try{mediaSession.playbackState=audio.paused?'paused':'playing';}catch{}
+    try{mediaSession.playbackState=playbackPhase==='playing'&&!audio.paused?'playing':'paused';}catch{}
     updateMediaPosition(forcePosition);
   }
   function clearMediaMetadataRefresh(){for(const timer of mediaMetadataRefreshTimers)ROOT.clearTimeout(timer);mediaMetadataRefreshTimers=[];}
@@ -367,18 +370,26 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function switchMediaTrack(step){const song=nextSong(step);if(song)play(song);}
   async function resumeMainAudioFromMediaSession(){
     if(!current){syncKeepAliveWithPlayback();return;}
-    playbackWanted=true;
-    pauseKeepAliveForTrack();updateMediaMetadata(current,true);
-    if(!audio.currentSrc&&!audio.src){await play(current);return;}
-    try{await audio.play();}catch(error){console.warn('[音乐播放器] 系统媒体播放恢复失败，重新解析当前歌曲',error);await play(current);}
+    playbackWanted=true;applyAudioSessionMode();pauseKeepAliveForTrack();updateMediaMetadata(current,true);
+    if(pendingPlaybackSelection||audioPriming||audio.error||!audio.currentSrc&&!audio.src){await play(current);return;}
+    const request=playRequest,song=current;
+    try{
+      await playUrl(audio.currentSrc||audio.src,'继续播放',false,{resume:true,isActive:()=>!disposed&&playbackWanted&&request===playRequest});
+      if(request!==playRequest||current!==song)return;
+      if(song.source!=='direct'){applyCurrentCover(song,request);loadLyrics(song,request);}
+    }catch(error){
+      if(error.name==='AbortError')return;
+      if(isNotAllowed(error)){playbackWanted=false;playbackPhase='idle';audio.pause();updatePlayButton();setStatus('浏览器阻止播放，请再次点击播放按钮');}
+      else recoverStuckPlayback(error,audio.currentSrc||audio.src);
+    }
   }
   function setupMediaSession(){
     applyAudioSessionMode();
     if(!mediaSession)return;
     audio.addEventListener('playing',updatePlayButton);
     setMediaAction('play',()=>resumeMainAudioFromMediaSession());
-    setMediaAction('pause',()=>{if(audio.paused&&current){playbackWanted=true;resumeMainAudioFromMediaSession();return;}playbackWanted=false;audio.pause();updateMediaPlaybackState(true);scheduleKeepAliveSync();});
-    setMediaAction('stop',()=>{playbackWanted=false;audio.pause();seekMediaTo(0);scheduleKeepAliveSync();});
+    setMediaAction('pause',()=>{playbackWanted=false;cancelPlaybackProbe?.();audio.pause();updateMediaPlaybackState(true);scheduleKeepAliveSync();});
+    setMediaAction('stop',()=>{playbackWanted=false;cancelPlaybackProbe?.();audio.pause();seekMediaTo(0);scheduleKeepAliveSync();});
     setMediaAction('previoustrack',()=>switchMediaTrack(-1));
     setMediaAction('nexttrack',()=>switchMediaTrack(1));
     setMediaAction('seekbackward',details=>seekMediaTo(audio.currentTime-(Number(details?.seekOffset)||10)));
@@ -395,6 +406,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function stopPlayback({release=true,stopBackground=false}={}){
     trackCompanionListeningTime({stop:true,saveNow:true});
     ++playRequest;
+    cancelPlaybackProbe?.();audioPriming=false;playbackPhase='idle';
     playbackWanted=false;
     interruptionRetryCount=0;
     clearInterruptionRetry();
@@ -441,10 +453,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     try{
       const record=await getOfflineSong(song);
       if(!isActive()||!record?.blob?.size||song.customAudio&&record.song?.customAudio!==song.customAudio)return null;
+      if(song.source!=='direct'&&!Number.isFinite(scoreSongHit(record.song,song)))return null;
       const url=ROOT.URL.createObjectURL(record.blob);releaseOfflineObjectUrl(url);currentCacheObjectUrl=url;
-      await playUrl(url,'离线缓存');
-      return {...record.song,...song,audio:'',offline:true};
-    }catch(error){if(isNotAllowed(error))throw error;console.warn('[音乐播放器] 离线缓存读取失败',error);return null;}
+      await playUrl(url,'离线缓存',false,{isActive});
+      return {...song,...record.song,...(song.source==='direct'?{title:song.title,artist:song.artist}:{}),customAudio:song.customAudio||'',audio:'',offline:true};
+    }catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;console.warn('[音乐播放器] 离线缓存读取失败',error);return null;}
   }
   const GD_SOURCE_LABELS={netease:'网易云',tencent:'QQ',kugou:'酷狗',kuwo:'酷我',migu:'咪咕',joox:'JOOX',bilibili:'哔哩哔哩'};
   function cacheDownloadError(error){
@@ -481,8 +494,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       const sameCurrent=!!current&&offlineKey(current)===offlineKey(song),liveAudio=sameCurrent&&audio.readyState>=2&&/^https?:/i.test(String(audio.currentSrc||''))?{...song,audio:audio.currentSrc,downloadLabel:'当前实际播放源'}:null,savedAudio=/^https?:/i.test(String(song.audio||''))?{...song,downloadLabel:sameCurrent?'当前播放源':'已保存播放源'}:null;
       const customAudio=song.customAudio?{...song,audio:song.customAudio,downloadLabel:'手动音源'}:null;
       for(const candidate of[customAudio,liveAudio,savedAudio])if(candidate&&await tryCandidate(candidate,'live'))return true;
-      for(const source of sources)for(const candidate of await resolveGdSourceTracks(song,source))if(await tryCandidate(candidate,'normal'))return true;
-      if(expiredFailures){setStatus(`当前音频地址已失效，正在强制刷新下载地址：${song.title}`);const nonce=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;for(const source of sources)for(const candidate of await resolveGdSourceTracks(song,source,true,{fresh:true,nonce:`${nonce}-${source}`}))if(await tryCandidate(candidate,'fresh'))return true;}
+      for(const source of sources)for(const bitrate of ['320','128'])for(const candidate of await resolveGdSourceTracks(song,source,false,{bitrate}))if(await tryCandidate(candidate,'normal'))return true;
+      if(expiredFailures){setStatus(`当前音频地址已失效，正在强制刷新下载地址：${song.title}`);const nonce=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;for(const source of sources)for(const bitrate of ['320','128'])for(const candidate of await resolveGdSourceTracks(song,source,false,{bitrate,fresh:true,nonce:`${nonce}-${source}`}))if(await tryCandidate(candidate,'fresh'))return true;}
       if(!uniqueUrls.size)throw Error('没有找到严格匹配的可下载音源');
       throw Error(`所有下载源均失败（${failures.slice(-5).join('；')}${failures.length>5?'；此前候选也不可用':''}）`);
     }catch(error){console.warn('[音乐播放器] 歌曲缓存失败',error);setStatus(`缓存失败：${error.message}`);if(!quiet)toast('error',`缓存失败：${error.message}`);return false;}
@@ -686,7 +699,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function applyPlayerSize(el=DOC.getElementById(ID)){if(!el||preserveMiniGeometry(el))return;const preferredWidth={s:310,m:365,l:430}[settings.playerSize]||365;if(isMobile()){refreshStableMobileViewport(el);const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth||390,maxWidth=Math.max(0,viewportWidth-28),width=Math.min(preferredWidth,maxWidth);el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('max-width',`${maxWidth}px`,'important');el.style.setProperty('min-width','0','important');return;}el.style.width=`min(${preferredWidth}px,calc(100vw - 24px))`;el.style.maxWidth='calc(100vw - 24px)';}
   function isMobile(){const media=ROOT.matchMedia?.bind(ROOT),width=ROOT.visualViewport?.width||ROOT.innerWidth||0,height=ROOT.visualViewport?.height||ROOT.innerHeight||0,touch=Number(ROOT.navigator?.maxTouchPoints||0)>0,touchTablet=touch&&Math.min(width,height)<=1024&&Math.max(width,height)<=1400;return !!(media?.('(max-width:480px)').matches||media?.('(max-width:1024px) and (hover:none) and (pointer:coarse)').matches||touchTablet);}
   function applyMobilePosition(el=DOC.getElementById(ID)){if(!el||!isMobile())return;const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth,viewportHeight=refreshStableMobileViewport(el),maxLeft=Math.max(6,viewportWidth-el.offsetWidth-6),left=Math.max(6,Math.min(maxLeft,settings.mobilePosition.left)),wantedTop=viewportHeight*(Number(settings.mobilePosition.top)||18)/100,maxTop=Math.max(6,viewportHeight-el.offsetHeight-6),top=Math.max(6,Math.min(maxTop,wantedTop));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}
-  function updatePlayButton(){const button=DOC.querySelector(`#${ID} [data-c="play"]`);if(button){button.textContent=audio.paused?'▶':'❚❚';button.classList.toggle('is-playing',!audio.paused);}if(!audio.paused&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);}
+  function updatePlayButton(){const playing=playbackPhase==='playing'&&!audio.paused,loading=playbackWanted&&playbackPhase==='loading',button=DOC.querySelector(`#${ID} [data-c="play"]`);if(button){button.textContent=loading?'…':playing?'❚❚':'▶';button.classList.toggle('is-playing',playing);button.setAttribute('aria-busy',String(loading));button.title=loading?'正在加载，点击取消':playing?'暂停':'播放';}if(playing&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);}
   function updateLyricsLock(){const button=DOC.querySelector(`#${ID} [data-a="lock"]`),lyrics=DOC.getElementById(`${ID}-desktop-lyrics`);if(button)button.textContent=settings.lyricsLocked?'歌词 🔒':'歌词 🔓';lyrics?.classList.toggle('lyrics-locked',!!settings.lyricsLocked);}
   function updatePlayMode(){const button=DOC.querySelector(`#${ID} [data-c="mode"]`),icons={loop:'↻',one:'↺',shuffle:'⤨'},labels={loop:'顺序循环',one:'单曲循环',shuffle:'随机播放'},mode=icons[settings.playMode]?settings.playMode:'loop';if(button){button.textContent=icons[mode];button.title=labels[mode];button.setAttribute('aria-label',labels[mode]);button.dataset.mode=mode;button.style.setProperty('font-size',DOC.getElementById(ID)?.classList.contains('immersive')?'0':mode==='shuffle'?'1.35em':'.95em','important');button.style.setProperty('font-weight',mode==='shuffle'?'800':'400','important');}}
   function nextSong(step=1){const list=queue.length?queue:(settings.favorites||[]);if(!list.length)return null;if(settings.playMode==='one')return current;if(settings.playMode==='shuffle'){if(list.length===1)return list[0];let pick;do pick=list[Math.floor(Math.random()*list.length)];while(pick===current);queueIndex=queue.length?queue.indexOf(pick):-1;return pick;}let index=queue.length?queueIndex:list.indexOf(current);if(index<0)index=step>0?-1:0;index=(index+step+list.length)%list.length;if(queue.length)queueIndex=index;return list[index];}
@@ -732,10 +745,48 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function metingMediaId(row){for(const value of[row?.url,row?.lrc,row?.pic])try{const id=new URL(String(value||'')).searchParams.get('id');if(id)return id;}catch{}return'';}
   async function searchMetingSource(source,word){let lastError=null;for(const base of METING_COVER_APIS)try{const u=new URL(base);u.searchParams.set('server',source);u.searchParams.set('type','search');u.searchParams.set('id',word);const response=await fetch(u,{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error(`HTTP ${response.status}`);const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]);if(!rows.length)continue;return rows.slice(0,20).map((x,i)=>{const mediaId=metingMediaId(x)||String(i);return{id:`${source}:${mediaId}`,mediaId,title:getSongTitle(x),artist:getSongArtist(x),album:String(x.album?.name||x.album||''),cover:x.pic||x.picUrl||x.album?.picUrl||'',coverId:'',lyricId:mediaId,duration:songDuration(x),audio:typeof x.url==='string'?x.url:'',source};});}catch(error){lastError=error;console.warn(`[音乐播放器] ${source} Meting 搜索备用失败：${base}`,error);}if(lastError)throw lastError;return[];}
-  async function searchSource(source,word){try{const u=new URL(GD_API);u.searchParams.set('types','search');u.searchParams.set('source',source);u.searchParams.set('name',word);u.searchParams.set('count','20');u.searchParams.set('pages','1');const response=await gdFetch(u,{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error(`HTTP ${response.status}`);const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]);return rows.map((x,i)=>({id:`${source}:${x.id||i}`,mediaId:String(x.id||''),title:getSongTitle(x),artist:getSongArtist(x),album:String(x.album?.name||x.album||''),cover:x.pic||x.picUrl||x.album?.picUrl||'',coverId:String(x.pic_id||''),lyricId:String(x.lyric_id||x.id||''),duration:songDuration(x),audio:'',source}));}catch(error){console.warn(`[音乐播放器] ${source} GD 搜索失败，切换 Meting 备用`,error);return searchMetingSource(source,word);}}
-  async function search(word, autoPlayFirst=false, showList=true, heading='', quiet=false, preferredSong=null) { word = String(word || '').trim(); if (!word) return; setStatus('正在搜索…'); const settled=await Promise.allSettled(GD_SOURCES.map(source=>searchSource(source,word))),rows=[];settled.forEach(x=>{if(x.status==='fulfilled')rows.push(...x.value);});results=rows.filter((s,i,a)=>s.title&&a.findIndex(x=>x.title===s.title&&x.artist===s.artist)===i);const listBox=DOC.querySelector(`#${ID} .list`);if(showList)render(results,heading,'results',false);else if(listBox){listBox.hidden=true;listBox.innerHTML='';}if(results.length){setStatus(`${results.length} 个全网结果`);if(autoPlayFirst){const exact=preferredSong?rankCompanionResults(results,preferredSong)[0]?.song:null;await play(exact||results[0]);if(showList)ROOT.setTimeout(()=>hydrateResultCovers(results,heading),600);}else if(showList){ROOT.setTimeout(()=>hydrateResultCovers(results,heading),0);}}else{const failed=settled.filter(x=>x.status==='rejected'),detail=failed[0]?.reason?.message||'';const msg=detail?`搜索服务暂时不可用：${detail}`:'没有找到歌曲';setStatus(msg);if(!quiet)toast('error',msg);}}
+  function gdSong(source,x){
+    const mediaId=String(x.mediaId||x.id||'').replace(new RegExp(`^${source}:`),'');
+    return {id:`${source}:${mediaId}`,mediaId,title:getSongTitle(x),artist:getSongArtist(x),album:getSongAlbum(x),version:String(x.version||''),cover:x.pic||x.picUrl||x.album?.picUrl||x.cover||'',coverId:String(x.pic_id||x.coverId||''),lyricId:String(x.lyric_id||x.lyricId||mediaId),duration:songDuration(x),audio:'',source,gdSource:source,gdLyricId:String(x.lyric_id||x.lyricId||mediaId)};
+  }
+  async function searchSource(source,word){
+    const data=await gdJson({types:'search',source,name:word,count:'20',pages:'1'}),rows=Array.isArray(data)?data:(data?.data||[]);
+    return rows.map(x=>gdSong(source,x)).filter(x=>x.mediaId&&x.title);
+  }
+  function querySongHits(rows,word,preferredSong){
+    if(preferredSong)return rows.filter(song=>Number.isFinite(scoreSongHit(song,preferredSong)));
+    const query=songTitleKey({title:word}).replace(/周杰倫|jaychou/g,'周杰伦'),version=lyricVersion({title:word});
+    return rows.filter(song=>{
+      const title=songTitleKey(song),artist=canonicalArtist(song.artist);
+      // A compound query must account for BOTH fields; never drop an explicit singer.
+      return (query===title||!!artist&&(query===title+artist||query===artist+title))&&lyricVersion(song)===version;
+    });
+  }
+  async function search(word,autoPlayFirst=false,showList=true,heading='',quiet=false,preferredSong=null){
+    word=String(word||'').trim();if(!word)return;
+    const request=++searchRequest;setStatus('正在搜索…');let found=[],lastError;
+    for(const source of GD_SOURCES){
+      try{const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;found=querySongHits(rows,word,preferredSong);if(found.length)break;}
+      catch(error){lastError=error;if(error.retryAt)break;}
+    }
+    if(request!==searchRequest||disposed)return;
+    results=found;
+    const listBox=DOC.querySelector(`#${ID} .list`);
+    if(showList)render(results,heading,'results',false);else if(listBox){listBox.hidden=true;listBox.innerHTML='';}
+    if(results.length){
+      setStatus(`${results.length} 个匹配结果`);
+      if(autoPlayFirst)await play(results[0]);
+      if(showList)ROOT.setTimeout(()=>{if(request===searchRequest)hydrateResultCovers(results,heading);},0);
+    }else{const message=lastError?.message||'没有找到符合歌名、歌手及版本的歌曲';setStatus(message);if(!quiet)toast('warning',message);}
+  }
+
   const coverDelay=ms=>new Promise(resolve=>ROOT.setTimeout(resolve,ms));
-  async function hydrateResultCovers(rows,heading=''){if(!Array.isArray(rows)||rows._coverHydrating||rows._coversHydrated)return;rows._coverHydrating=true;try{for(const song of rows.slice(0,10)){if(results!==rows)break;if(!song.cover)song.cover=await gdCover(song)||await metingCover(song);await coverDelay(120);}rows._coversHydrated=true;}catch(error){console.warn('[音乐播放器] 候选列表封面加载失败',error);}finally{rows._coverHydrating=false;}if(results===rows)render(rows,heading,'results',false);}
+  async function hydrateResultCovers(rows,heading=''){
+    if(!Array.isArray(rows)||rows._coverHydrating||rows._coversHydrated)return;rows._coverHydrating=true;
+    try{for(const song of rows.slice(0,10)){if(results!==rows)break;const source=song.source,id=song.mediaId;if(!song.cover){const cover=await gdCover({...song});if(song.source===source&&song.mediaId===id&&!song.cover)song.cover=cover;}await coverDelay(120);}rows._coversHydrated=true;}
+    catch(error){console.warn('[音乐播放器] 候选列表封面加载失败',error);}finally{rows._coverHydrating=false;}
+    if(results===rows)render(rows,heading,'results',false);
+  }
   function render(rows, heading='', kind='results', hydrateCovers=true) {
     syncLibraryNavigation(kind==='fav'?'favorites':kind==='queue'?'queue':'');
     const box=DOC.querySelector(`#${ID} .list`),saved=kind==='fav'||kind==='queue';
@@ -786,7 +837,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     };
     if(hydrateCovers){if(kind==='results')ROOT.setTimeout(()=>hydrateResultCovers(rows,heading),0);else if(kind==='fav'||kind==='queue')ROOT.setTimeout(()=>hydrateSavedCovers(rows,heading,kind),0);}
   }
-  const strip = s => ({ id:s.id,mediaId:s.mediaId||s.id,title:s.title,artist:s.artist,cover:s.cover,coverId:s.coverId||'',lyricId:s.lyricId||'',gdSource:s.gdSource||'',gdLyricId:s.gdLyricId||'',duration:Number(s.duration)||0,audio:s.audio||'',customAudio:s.customAudio||'',source:s.source||'netease' });
+  const strip = s => ({ album:typeof s.album==='object'?s.album?.name||'':s.album||'',version:s.version||'',id:s.id,mediaId:s.mediaId||s.id,title:s.title,artist:s.artist,cover:s.cover,coverId:s.coverId||'',lyricId:s.lyricId||'',gdSource:s.gdSource||'',gdLyricId:s.gdLyricId||'',duration:Number(s.duration)||0,audio:s.audio||'',customAudio:s.customAudio||'',source:s.source||'netease' });
   function currentIsFavorite(song=current){return !!song&&(settings.favorites||[]).some(item=>item.id===song.id);}
   function updateCurrentFavorite(){const button=DOC.querySelector(`#${ID} .current-favorite`);if(!button)return;const active=currentIsFavorite();button.textContent=active?'♥':'♡';button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',active?'取消收藏当前歌曲':'收藏当前歌曲');button.title=active?'取消收藏当前歌曲':'收藏当前歌曲';button.disabled=!current;}
   function bindCurrentFavorite(el){const button=el.querySelector('.current-favorite');if(!button)return;button.onclick=()=>{if(!current)return;const removing=currentIsFavorite();favorite(current);setStatus(removing?'已取消收藏当前歌曲':'已收藏当前歌曲');toast(removing?'info':'success',removing?'已取消收藏':'已加入收藏');};updateCurrentFavorite();}
@@ -800,7 +851,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function getSongTitle(item){return String(item?.name||item?.title||'').trim();}
   function getSongArtist(item){const value=item?.artist??item?.artists??item?.ar??item?.singer??item?.author??'';return Array.isArray(value)?value.map(x=>typeof x==='string'?x:(x?.name||x?.artist||'')).filter(Boolean).join('/'):String(value||'').trim();}
   function artistParts(value){return String(value||'').split(/\s*(?:\/|、|,|，|&|＆|\bfeat(?:uring)?\.?\b|\bft\.?\b)\s*/i).map(normalizeSongText).filter(Boolean);}
-  function artistMatches(resultArtist,wantedArtist){const wanted=artistParts(wantedArtist),result=artistParts(resultArtist);return !wanted.length||!!result.length&&wanted.every(w=>result.some(r=>r===w||r.includes(w)||w.includes(r)));}
+  function canonicalArtist(value){const name=normalizeSongText(value);return ({'周杰倫':'周杰伦','jaychou':'周杰伦'})[name]||name;}
+  function artistMatches(resultArtist,wantedArtist){const wanted=artistParts(wantedArtist).map(canonicalArtist),result=artistParts(resultArtist).map(canonicalArtist);return !wanted.length||wanted.length===result.length&&wanted.every(w=>result.includes(w));}
+  function getSongAlbum(song){const album=song?.album??song?.al;return String(typeof album==='object'?album?.name||'':album||'').trim();}
   function lyricText(value){if(typeof value==='string')return value;if(!value||typeof value!=='object')return '';for(const key of ['lyric','lrc','text','content'])if(typeof value[key]==='string')return value[key];return '';}
   function extractLyrics(data){const groups=[data,data?.data,data?.result,data?.data?.[0],data?.result?.[0]],pick=keys=>{for(const group of groups)for(const key of keys){const text=lyricText(group?.[key]);if(text)return text;}return '';};return {original:pick(['lyric','lrc']),translation:pick(['tlyric','translation','translatedLyric','transLyric','trans','translate','lyricTranslation'])};}
   // LRC is line-timed; never manufacture word timings from character counts.
@@ -838,22 +891,43 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(typeof value==='string'&&value.includes(':'))return lrcTime(value)||0;
     const number=Number(value);return Number.isFinite(number)&&number>0?(number>10000?number/1000:number):0;
   }
+  const SONG_VERSION_PATTERN=/\b(?:live|remix|demo|acoustic|instrumental|karaoke|cover|remaster(?:ed)?|sped\s*up|slowed|radio\s*edit|dj)\b|现场|現場|伴奏|纯音乐|純音樂|翻唱|重制|加速|降速|演奏|不插电|不插電|串烧|串燒/gi;
   function lyricVersion(song){
-    const text=`${getSongTitle(song)} ${song?.version||''}`.normalize('NFKC').toLowerCase();
-    const tags=text.match(/\b(?:live|remix|demo|acoustic|instrumental|karaoke|cover|remaster(?:ed)?|sped\s*up|slowed|radio\s*edit)\b|现场|伴奏|纯音乐|翻唱|重制|加速|降速|演奏|不插电/g)||[];
-    return [...new Set(tags)].sort().join('|');
+    const text=`${getSongTitle(song)} ${song?.version||''} ${getSongAlbum(song)}`.normalize('NFKC').toLowerCase(),aliases={'现场':'live','現場':'live','翻唱':'cover','不插电':'acoustic','不插電':'acoustic','純音樂':'instrumental','纯音乐':'instrumental','重制':'remaster','remastered':'remaster','串燒':'串烧'};
+    return [...new Set((text.match(SONG_VERSION_PATTERN)||[]).map(tag=>aliases[tag]||tag))].sort().join('|');
   }
+  function songTitleKey(song){return normalizeSongText(getSongTitle(song).replace(SONG_VERSION_PATTERN,''));}
   function scoreLyricHit(item,song){
-    const wanted=artistParts(getSongArtist(song)).sort(),found=artistParts(getSongArtist(item)).sort();
+    const wanted=artistParts(getSongArtist(song)).map(canonicalArtist).sort(),found=artistParts(getSongArtist(item)).map(canonicalArtist).sort();
     if(!wanted.length||wanted.join('|')!==found.join('|')||normalizeSongText(getSongTitle(item))!==normalizeSongText(getSongTitle(song))||lyricVersion(item)!==lyricVersion(song))return -Infinity;
     // Cross-source lyrics require duration evidence. The last sung line is NOT track duration.
     const a=songDuration(item),b=songDuration(song);
     return a&&b&&Math.abs(a-b)<=Math.min(4,Math.max(2,b*.015))?1000-Math.abs(a-b):-Infinity;
   }
-  function scoreSongHit(item,song){const title=normalizeSongText(getSongTitle(item)),artist=getSongArtist(item),wantedTitle=normalizeSongText(song?.title),wantedArtist=String(song?.artist||'');if(!title||!wantedTitle||title!==wantedTitle||!artistMatches(artist,wantedArtist))return-Infinity;let score=1000;if(normalizeSongText(artist)===normalizeSongText(wantedArtist))score+=300;const itemId=String(item?.id||item?.songmid||''),oldId=String(song?.mediaId||'').replace(/^\w+:/,'');if(itemId&&oldId&&itemId===oldId)score+=20;return score;}
+  function scoreSongHit(item,song){
+    const title=songTitleKey(item),wantedTitle=songTitleKey(song),artist=getSongArtist(item),wantedArtist=getSongArtist(song);
+    if(!title||title!==wantedTitle||!artistMatches(artist,wantedArtist)||lyricVersion(item)!==lyricVersion(song))return -Infinity;
+    const a=songDuration(item),b=songDuration(song),album=normalizeSongText(getSongAlbum(item)),wantedAlbum=normalizeSongText(getSongAlbum(song));
+    if(a&&b&&Math.abs(a-b)>Math.max(6,b*.03))return -Infinity;
+    let score=1000+(wantedArtist?300:0)+(album&&album===wantedAlbum?100:0)+(a&&b?60-Math.abs(a-b):0);
+    return score;
+  }
   function bestSongHit(rows,song){return(Array.isArray(rows)?rows:[]).map(item=>({item,score:scoreSongHit(item,song)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>b.score-a.score)[0]?.item||null;}
   // Share the GD budget with search, artwork and playback requests, including script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0});
+  const gdResponses=new Map(),gdRequests=new Map();
+  async function gdJson(params,{fresh=false,nonce=''}={}){
+    const url=new URL(GD_API);for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
+    const key=url.href,cached=gdResponses.get(key);
+    if(!fresh&&cached&&cached.until>Date.now())return cached.value;
+    if(gdRequests.has(key))return gdRequests.get(key);
+    if(fresh)url.searchParams.set('_selene',String(nonce||Date.now()));
+    const pending=(async()=>{
+      const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),12000);
+      try{const response=await gdFetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'});if(!response.ok)throw Error(`GD 请求失败：${response.status}`);const value=await response.json();gdResponses.set(key,{value,until:Date.now()+60000});while(gdResponses.size>100)gdResponses.delete(gdResponses.keys().next().value);return value;}
+      finally{ROOT.clearTimeout(timer);gdRequests.delete(key);}
+    })();gdRequests.set(key,pending);return pending;
+  }
   async function gdFetch(url,options={},lyric=false){
     const now=Date.now();gdRate.times=gdRate.times.filter(time=>now-time<300000);
     if(now<gdRate.until||gdRate.times.length>=(lyric?40:50))throw Object.assign(Error('GD 音乐台请求限流，请稍后再试'),{retryAt:Math.max(gdRate.until,(gdRate.times[0]||now)+300000)});
@@ -959,52 +1033,129 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   const mediaText = code => ({1:'MEDIA_ERR_ABORTED：音频加载被中止',2:'MEDIA_ERR_NETWORK：加载音频时发生网络错误',3:'MEDIA_ERR_DECODE：浏览器无法解码音频',4:'MEDIA_ERR_SRC_NOT_SUPPORTED：音频地址或格式不受支持'})[code] || '未知音频错误';
   const isNotAllowed = error => error?.name === 'NotAllowedError';
   const getResponseUrl = data => data?.url||data?.data?.url||data?.data?.[0]?.url||data?.pic||'';
-  async function gdCover(s){try{const source=s.source||'netease',picId=String(s.coverId||'').trim();if(s.cover&&/^https?:\/\//i.test(s.cover))return s.cover;if(!picId){console.warn('[音乐播放器] 没有 pic_id，无法获取 GD 封面',s);return '';}if(source==='bilibili'){if(picId.startsWith('//'))return `https:${picId}`;if(/^https?:\/\//i.test(picId))return picId;}const u=new URL(GD_API);u.searchParams.set('types','pic');u.searchParams.set('source',source);u.searchParams.set('id',picId);u.searchParams.set('size','500');console.log('[GD封面请求]',source,picId);const response=await gdFetch(u);if(!response.ok)throw Error(`GD 封面请求失败：${response.status}`);const data=await response.json(),coverUrl=getResponseUrl(data);console.log('[GD封面响应]',data);console.log('[GD最终封面URL]',coverUrl);return coverUrl;}catch(error){console.warn('[音乐播放器] GD 封面获取失败',error);return '';}}
-  function playUrl(url, label = '音源', isolated = false){return new Promise((resolve,reject)=>{const player=isolated?new ROOT.Audio():audio;if(!isolated)releaseOfflineObjectUrl(url);let done=false,playAccepted=false;const finish=err=>{if(done)return;done=true;clearTimeout(timer);events.forEach(([n,f])=>player.removeEventListener(n,f));err?reject(err):resolve();};const state=()=>({url,src:player.src,currentSrc:player.currentSrc,errorCode:player.error?.code,errorMessage:player.error?.message,networkState:player.networkState,readyState:player.readyState,duration:player.duration,paused:player.paused}),log=name=>()=>console.info('[音乐播放器]',name,state()),bad=()=>{const err=new Error(mediaText(player.error?.code));err.media={code:player.error?.code,message:player.error?.message,currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};console.error('[音乐播放器] Audio 错误',err.media);finish(err);},good=()=>{if(player.paused||player.readyState<2)return;console.info('[音乐播放器]',label,'已验证开始播放',state());finish();},canPlay=()=>{log('canplay')();if(playAccepted)good();};const events=[['loadstart',log('loadstart')],['loadedmetadata',log('loadedmetadata')],['loadeddata',log('loadeddata')],['canplay',canPlay],['play',log('play-requested')],['playing',good],['stalled',log('stalled')],['suspend',log('suspend')],['abort',log('abort')],['error',bad]];events.forEach(([n,f])=>player.addEventListener(n,f));const timer=ROOT.setTimeout(()=>{if(!player.paused&&player.readyState>=2){good();return;}const err=new Error('音源响应超时');err.media={currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};finish(err);},15000);player.preload='auto';player.src=url;const playPromise=player.play();if(playPromise?.then)playPromise.then(()=>{playAccepted=true;good();}).catch(err=>{if(isNotAllowed(err))finish(err);else if(!player.error){const failure=new Error(err?.message||'浏览器无法开始播放');failure.media={currentSrc:player.currentSrc,networkState:player.networkState,readyState:player.readyState};finish(failure);}});});}
-  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce=''}={}){
-    const results=[];
+  async function gdCover(s){
     try{
-      const requestOptions=fresh?{cache:'no-store',credentials:'omit'}:undefined,queries=[`${s.title} ${s.artist}`,s.title,`${s.artist} ${s.title}`].map(value=>String(value||'').trim()).filter((value,index,list)=>value&&list.indexOf(value)===index);let hit=null;
-      for(let index=0;index<queries.length&&!hit;index++){
-        try{const search=new URL(GD_API);search.searchParams.set('types','search');search.searchParams.set('source',source);search.searchParams.set('name',queries[index]);search.searchParams.set('count','20');search.searchParams.set('pages','1');if(fresh)search.searchParams.set('_selene',`${nonce||Date.now()}-search-${index}`);const response=await gdFetch(search,requestOptions);if(!response.ok)continue;const data=await response.json(),rows=Array.isArray(data)?data:(data?.data||[]);hit=bestSongHit(rows,s);}catch(error){console.warn(`[音乐播放器] ${source} 第 ${index+1} 个查询失败，继续下一个`,error);}
+      if(s.cover&&/^https?:\/\//i.test(s.cover))return s.cover;
+      const source=s.source||'netease',id=String(s.coverId||'').trim();if(!id)return '';
+      if(source==='bilibili'){if(id.startsWith('//'))return `https:${id}`;if(/^https?:\/\//i.test(id))return id;}
+      return getResponseUrl(await gdJson({types:'pic',source,id,size:'500'}));
+    }catch(error){console.warn('[音乐播放器] GD 封面获取失败',error);return '';}
+  }
+  function primeAudioFromGesture(){
+    // Safari grants playback per element. Prime this SAME element before IDB/network awaits.
+    if(!ROOT.navigator?.userActivation?.isActive||disposed)return;
+    audioPriming=true;playbackPhase='loading';audio.src=ensureKeepAliveUrl();audio.muted=false;
+    const src=audio.src;
+    try{audio.play()?.then(()=>{if(audioPriming&&audio.src===src)audio.pause();}).catch(()=>{});}catch{}
+  }
+  function recoverStuckPlayback(error,url){
+    if(disposed||!playbackWanted||!current)return;
+    failedPlaybackUrls.add(url);
+    if(playbackRecoveryCount++<1){setStatus('音源持续无进度，正在切换备用源…');void play(current,true);}
+    else{playbackWanted=false;playbackPhase='idle';audio.pause();updatePlayButton();setStatus(mediaDetail(error));}
+  }
+  function playUrl(url,label='音源',isolated=false,{resume=false,isActive=()=>true,expectedDuration=0}={}){
+    if(!isolated)cancelPlaybackProbe?.();
+    return new Promise((resolve,reject)=>{
+      const player=isolated?new ROOT.Audio():audio;
+      if(!isolated){releaseOfflineObjectUrl(url);audioPriming=false;playbackPhase='loading';updatePlayButton();}
+      let settled=false,closed=false,lastTime=resume?Number(player.currentTime)||0:0,lastProgress=Date.now(),evidence=0,progressSamples=0,seeking=false,timer=0;
+      const state=()=>({currentSrc:player.currentSrc,errorCode:player.error?.code,networkState:player.networkState,readyState:player.readyState,currentTime:player.currentTime});
+      const close=()=>{if(closed)return;closed=true;ROOT.clearInterval(timer);events.forEach(([name,handler])=>player.removeEventListener(name,handler));DOC.removeEventListener('visibilitychange',visibility);if(!isolated&&cancelPlaybackProbe===cancel)cancelPlaybackProbe=null;};
+      const cancel=()=>{close();if(!settled){settled=true;reject(Object.assign(Error('播放已取消'),{name:'AbortError'}));}};
+      const fail=error=>{
+        if(closed)return;const started=settled;close();
+        if(!isolated){if(!isNotAllowed(error)&&error.name!=='AbortError')failedPlaybackUrls.add(url);playbackPhase='idle';}
+        if(!started){settled=true;reject(error);}else if(!isolated)recoverStuckPlayback(error,url);
+      };
+      const sample=()=>{
+        if(closed)return;if(!isActive()){cancel();return;}
+        const now=Date.now(),time=Number(player.currentTime),duration=Number(player.duration);
+        if(expectedDuration>0&&Number.isFinite(duration)&&duration>0&&Math.abs(duration-expectedDuration)>Math.max(6,expectedDuration*.03)){fail(Error('音源时长与匹配歌曲不符，可能为试听或其他版本'));return;}
+        if(player.ended){close();return;}
+        if(player.seeking||seeking){lastTime=time;lastProgress=now;return;}
+        if(player.paused){lastTime=time;if(settled){lastProgress=now;return;}}
+        const delta=time-lastTime;
+        // Seeks and a single synthetic timeupdate are not proof of decoded playback.
+        if(!player.paused&&Number.isFinite(delta)&&delta>0&&delta<=2){
+          evidence+=delta;progressSamples++;lastProgress=now;
+          if(evidence>=.2&&progressSamples>=2){
+            if(!isolated&&playbackPhase!=='playing'){playbackPhase='playing';companionListeningAwaitingPlay=false;updatePlayButton();setStatus('正在播放');}
+            if(!settled){settled=true;console.info('[音乐播放器]',label,'时间已推进',state());resolve();}
+          }
+        }else if(delta<0||delta>2){evidence=0;progressSamples=0;}
+        lastTime=time;
+        // Allow transient waiting/stalled; hidden-page timer throttling must not trigger fallback.
+        if(DOC.visibilityState==='hidden'){lastProgress=now;return;}
+        if(now-lastProgress>=20000){const error=Error('音源持续 20 秒无播放进度');error.media=state();fail(error);}
+      };
+      const buffering=()=>{if(!isolated){playbackPhase='loading';evidence=0;progressSamples=0;updatePlayButton();setStatus('音频缓冲中…');}};
+      const bad=()=>{const error=Error(mediaText(player.error?.code));error.media=state();fail(error);};
+      const events=[['timeupdate',sample],['waiting',buffering],['stalled',buffering],['error',bad],['seeking',()=>{seeking=true;evidence=0;progressSamples=0;}],['seeked',()=>{seeking=false;lastTime=Number(player.currentTime);lastProgress=Date.now();}],['ended',()=>{if(!settled)fail(Error('音源未开始播放即结束'));else close();}]];
+      const visibility=()=>{lastProgress=Date.now();lastTime=Number(player.currentTime);};
+      DOC.addEventListener('visibilitychange',visibility);events.forEach(([name,handler])=>player.addEventListener(name,handler));
+      timer=ROOT.setInterval(sample,250);if(!isolated)cancelPlaybackProbe=cancel;
+      player.preload='auto';player.muted=false;
+      try{if(!resume){player.src=url;player.load();}player.play()?.catch(error=>{if(error.name==='AbortError'&&!isActive())cancel();else fail(error);});}
+      catch(error){fail(error);}
+    });
+  }
+  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320'}={}){
+    // Reuse a selected identity; cross-source lookup must pass strict matching first.
+    let hit=!fresh&&s.source===source&&s.mediaId&&s.gdSource===source?s:null;
+    if(!hit){
+      const queries=[`${s.title} ${s.artist||''}`.trim(),s.title].filter((value,index,list)=>list.indexOf(value)===index);
+      for(const name of queries){
+        const data=await gdJson({types:'search',source,name,count:'20',pages:'1'},{fresh,nonce}),rows=Array.isArray(data)?data:(data?.data||[]);
+        hit=bestSongHit(rows,s);if(hit)break;
       }
-      if(!hit?.id)return[];
-      for(const bitrate of ['320','192','128']){
-        try{const url=new URL(GD_API);url.searchParams.set('types','url');url.searchParams.set('source',source);url.searchParams.set('id',String(hit.id));url.searchParams.set('br',bitrate);if(fresh)url.searchParams.set('_selene',`${nonce||Date.now()}-${bitrate}`);const linkResponse=await gdFetch(url,requestOptions);if(!linkResponse.ok)continue;const info=await linkResponse.json(),audioUrl=info?.url||info?.data?.url||info?.data?.[0]?.url||'';if(!/^https?:/i.test(String(audioUrl||'')))continue;const lyricId=String(hit.lyric_id||hit.id||''),coverId=String(hit.pic_id||hit.album?.pic_id||hit.album?.picId||hit.al?.pic_str||hit.al?.pic||'');results.push({...s,id:`${source}:${hit.id}`,mediaId:String(hit.id),source,lyricId,gdSource:source,gdLyricId:lyricId,coverId,cover:s.cover||'',audio:audioUrl,bitrate,refreshed:!!fresh});if(!allBitrates)return results;}catch(error){console.warn(`[音乐播放器] ${source} ${bitrate}k 音源地址请求失败，继续降级`,error);}
-      }
-    }catch(error){console.warn(`[音乐播放器] ${source} 严格匹配失败`,error);}
-    return results;
+    }
+    if(!hit)return[];
+    const identity=gdSong(source,hit),tracks=[];
+    for(const br of allBitrates?['320','128']:[bitrate]){
+      const info=await gdJson({types:'url',source,id:identity.mediaId,br},{fresh,nonce}),url=getResponseUrl(info);
+      if(!/^https?:\/\//i.test(String(url||''))||tracks.some(track=>track.audio===url))continue;
+      tracks.push({...s,...identity,audio:url,bitrate:br,refreshed:!!fresh});
+    }
+    return tracks;
   }
   async function resolveGdSourceTrack(s,source){return(await resolveGdSourceTracks(s,source,false))[0]||null;}
-  async function resolveMetingSourceTrack(s,source){const queries=[`${s.title} ${s.artist}`,s.title,`${s.artist} ${s.title}`].map(value=>String(value||'').trim()).filter((value,index,list)=>value&&list.indexOf(value)===index);for(let index=0;index<queries.length;index++)try{const rows=await searchMetingSource(source,queries[index]),hit=bestSongHit(rows,s);if(hit?.audio)return{...s,...hit,gdSource:source,gdLyricId:hit.lyricId||hit.mediaId,source,audio:hit.audio};}catch(error){console.warn(`[音乐播放器] ${source} Meting 第 ${index+1} 个查询失败，继续下一个`,error);}return null;}
-  async function resolveGdTrack(s,sourceOffset=0){const base=[...new Set([s.source,'netease',...GD_SOURCES].filter(Boolean))],offset=Math.abs(Number(sourceOffset)||0)%Math.max(1,base.length),sources=base.slice(offset).concat(base.slice(0,offset));for(const source of sources){let resolved=await resolveGdSourceTrack(s,source);if(resolved)return resolved;resolved=await resolveMetingSourceTrack(s,source);if(resolved)return resolved;}return null;}
-  async function gdFallback(s,attempt=0,isActive=()=>true){
-    const base=[...new Set([s.source,...GD_SOURCES].filter(source=>GD_SOURCES.includes(source)))],offset=Math.abs(Number(attempt)||0)%Math.max(1,base.length),sources=base.slice(offset).concat(base.slice(0,offset)),tried=new Set();let lastError=null;
-    const tryTrack=async track=>{
-      if(!isActive()||!track?.audio||tried.has(track.audio))return null;
-      tried.add(track.audio);
-      try{await playUrl(track.audio,`${GD_SOURCE_LABELS[track.source]||'备用'}音源`);return isActive()?{...track,offline:false}:null;}
-      catch(error){if(isNotAllowed(error))throw error;lastError=error;console.warn('[音乐播放器] 候选音源无法播放，继续切换',error);return null;}
-    };
-    for(const source of sources){
-      if(!isActive())return null;
-      const tracks=await resolveGdSourceTracks(s,source,true,{fresh:attempt>0});
-      for(const track of tracks){if(!isActive())return null;const played=await tryTrack(track);if(played)return played;}
-      if(!isActive())return null;
-      const meting=await resolveMetingSourceTrack(s,source);
-      if(!isActive())return null;
-      const played=await tryTrack(meting);if(played)return played;
+  async function resolveMetingSourceTrack(s,source){
+    const rows=await searchMetingSource(source,`${s.title} ${s.artist||''}`.trim()),hit=bestSongHit(rows,s);
+    return hit?.audio?{...s,...hit,gdSource:source,gdLyricId:hit.lyricId||hit.mediaId,source}:null;
+  }
+  async function resolveGdTrack(s){for(const source of GD_SOURCES){const resolved=await resolveGdSourceTrack(s,source);if(resolved)return resolved;}return null;}
+  async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set()){
+    const tried=new Set(excluded);let lastError=null;
+    for(const source of GD_SOURCES){
+      for(const bitrate of ['320','128']){
+        if(!isActive())return null;
+        let tracks;
+        try{tracks=await resolveGdSourceTracks(s,source,false,{bitrate});}
+        catch(error){if(error.retryAt)throw error;lastError=error;break;}
+        if(!isActive())return null;
+        for(const track of tracks){
+          if(!track.audio||tried.has(track.audio))continue;
+          tried.add(track.audio);
+          try{await playUrl(track.audio,`${GD_SOURCE_LABELS[source]||source}音源`,false,{isActive,expectedDuration:songDuration(s)||songDuration(track)});return isActive()?{...track,offline:false}:null;}
+          catch(error){if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;lastError=error;}
+        }
+        // Search results and identities are cached; only request the next quality on failure.
+      }
     }
-    if(lastError)throw lastError;
-    return null;
+    if(lastError)throw lastError;return null;
   }
   async function gdMetadata(s){return{...s,gdSource:s.gdSource||s.source,gdLyricId:s.gdLyricId||s.lyricId||s.mediaId};}
 
   async function metingCover(s){for(const base of METING_COVER_APIS)try{const u=new URL(base);u.searchParams.set('server','netease');u.searchParams.set('type','search');u.searchParams.set('id',`${s.title} ${s.artist}`);const r=await fetch(u);if(!r.ok)continue;const data=await r.json(),rows=Array.isArray(data)?data:(data?.data||[]),hit=bestSongHit(rows,s);if(typeof hit?.pic==='string'&&hit.pic)return hit.pic;}catch(error){console.warn(`[音乐播放器] Meting 封面失败：${base}`,error);}return '';}
   function imageLoads(url,timeout=8000){return new Promise(resolve=>{if(!/^https?:\/\//i.test(String(url||'')))return resolve(false);const image=new ROOT.Image();let done=false;const finish=ok=>{if(done)return;done=true;ROOT.clearTimeout(timer);image.onload=null;image.onerror=null;resolve(ok);};const timer=ROOT.setTimeout(()=>finish(false),timeout);image.onload=()=>finish(true);image.onerror=()=>finish(false);image.src=url;});}
-  async function resolveCover(s,excluded=[]){const blocked=new Set(excluded.filter(Boolean).map(x=>String(x).replace(/#.*$/,''))),candidates=[],meting=await metingCover(s);if(meting)candidates.push(meting);try{const gd=await gdCover({...s,cover:''});if(gd)candidates.push(gd);}catch{}if(s.cover)candidates.push(s.cover);for(const url of [...new Set(candidates)]){if(blocked.has(String(url).replace(/#.*$/,'')))continue;if(await imageLoads(url))return url;}return '';}
+  async function resolveCover(s,excluded=[]){
+    const blocked=new Set(excluded.filter(Boolean).map(value=>String(value).replace(/#.*$/,''))),usable=async url=>url&&!blocked.has(String(url).replace(/#.*$/,''))&&await imageLoads(url);
+    if(await usable(s.cover))return s.cover;
+    const cover=await gdCover({...s,cover:''});return await usable(cover)?cover:'';
+  }
   async function applyCurrentCover(s,request){const pic=await resolveCover(s);if(request!==playRequest||current!==s||!pic)return;s.cover=pic;const img=DOC.querySelector(`#${ID} .now img`);if(img){img.style.visibility='visible';img.onerror=async()=>{const failed=img.src;img.removeAttribute('src');const fallback=await resolveCover({...s,cover:''},[failed]);if(request===playRequest&&current===s&&fallback){s.cover=fallback;show(s);if(settings.favorites?.includes(s))save();}};show(s);}if(settings.favorites?.includes(s))save();}
-  async function hydrateSavedCovers(rows,heading='',kind='fav'){if(!Array.isArray(rows)||rows._coverHydrating)return;rows._coverHydrating=true;try{for(const song of rows.slice(0,12)){if(song.source==='direct')continue;const oldCover=song.cover||'';if(oldCover)continue;song.cover=await resolveCover({...song,cover:''},oldCover?[oldCover]:[]);}if(kind==='fav')save();}finally{rows._coverHydrating=false;}if(kind==='fav')render(rows,heading,kind,false);}
+  async function hydrateSavedCovers(rows,heading='',kind='fav'){if(!Array.isArray(rows)||rows._coverHydrating)return;rows._coverHydrating=true;try{for(const song of rows.slice(0,12)){if(song.source==='direct')continue;const oldCover=song.cover||'';if(oldCover)continue;const source=song.source,id=song.mediaId,cover=await resolveCover({...song,cover:''},oldCover?[oldCover]:[]);if(song.source===source&&song.mediaId===id&&!song.cover)song.cover=cover;}if(kind==='fav')save();}finally{rows._coverHydrating=false;}if(kind==='fav')render(rows,heading,kind,false);}
   async function loadLyrics(s,request){
     const isActive=()=>!disposed&&request===playRequest&&current===s;if(!isActive())return;
     lyricTimeline=[];currentLyricWords='';lyricState='加载歌词…';paintTime();
@@ -1016,34 +1167,32 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){if(!isActive())return;lyricState=error.retryAt?'歌词请求限流，请稍后再试':'歌词暂时加载失败';console.warn('[音乐播放器] 歌词加载失败',error);}
     paintTime();
   }
-  const waitForRetry=ms=>DOC.visibilityState==='hidden'?Promise.resolve():new Promise(resolve=>ROOT.setTimeout(resolve,ms));
-  async function play(s){
-    const request=++playRequest,isActive=()=>request===playRequest;playbackWanted=true;applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'加载歌词…';paintTime();let lastError,played=null;
+  async function play(s,recovering=false){
+    cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;failedPlaybackUrls.clear();}primeAudioFromGesture();
+    const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'加载歌词…';paintTime();let lastError,played=null;
     try{
-      setStatus('正在检查离线缓存…');played=await playOfflineSong(s,isActive);
+      setStatus('正在检查离线缓存…');played=recovering?null:await playOfflineSong(s,isActive);
       if(!isActive())return;
-      if(!played&&s.customAudio){
+      if(!played&&s.customAudio&&!failedPlaybackUrls.has(s.customAudio)){
         setStatus('正在验证手动音源…');
-        try{await playUrl(s.customAudio,'手动音源');played={...s,audio:s.customAudio,offline:false};}
-        catch(error){if(isNotAllowed(error))throw error;lastError=error;}
+        try{await playUrl(s.customAudio,'手动音源',false,{isActive});played={...s,audio:s.customAudio,offline:false};}
+        catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
       }
       if(!isActive())return;
-      if(!played&&/^https?:\/\//i.test(String(s?.audio||''))&&s.audio!==s.customAudio){
+      if(!played&&(s.source==='direct'||s.source==='netease')&&!failedPlaybackUrls.has(s.audio)&&/^https?:\/\//i.test(String(s?.audio||''))&&s.audio!==s.customAudio){
         setStatus('正在验证已保存音源…');
-        try{await playUrl(s.audio,'已保存音源');played={...s,offline:false};}
-        catch(error){if(isNotAllowed(error))throw error;lastError=error;console.warn('[音乐播放器] 已保存音源失效，切换备用源',error);}
+        try{await playUrl(s.audio,'已保存音源',false,{isActive});played={...s,offline:false};}
+        catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;console.warn('[音乐播放器] 已保存音源失效，切换备用源',error);}
       }
       if(!isActive())return;
-      if(!played&&s.source!=='direct')for(let attempt=0;attempt<3&&!played;attempt++){
-        if(!isActive())return;
-        setStatus(attempt?`正在后台刷新音源 ${attempt+1}/3`:'正在逐一验证备用音源…');
-        try{played=await gdFallback(s,attempt,isActive);}
-        catch(error){if(isNotAllowed(error))throw error;lastError=error;}
-        if(!played&&attempt<2)await waitForRetry(700*(attempt+1));
+      if(!played&&s.source!=='direct'){
+        setStatus('正在逐一验证备用音源…');
+        try{played=await gdFallback(s,0,isActive,failedPlaybackUrls);}
+        catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
       }
       if(played){
         if(!isActive())return;
-        Object.assign(s,played);
+        pendingPlaybackSelection=false;Object.assign(s,played);if(Number.isFinite(audio.duration)&&audio.duration>0)s.duration=audio.duration;
         if(settings.favorites?.includes(s)||(settings.playlists||[]).some(playlist=>playlist.songs?.includes(s)))save();
         show(s);setStatus(played.offline?'正在播放 · 离线缓存':'正在播放');
         if(s.source==='direct'){const lyrics=DOC.querySelector(`#${ID} .lyrics`);if(lyrics)lyrics.textContent='MP3 直链歌曲';}
@@ -1051,7 +1200,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         recordCompanionPlay(s);maybeAutoCompanion(s);return;
       }
       lastError=lastError||Error('没有找到可播放音源');
-    }catch(error){if(isNotAllowed(error)){if(isActive())setStatus('浏览器阻止播放，请再次点击播放按钮');return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
+    }catch(error){if(error.name==='AbortError')return;if(isNotAllowed(error)){if(isActive()){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();updatePlayButton();show(s);setStatus('浏览器阻止播放，请再次点击播放按钮');}return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
     if(!isActive())return;
     playbackWanted=false;audio.pause();const detail=`${mediaDetail(lastError)}。可点击歌曲旁的“音源”补充 MP3 直链`;setStatus(detail);toast('warning',detail);
   }
@@ -1619,7 +1768,7 @@ ${latest}
 最后必须另起一行且只输出：SELENE_SONG: 官方歌名 | 官方歌手或作曲者。这一行只允许两个字段，不加 Markdown、书名号、括号、影片名、专辑名、版本说明或其他注释。可见回复与结构行必须是同一首。${authorized?'用户已经授权本次播放，选定后将直接搜索并播放。':'这一步只提出推荐，最终是否播放由用户确认。'}`;
   }
   function rankCompanionResults(rows,choice,before=''){const titleKey=normalizeSongText(choice?.title),artistKey=normalizeSongText(choice?.artist);if(!titleKey)return[];return(rows||[]).map(song=>{const title=normalizeSongText(song.title),artist=normalizeSongText(song.artist),titleScore=title===titleKey?12:title.startsWith(titleKey)||titleKey.startsWith(title)?7:0,artistScore=!artistKey?0:artist===artistKey?8:artist.includes(artistKey)||artistKey.includes(artist)?4:0;return{song,titleScore,artistScore,score:titleScore+artistScore-(before&&offlineKey(song)===before?20:0)};}).filter(item=>item.titleScore>0&&(!artistKey||item.artistScore>0)).sort((a,b)=>b.score-a.score);}
-  async function searchCompanionChoice(choice,{playResult=true}={}){choice=companionSongChoice(choice?.title,choice?.artist);if(!choice)return null;const before=current?offlineKey(current):'',pick=()=>{const ranked=rankCompanionResults(results,choice,before);return ranked.find(item=>!before||offlineKey(item.song)!==before)?.song||ranked[0]?.song||null;};await search(`${choice.title} ${choice.artist}`.trim(),false,false,'',true);let song=pick();if(!song){await search(choice.title,false,false,'',true);song=pick();}if(song&&playResult)await play(song);return song;}
+  async function searchCompanionChoice(choice,{playResult=true}={}){choice=companionSongChoice(choice?.title,choice?.artist);if(!choice)return null;const before=current?offlineKey(current):'',pick=()=>{const ranked=rankCompanionResults(results,choice,before);return ranked.find(item=>!before||offlineKey(item.song)!==before)?.song||ranked[0]?.song||null;};await search(`${choice.title} ${choice.artist}`.trim(),false,false,'',true,choice);let song=pick();if(!song){await search(choice.title,false,false,'',true,choice);song=pick();}if(song&&playResult)await play(song);return song;}
   async function uniqueCompanionRecommendation({mood='',userText='',authorized=true,maxAttempts=3}={}){
     const info=companionCharacter(),attempts=Math.max(1,Math.min(5,Number(maxAttempts)||3));let retryNote='',lastReason='';
     for(let attempt=0;attempt<attempts;attempt++){
@@ -2024,7 +2173,7 @@ ${latest}
     f.querySelector('[data-reset-lyrics]').onclick=()=>{settings.desktopPosition={...defaults.desktopPosition};settings.mobileLyricsPosition={...defaults.mobileLyricsPosition};settings.desktopLyricFontSize=defaults.desktopLyricFontSize;settings.mobileLyricFontSize=defaults.mobileLyricFontSize;settings.mobileLyrics=true;save();renderDesktopLyrics(currentLyricWords);toast('success','歌词位置和大小已重置');};
   }
   function bindReliableTap(button,handler){if(!button)return;let lastTouchAt=0;button.style.setProperty('touch-action','manipulation','important');const activate=e=>{if(e?.type==='click'&&Date.now()-lastTouchAt<500)return;e?.preventDefault?.();e?.stopPropagation?.();handler(e);};button.onclick=activate;button.onpointerup=e=>{if(e.pointerType==='mouse')return;lastTouchAt=Date.now();activate(e);};}
-  function bind(el){bindReliableTap(el.querySelector('.selene-player-close'),()=>{setPublicVisible(false);menu();});el.querySelector('.gear').onclick=settingsDialog;el.querySelector('form').onsubmit=e=>{e.preventDefault();search(el.querySelector('input').value);};el.querySelector('.actions').onclick=e=>{const a=e.target.dataset.a;if(a==='rec')recommendation(true);if(a==='fav-queue'){const favorites=settings.favorites||[],known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(a==='lock'){settings.lyricsLocked=!settings.lyricsLocked;updateLyricsLock();paintTime();save();}if(a==='playlist'){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}if(a==='offline')showOfflineSongs();};el.querySelector('.controls').onclick=e=>{const c=e.target.dataset.c;if(c==='play'&&current){if(audio.paused){playbackWanted=true;applyAudioSessionMode();if(audio.error||!audio.currentSrc&&!audio.src)play(current);else{audio.muted=false;const attempt=audio.play();attempt?.catch?.(error=>{if(isNotAllowed(error))setStatus('手机浏览器等待播放，请再次点击播放键');else play(current);});}}else{playbackWanted=false;audio.pause();}}if(c==='mode'){settings.playMode={loop:'one',one:'shuffle',shuffle:'loop'}[settings.playMode]||'loop';updatePlayMode();save();}if(c==='prev'||c==='next'){const song=nextSong(c==='next'?1:-1);if(song)play(song);}};const progress=el.querySelector('.progress'),beginProgress=()=>{progress.classList.add('is-seeking');progressSeeking=true;pendingProgressValue=Number(progress.value)||0;},previewProgress=e=>{progressSeeking=true;pendingProgressValue=Math.max(0,Math.min(1000,Number(e.target.value)||0));e.target.style.setProperty('--range-fill',`${pendingProgressValue/10}%`);const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)el.querySelector('.time').textContent=`${clock(duration*pendingProgressValue/1000)} / ${clock(duration)}`;},commitProgress=()=>{progress.classList.remove('is-seeking');const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)audio.currentTime=duration*pendingProgressValue/1000;progressSeeking=false;updateMediaPosition(true);paintTime();},cancelProgress=()=>{progress.classList.remove('is-seeking');progressSeeking=false;paintTime();};progress.onpointerdown=beginProgress;progress.ontouchstart=beginProgress;progress.oninput=previewProgress;progress.onchange=commitProgress;progress.onpointerup=commitProgress;progress.ontouchend=commitProgress;progress.onpointercancel=cancelProgress;progress.ontouchcancel=cancelProgress;el.querySelector('.volume input').style.setProperty('--range-fill',`${settings.volume*100}%`);el.querySelector('.volume input').oninput=e=>{e.target.style.setProperty('--range-fill',`${e.target.value}%`);audio.volume=e.target.value/100;settings.volume=audio.volume;save();};let p;const head=el.querySelector('.selene-player-head');head.style.touchAction='none';head.onpointerdown=e=>{if(e.target.closest('button')||(e.pointerType==='mouse'&&(e.button!==0||!e.isPrimary)))return;const rect=el.getBoundingClientRect();p={id:e.pointerId,x:e.clientX,y:e.clientY,l:rect.left,t:rect.top,mobile:isMobile()};head.setPointerCapture?.(e.pointerId);e.preventDefault();};head.onpointermove=e=>{if(!p||e.pointerId!==p.id||(e.pointerType==='mouse'&&(e.buttons&1)!==1))return;if(p.mobile){const width=ROOT.visualViewport?.width||ROOT.innerWidth,height=ROOT.visualViewport?.height||ROOT.innerHeight,left=Math.max(6,Math.min(width-el.offsetWidth-6,p.l+e.clientX-p.x)),top=Math.max(6,Math.min(height-el.offsetHeight-6,p.t+e.clientY-p.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}else{el.style.right=`${Math.max(0,parseFloat(el.style.right)-e.clientX+p.x)}px`;el.style.bottom=`${Math.max(0,parseFloat(el.style.bottom)-e.clientY+p.y)}px`;p.x=e.clientX;p.y=e.clientY;}};const finish=()=>{if(!p)return;if(p.mobile){const rect=el.getBoundingClientRect();settings.mobilePosition={left:Math.round(rect.left),top:Math.round(rect.top/(ROOT.visualViewport?.height||ROOT.innerHeight)*100)};}else settings.position={right:parseFloat(el.style.right),bottom:parseFloat(el.style.bottom)};save();p=null;};head.onpointerup=finish;head.onpointercancel=finish;head.onlostpointercapture=finish;}
+  function bind(el){bindReliableTap(el.querySelector('.selene-player-close'),()=>{setPublicVisible(false);menu();});el.querySelector('.gear').onclick=settingsDialog;el.querySelector('form').onsubmit=e=>{e.preventDefault();search(el.querySelector('input').value);};el.querySelector('.actions').onclick=e=>{const a=e.target.dataset.a;if(a==='rec')recommendation(true);if(a==='fav-queue'){const favorites=settings.favorites||[],known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(a==='lock'){settings.lyricsLocked=!settings.lyricsLocked;updateLyricsLock();paintTime();save();}if(a==='playlist'){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}if(a==='offline')showOfflineSongs();};el.querySelector('.controls').onclick=e=>{const c=e.target.dataset.c;if(c==='play'&&current){if(!playbackWanted||audio.paused&&playbackPhase!=='loading'){void resumeMainAudioFromMediaSession();}else{playbackWanted=false;++playRequest;cancelPlaybackProbe?.();playbackPhase='idle';audio.pause();updatePlayButton();}}if(c==='mode'){settings.playMode={loop:'one',one:'shuffle',shuffle:'loop'}[settings.playMode]||'loop';updatePlayMode();save();}if(c==='prev'||c==='next'){const song=nextSong(c==='next'?1:-1);if(song)play(song);}};const progress=el.querySelector('.progress'),beginProgress=()=>{progress.classList.add('is-seeking');progressSeeking=true;pendingProgressValue=Number(progress.value)||0;},previewProgress=e=>{progressSeeking=true;pendingProgressValue=Math.max(0,Math.min(1000,Number(e.target.value)||0));e.target.style.setProperty('--range-fill',`${pendingProgressValue/10}%`);const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)el.querySelector('.time').textContent=`${clock(duration*pendingProgressValue/1000)} / ${clock(duration)}`;},commitProgress=()=>{progress.classList.remove('is-seeking');const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)audio.currentTime=duration*pendingProgressValue/1000;progressSeeking=false;updateMediaPosition(true);paintTime();},cancelProgress=()=>{progress.classList.remove('is-seeking');progressSeeking=false;paintTime();};progress.onpointerdown=beginProgress;progress.ontouchstart=beginProgress;progress.oninput=previewProgress;progress.onchange=commitProgress;progress.onpointerup=commitProgress;progress.ontouchend=commitProgress;progress.onpointercancel=cancelProgress;progress.ontouchcancel=cancelProgress;el.querySelector('.volume input').style.setProperty('--range-fill',`${settings.volume*100}%`);el.querySelector('.volume input').oninput=e=>{e.target.style.setProperty('--range-fill',`${e.target.value}%`);audio.volume=e.target.value/100;settings.volume=audio.volume;save();};let p;const head=el.querySelector('.selene-player-head');head.style.touchAction='none';head.onpointerdown=e=>{if(e.target.closest('button')||(e.pointerType==='mouse'&&(e.button!==0||!e.isPrimary)))return;const rect=el.getBoundingClientRect();p={id:e.pointerId,x:e.clientX,y:e.clientY,l:rect.left,t:rect.top,mobile:isMobile()};head.setPointerCapture?.(e.pointerId);e.preventDefault();};head.onpointermove=e=>{if(!p||e.pointerId!==p.id||(e.pointerType==='mouse'&&(e.buttons&1)!==1))return;if(p.mobile){const width=ROOT.visualViewport?.width||ROOT.innerWidth,height=ROOT.visualViewport?.height||ROOT.innerHeight,left=Math.max(6,Math.min(width-el.offsetWidth-6,p.l+e.clientX-p.x)),top=Math.max(6,Math.min(height-el.offsetHeight-6,p.t+e.clientY-p.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}else{el.style.right=`${Math.max(0,parseFloat(el.style.right)-e.clientX+p.x)}px`;el.style.bottom=`${Math.max(0,parseFloat(el.style.bottom)-e.clientY+p.y)}px`;p.x=e.clientX;p.y=e.clientY;}};const finish=()=>{if(!p)return;if(p.mobile){const rect=el.getBoundingClientRect();settings.mobilePosition={left:Math.round(rect.left),top:Math.round(rect.top/(ROOT.visualViewport?.height||ROOT.innerHeight)*100)};}else settings.position={right:parseFloat(el.style.right),bottom:parseFloat(el.style.bottom)};save();p=null;};head.onpointerup=finish;head.onpointercancel=finish;head.onlostpointercapture=finish;}
   function ensureMenuStyle(){if(DOC.getElementById(`${ID}-menu-style`))return;DOC.head?.insertAdjacentHTML('beforeend',`<style id="${ID}-menu-style">#${ID}-menu{display:block!important;width:100%!important;min-width:0!important;padding:0!important;margin:0!important;color:inherit!important}#${ID}-menu>.selene-menu-item{box-sizing:border-box!important;display:flex!important;flex-flow:row nowrap!important;align-items:center!important;column-gap:10px!important;width:100%!important;min-width:0!important;padding:5px!important;color:inherit!important;cursor:pointer!important;white-space:nowrap!important;writing-mode:horizontal-tb!important}#${ID}-menu>.selene-menu-item>.extensionsMenuExtensionButton{display:flex!important;flex:0 0 20px!important;align-items:center!important;justify-content:center!important;width:20px!important;height:20px!important;padding:0!important;pointer-events:none!important}#${ID}-menu>.selene-menu-item>.selene-menu-label{display:block!important;min-width:0!important;padding:0!important;white-space:nowrap!important;writing-mode:horizontal-tb!important}#${ID}-menu>.selene-menu-item:hover{opacity:1!important}</style>`);}
   function styleMenuEntry(wrapper){
     const row=wrapper.firstElementChild,icon=row?.querySelector('.extensionsMenuExtensionButton'),label=row?.querySelector('.selene-menu-label');
@@ -2397,8 +2546,8 @@ ${latest}
     };
     (targets||el.querySelectorAll('.selene-player-head,.selene-player-head>b,.resize-handle,.mini-cover-shell')).forEach(wrap);
   }
-  function handleAudioPlay(){interruptionRetryCount=0;clearInterruptionRetry();companionListeningAwaitingPlay=false;updatePlayButton();trackCompanionListeningTime({reset:true});}
-  function handleUnexpectedPause(){trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();if(playbackWanted&&!audio.ended)scheduleInterruptionRecovery();}
+  function handleAudioPlay(){if(audioPriming)return;interruptionRetryCount=0;clearInterruptionRetry();updatePlayButton();trackCompanionListeningTime({reset:true});}
+  function handleUnexpectedPause(){if(audioPriming)return;trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();if(playbackWanted&&!audio.ended&&playbackPhase==='playing')scheduleInterruptionRecovery();}
   const companionColorScheme=ROOT.matchMedia?.('(prefers-color-scheme:dark)');
   let contextEventBindings=[],contextRecommendationTimer=0;
   function cleanupContextEvents(){
@@ -2409,8 +2558,8 @@ ${latest}
   function events(){
     const player=DOC.getElementById(ID);hardenResizeInteractions(player);ensureCleanLibraryLayout(player);bindOrbitStyle(player);companionColorScheme?.addEventListener?.('change',syncCompanionAppearance);optimizeWindowInteractions(player);setupMediaSession();
     for(const event of ['playing','pause','waiting','ended','emptied','error'])audio.addEventListener(event,syncOrbitMotion);
-    audio.addEventListener('play',handleAudioPlay);audio.addEventListener('pause',handleUnexpectedPause);audio.addEventListener('timeupdate',()=>{paintTime();trackCompanionListeningTime();});audio.addEventListener('loadedmetadata',()=>{paintTime();updateMediaPosition(true);});audio.addEventListener('durationchange',()=>updateMediaPosition(true));audio.addEventListener('seeked',()=>updateMediaPosition(true));audio.addEventListener('ratechange',()=>updateMediaPosition(true));
-    audio.addEventListener('ended',()=>{trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();paintTime();if(current)createCompanionTicket({automatic:true});if(settings.playMode==='one'&&current){const memories=companionMemoryList(),entry=memories[offlineKey(current)];if(entry){entry.loops=(Number(entry.loops)||0)+1;save();}audio.currentTime=0;playbackWanted=true;audio.play().catch(()=>{});return;}const song=nextSong(1);if(song)play(song);else playbackWanted=false;});
+    audio.addEventListener('play',handleAudioPlay);audio.addEventListener('pause',handleUnexpectedPause);audio.addEventListener('timeupdate',()=>{if(!audioPriming){paintTime();trackCompanionListeningTime();}});audio.addEventListener('loadedmetadata',()=>{paintTime();updateMediaPosition(true);});audio.addEventListener('durationchange',()=>updateMediaPosition(true));audio.addEventListener('seeked',()=>updateMediaPosition(true));audio.addEventListener('ratechange',()=>updateMediaPosition(true));
+    audio.addEventListener('ended',()=>{if(audioPriming)return;trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();paintTime();if(current)createCompanionTicket({automatic:true});if(settings.playMode==='one'&&current){const memories=companionMemoryList(),entry=memories[offlineKey(current)];if(entry){entry.loops=(Number(entry.loops)||0)+1;save();}audio.currentTime=0;playbackWanted=true;void resumeMainAudioFromMediaSession();return;}const song=nextSong(1);if(song)play(song);else playbackWanted=false;});
     audioSession?.addEventListener?.('statechange',handleAudioSessionState);
     cleanupContextEvents();const c=context(),source=c?.eventSource,t=c?.eventTypes||ROOT.event_types||{},handler=()=>{if(contextRecommendationTimer)ROOT.clearTimeout(contextRecommendationTimer);contextRecommendationTimer=ROOT.setTimeout(()=>{contextRecommendationTimer=0;if(!disposed)recommendation();},50);};['CHARACTER_MESSAGE_RENDERED','MESSAGE_SWIPED','MESSAGE_EDITED','CHAT_CHANGED'].forEach(n=>{if(t[n]&&source?.on){source.on(t[n],handler);contextEventBindings.push([source,t[n],handler]);}});
   }

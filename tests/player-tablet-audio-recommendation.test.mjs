@@ -86,6 +86,7 @@ test('automatic recommendations prefer the exact title and artist over the first
 class FakeAudio extends EventTarget {
   constructor() {
     super();
+    this.currentTime = 0;
     this.currentSrc = '';
     this.duration = Number.NaN;
     this.error = null;
@@ -97,6 +98,8 @@ class FakeAudio extends EventTarget {
 
   get src() { return this._src; }
   set src(value) { this._src = value; this.currentSrc = value; }
+
+  load() { this.currentTime=0; }
 
   play() {
     this.paused = false;
@@ -117,9 +120,11 @@ function createPlayUrl(fakeAudio) {
     'mediaText',
     'isNotAllowed',
     'testConsole',
-    `${playbackSource};return playUrl;`,
+    `let cancelPlaybackProbe=null,audioPriming=false,playbackPhase='idle',companionListeningAwaitingPlay=true;
+    const DOC=new EventTarget(),failedPlaybackUrls=new Set(),updatePlayButton=()=>{},setStatus=()=>{},recoverStuckPlayback=()=>{};
+    ${playbackSource};return playUrl;`,
   )(
-    { Audio: FakeAudio, setTimeout, clearTimeout },
+    { Audio: FakeAudio, setInterval:()=>1, clearInterval:()=>{} },
     fakeAudio,
     () => {},
     code => `media error ${code}`,
@@ -147,7 +152,7 @@ test('a touch release activates a header button once and suppresses its syntheti
   assert.equal(activations, 1);
 });
 
-test('an accepted play promise is not treated as verified audio before media is playable', async () => {
+test('an accepted play promise is not verified before the media clock advances', async () => {
   const fakeAudio = new FakeAudio();
   const playUrl = createPlayUrl(fakeAudio);
   let settled = false;
@@ -158,8 +163,13 @@ test('an accepted play promise is not treated as verified audio before media is 
   fakeAudio.readyState = 2;
   fakeAudio.duration = 180;
   fakeAudio.dispatchEvent(new Event('canplay'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled,false);
+  fakeAudio.currentTime=.25;fakeAudio.dispatchEvent(new Event('timeupdate'));
+  fakeAudio.currentTime=.5;fakeAudio.dispatchEvent(new Event('timeupdate'));
   await playback;
   assert.equal(settled, true);
+  fakeAudio.dispatchEvent(new Event('ended'));
 });
 
 test('a source error after play acceptance still rejects and enables fallback', async () => {

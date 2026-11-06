@@ -55,8 +55,8 @@ test('replacing and clearing manual audio updates saved copies without losing pl
 });
 
 const fallbackSource = section('async function gdFallback', 'async function gdMetadata');
-function fallback({ gd, meting = async () => null, play, sources = ['netease', 'tencent'] }) {
-  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'resolveMetingSourceTrack', 'playUrl', 'isNotAllowed', 'console', `${fallbackSource};return gdFallback;`)(sources, {}, gd, meting, play, error => error.name === 'NotAllowedError', { warn() {} });
+function fallback({ gd, meting = async () => null, play, sources = ['netease', 'joox', 'bilibili'] }) {
+  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'resolveMetingSourceTrack', 'playUrl', 'isNotAllowed', 'console', 'songDuration', `${fallbackSource};return gdFallback;`)(sources, {}, gd, meting, play, error => error.name === 'NotAllowedError', { warn() {} }, song => Number(song.duration)||0);
 }
 
 test('unplayable 320k and duplicate candidates do not prevent lower bitrate playback', async () => {
@@ -68,12 +68,12 @@ test('unplayable 320k and duplicate candidates do not prevent lower bitrate play
   assert.equal(result.offline, false);
 });
 
-test('failed GD playback proceeds to Meting and then other platforms', async () => {
+test('failed GD playback proceeds to JOOX without requesting Meting', async () => {
   const tried = [];
-  const gdFallback = fallback({ gd: async (_, source) => [{ source, audio: `${source}-gd` }], meting: async (_, source) => ({ source, audio: `${source}-meting` }), play: async url => { tried.push(url); if (url !== 'tencent-gd') throw Error('unplayable'); } });
+  const gdFallback = fallback({ gd: async (_, source) => [{ source, audio: `${source}-gd` }], meting: async (_, source) => ({ source, audio: `${source}-meting` }), play: async url => { tried.push(url); if (url !== 'joox-gd') throw Error('unplayable'); } });
   const result = await gdFallback({ source: 'netease' });
-  assert.deepEqual(tried, ['netease-gd', 'netease-meting', 'tencent-gd']);
-  assert.equal(result.source, 'tencent');
+  assert.deepEqual(tried, ['netease-gd', 'joox-gd']);
+  assert.equal(result.source, 'joox');
 });
 
 test('browser autoplay denial stops fallback without cycling through every provider', async () => {
@@ -91,11 +91,11 @@ test('superseded playback cannot start a late resolved candidate', async () => {
   assert.equal(attempts, 0);
 });
 
-test('later fallback rounds request fresh temporary URLs', async () => {
+test('fallback starts at the default quality without forced refresh rounds', async () => {
   const options = [];
   const gdFallback = fallback({ gd: async (_, source, all, opts) => { options.push(opts); return [{ source, audio: 'good' }]; }, play: async () => {} });
   await gdFallback({ source: 'netease' }, 1);
-  assert.equal(options[0].fresh, true);
+  assert.deepEqual(options,[{bitrate:'320'}]);
 });
 
 const importSource = section('function playlistSongsFromRows', 'let activeCompanionWorldText');
