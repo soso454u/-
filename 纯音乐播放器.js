@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.46';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.47';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -132,7 +132,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchSource: 'auto', lxMusicEnabled: false, desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchSource: 'auto', lxMusicEnabled: true, desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -1526,16 +1526,17 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   // Huibq's public LX Music source: https://github.com/Huibq/keep-alive/blob/master/render_api.js
   const LX_SOURCES={tencent:{code:'tx',id:/^[a-z0-9]{14}$/i},netease:{code:'wy',id:/^\d{1,20}$/},kugou:{code:'kg',id:/^[a-f0-9]{32}$/i}};
+  const LX_URL_API='https://selene-lx-worker.soivt44.workers.dev/api/lx/url';
   const lxSourceLabel=platform=>`LX Music · ${GD_SOURCE_LABELS[platform]}`;
   const playbackLabel=song=>song.offline?'离线缓存':audio.dataset?.seleneLxSource||(song.customAudio?'手动音源':GD_SOURCE_LABELS[song.source]||'自动');
   let lxRetryAt=0;
-  async function requestLxJson(url,options={},timeout=12000){
+  async function requestLxJson(url,timeout=12000){
     const controller=new ROOT.AbortController();
     let timedOut=false;
     const timer=ROOT.setTimeout(()=>{timedOut=true;controller.abort();},timeout);
     dataRequestControllers.add(controller);
     try{
-      const response=await fetch(url,{cache:'no-store',credentials:'omit',...options,signal:controller.signal});
+      const response=await fetch(url,{method:'GET',cache:'no-store',credentials:'omit',signal:controller.signal});
       const data=await response.json().catch(error=>{if(controller.signal.aborted)throw error;return null;});
       return {response,data};
     }catch(error){
@@ -1550,65 +1551,50 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const title=getSongTitle(song),artist=getSongArtist(song);
     if(!title||!artistParts(artist).length)throw Error('LX Music 匹配需要歌曲名和原唱');
     const search=metingSearchUrl(SELENE_METING_API,platform,{title,artist});
-    const {response,data}=await requestLxJson(search,{},8000);
+    const {response,data}=await requestLxJson(search,8000);
     const rows=Array.isArray(data)?data:data?.data;
     if(!response.ok||!Array.isArray(rows))throw Error('LX Music 歌曲 ID 查询暂不可用');
     const candidates=[];
     for(const row of rows.slice(0,30)){
       let url;try{url=new URL(row?.url);}catch{continue;}
       const songId=url.searchParams.get('id')||'';
-      if(url.origin===search.origin&&url.searchParams.get('server')===platform&&url.searchParams.get('type')==='url'&&pattern.test(songId))candidates.push({...row,songId});
+      if(url.origin===search.origin&&url.pathname===search.pathname&&url.searchParams.get('server')===platform&&url.searchParams.get('type')==='url'&&pattern.test(songId))candidates.push({...row,songId});
     }
     const match=bestSongHit(candidates,song);
     if(!match)throw Error('LX Music 未找到同歌手、同版本且带有平台 ID 的歌曲');
     return match.songId;
   }
   async function playLxSource(song,platform,isActive){
-    if(Date.now()<lxRetryAt)throw Error('LX Music 限流冷却中，请稍后再试');
+    const checkCooldown=()=>{if(Date.now()<lxRetryAt)throw Object.assign(Error('LX Music 限流冷却中，请稍后再试'),{retryAt:lxRetryAt});};
+    if(!isActive())return null;
+    checkCooldown();
     const source=LX_SOURCES[platform].code,label=lxSourceLabel(platform);
     const songId=await findLxSongId(song,platform);
-    let usePlugin=true;
     for(const quality of ['128k','320k']){
       if(!isActive())return null;
-      let result;
-      if(usePlugin){
-        result=await requestLxJson('/api/plugins/selene-lx/url',{
-          method:'POST',credentials:'same-origin',redirect:'error',headers:{...playlistSameOriginHeaders(),'Content-Type':'application/json'},
-          body:JSON.stringify({source,songId,quality}),
-        });
-        if(!isActive())return null;
-        usePlugin=result.response.status!==404;
-      }
-      if(!usePlugin){
-        // The existing general proxy forwards headers. Never send session or HTTP auth credentials to it.
-        result=await requestLxJson(`/proxy/https://lxmusicapi.onrender.com/url/${source}/${songId}/${quality}`,{
-          credentials:'omit',redirect:'manual',headers:{'X-Request-Key':'share-v3'},
-        });
-      }
-      if(!isActive())return null;
-      const {response,data}=result,code=data?.code;
-      if(!usePlugin&&(response.type==='opaqueredirect'||[401,403,404].includes(response.status))&&![1,2,5,429].includes(code)){
-        throw Error('酒馆内置代理不可用，请安装 Selene LX Music 服务端插件');
-      }
+      checkCooldown();
+      const request=new URL(LX_URL_API);
+      request.search=new URLSearchParams({source,id:songId,quality});
+      const {response,data}=await requestLxJson(request),code=data?.code;
       if(response.status===429||[1,5,429].includes(code)){
         const blocked=data?.error==='blocked'||code===1;
         const retry=response.headers.get('Retry-After'),seconds=Number(retry),now=Date.now();
         const retryAt=Number(data?.retryAt)||(retry&&Number.isFinite(seconds)?now+seconds*1000:Date.parse(retry));
-        lxRetryAt=Math.max(now+1000,retryAt||now+(blocked?300000:30000));
-        throw Error(blocked?'LX Music 暂时封锁服务端 IP':'LX Music 限流，请稍后再试');
+        lxRetryAt=Math.max(lxRetryAt,now+1000,retryAt||now+(blocked?300000:30000));
+        throw Object.assign(Error('LX Music 限流，请稍后再试'),{retryAt:lxRetryAt});
       }
-      if(response.status===504)throw Error('LX Music 取址超时');
-      if(code===2||data?.error==='unavailable'||data?.error==='expired')continue;
-      if(!response.ok||code!==0)throw Error(`LX Music 取址失败（${code??`HTTP ${response.status}`}）`);
-      const expiry=data.extra?.expire??data.expire,timestamp=Number(expiry?.time??expiry);
-      let expiresAt=Number(data.expiresAt)||0;
-      if(!usePlugin&&expiry?.canExpire!==false&&Number.isFinite(timestamp)&&timestamp>0)expiresAt=timestamp<1e12?timestamp*1000:timestamp;
-      if(expiresAt&&expiresAt<=Date.now())continue;
+      if(!isActive())return null;
+      if([408,504].includes(response.status))throw Error('LX Music 取址超时');
+      if((response.ok||response.status===422)&&(code===2||data?.error==='unavailable'||data?.error==='expired'))continue;
+      if(!response.ok)throw Error(`LX Music 取址失败（HTTP ${response.status}）`);
+      if(code!==0)throw Error(code==null?'LX Music 返回无效取址响应':`LX Music 取址失败（代码 ${code}）`);
+      const expiry=data.expire??data.extra?.expire,timestamp=Number(expiry?.time??expiry);
+      if(expiry?.canExpire!==false&&Number.isFinite(timestamp)&&timestamp>0&&(timestamp<1e12?timestamp*1000:timestamp)<=Date.now())continue;
       let url;try{url=new URL(data.url);}catch{throw Error('LX Music 返回无效播放地址');}
       if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('LX Music 返回无效播放地址');
-      url.protocol='https:';
+      await playUrl(data.url,label,false,{isActive,expectedDuration:songDuration(song)});
+      if(!isActive())return null;
       audio.dataset.seleneLxSource=label;
-      await playUrl(url.href,label,false,{isActive,expectedDuration:songDuration(song)});
       return {offline:false};
     }
     throw Error('LX Music 没有返回有效期内的播放地址');
@@ -1662,6 +1648,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             if(lastError){
               lastError.message=`${mediaDetail(lastError)}；${mediaDetail(error)}`;
               lastError.lxError=error;
+              if(error.retryAt)lastError.retryAt=Math.max(lastError.retryAt||0,error.retryAt);
             }else lastError=error;
           }
         }
