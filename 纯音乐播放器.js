@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.41';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.42';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -2668,7 +2668,7 @@ ${latest}
       #${ID}.mini>.settings-panel[style]{display:none!important;visibility:hidden!important;pointer-events:none!important}
       #${ID}.pointer-interacting{transition:none!important;will-change:transform!important}
       #${ID}.pointer-interacting *{transition:none!important}
-      #${ID}:not(.mini)>.selene-player-head>.lyrics-tools{display:inline-flex!important;align-items:center!important;flex:0 0 62px!important;width:62px!important;height:30px!important;gap:0!important;border:1px solid var(--smp-control-border,#ffffff24)!important;border-radius:999px!important;background:var(--smp-control-bg,#ffffff10)!important;overflow:hidden!important;padding:0!important;position:relative!important;z-index:35!important;touch-action:manipulation}
+      #${ID}:not(.mini)>.selene-player-head>.lyrics-tools{display:inline-flex!important;align-items:center!important;flex:0 0 62px!important;width:62px!important;height:30px!important;gap:0!important;overflow:hidden!important;padding:0!important;position:relative!important;z-index:35!important;touch-action:manipulation}
       #${ID}:not(.mini)>.selene-player-head>.lyrics-tools>button{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 30px!important;width:30px!important;min-width:30px!important;height:28px!important;min-height:28px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;transform:none!important;background:transparent!important;color:inherit!important;font:600 13px/1 system-ui!important;pointer-events:auto!important;touch-action:manipulation!important}
       #${ID} .lyrics-tools>button::before,#${ID} .lyrics-tools>button::after{content:none!important;display:none!important}
       #${ID} .quick-lyrics-lock .selene-control-icon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7}
@@ -2699,9 +2699,18 @@ ${latest}
       #${ID} button:hover{background-color:color-mix(in srgb,var(--smp-text) 14%,transparent)!important;border-color:color-mix(in srgb,var(--smp-text) 22%,transparent)!important}
       #${ID} button:active{opacity:.72!important}
       #${ID} button:focus-visible,#${ID}-skin-float button:focus-visible{outline:2px solid #70b7ff!important;outline-offset:2px!important}
-      #${ID}:not(.mini)>.selene-player-head>button{border:0!important;border-radius:50%!important;background:color-mix(in srgb,var(--smp-head-text) 8%,transparent)!important;color:var(--smp-head-text)!important}
+      #${ID}:not(.mini)>.selene-player-head>button{color:var(--smp-head-text)!important}
+      #${ID}:not(.mini)>.selene-player-head>.selene-player-close{border:0!important;border-radius:50%!important;background:color-mix(in srgb,var(--smp-head-text) 8%,transparent)!important}
+      #${ID}:not(.mini)>.selene-player-head>:is(.lyrics-tools,.pin,.skin,.gear){
+        border:1px solid var(--smp-control-border,#ffffff24)!important;
+        border-radius:999px!important;
+        background:var(--smp-control-bg,#ffffff10)!important;
+      }
       #${ID}:not(.mini)>.selene-player-head>button:hover{background:color-mix(in srgb,var(--smp-head-text) 18%,transparent)!important}
-      #${ID}.pinned>.selene-player-head>.pin{background:color-mix(in srgb,var(--smp-head-text) 22%,transparent)!important}
+      #${ID}.pinned:not(.mini)>.selene-player-head>button.pin{
+        border-color:var(--smp-switch,var(--smp-control-border))!important;
+        background:color-mix(in srgb,var(--smp-head-text) 22%,transparent)!important;
+      }
       #${ID} .selene-control-icon,#${ID}-companion .selene-control-icon{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
       #${ID} .actions button{border-radius:12px!important;border-color:color-mix(in srgb,var(--smp-text) 10%,transparent)!important;background:color-mix(in srgb,var(--smp-text) 6%,transparent)!important}
       #${ID} .row .row-tools button{border-color:transparent!important;border-radius:10px!important;background:color-mix(in srgb,var(--smp-text) 6%,transparent)!important}
