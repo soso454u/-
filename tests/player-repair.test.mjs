@@ -65,13 +65,13 @@ test('GD extra_data duration participates in strict version and lyric matching',
 });
 
 test('playback defaults to automatic fallback independently of search; per-song overrides remain exclusive',()=>{
-  const {order,choices}=new Function(`const GD_SOURCES=['netease','joox','bilibili'],playbackSources=new WeakMap(),settings={searchSource:'joox'};${urlHelpers};return {order:song=>playbackSourceOrder(song,playbackSourceChoice(song)),choices:playbackSources};`)();
+  const {order,choices}=new Function(`const GD_SOURCES=['netease','joox','bilibili'],playbackSources=new WeakMap(),settings={searchSource:'joox'};${urlHelpers};return {order:song=>playbackSourceOrder(playbackSourceChoice(song)),choices:playbackSources};`)();
   const song={source:'joox'};
-  assert.deepEqual(order(song),['joox','netease','bilibili']);
+  assert.deepEqual(order(song),['netease','joox','bilibili']);
   assert.deepEqual(order({source:'netease'}),['netease','joox','bilibili']);
   choices.set(song,'joox');assert.deepEqual(order(song),['joox']);
   choices.set(song,'netease');assert.deepEqual(order(song),['netease']);
-  choices.set(song,'auto');assert.deepEqual(order(song),['joox','netease','bilibili']);
+  choices.set(song,'auto');assert.deepEqual(order(song),['netease','joox','bilibili']);
 });
 test('GD opaque track IDs are preserved verbatim and deprecated url_id never replaces them',async()=>{
   const id='joox:opaque+/==#',calls=[];
@@ -81,7 +81,7 @@ test('GD opaque track IDs are preserved verbatim and deprecated url_id never rep
 });
 test('manual JOOX playback cannot fall through to Bilibili and identifies its own empty URL failure',async()=>{
   const calls=[];
-  const fallback=new Function('resolveGdSourceTracks',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return song=>gdFallback(song,0,()=>true,new Set(),playbackSourceOrder(song,'joox'));`)(async(_,source)=>{calls.push(source);const tracks=[];tracks.reason='empty-url';return tracks;});
+  const fallback=new Function('resolveGdSourceTracks',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return song=>gdFallback(song,0,()=>true,new Set(),playbackSourceOrder('joox'));`)(async(_,source)=>{calls.push(source);const tracks=[];tracks.reason='empty-url';return tracks;});
   await assert.rejects(fallback({source:'joox'}),error=>/JOOX.*未返回播放地址/.test(error.message)&&!/哔哩哔哩/.test(error.message));
   assert.deepEqual([...new Set(calls)],['joox']);assert.equal(calls.length,5);
 });
@@ -89,9 +89,9 @@ test('a final Bilibili miss cannot overwrite an earlier JOOX playback error',asy
   const calls=[];
   const fallback=new Function('resolveGdSourceTracks','playUrl',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false,songDuration=()=>0;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return gdFallback;`)(async(_,source)=>{calls.push(source);if(source==='joox')return [{audio:'https://cdn.test/bad.mp3',source}];const tracks=[];tracks.reason='no-match';return tracks;},async()=>{throw Error('音频格式无法解码');});
   await assert.rejects(fallback({source:'joox'}),error=>{
-    assert.match(error.message,/^JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同歌手/);assert.deepEqual(error.failures.map(x=>x.source),['joox','netease','bilibili']);return true;
+    assert.match(error.message,/JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同歌手/);assert.deepEqual(error.failures.map(x=>x.source),['netease','joox','bilibili']);return true;
   });
-  assert.equal(calls[0],'joox');assert.equal(calls.filter(x=>x==='bilibili').length,1,'a missing identity stops quality requests for that source');
+  assert.equal(calls[0],'netease');assert.equal(calls.filter(x=>x==='bilibili').length,1,'a missing identity stops quality requests for that source');
 });
 
 test('artist aliases and collaborator formatting are tolerant while identity remains explicit',()=>{

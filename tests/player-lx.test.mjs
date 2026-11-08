@@ -33,7 +33,7 @@ function player(fetch, enabled, resolveGd = () => null) {
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
     let playbackRecoveryCount=0,safariBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{};
-    const playOfflineSong=async()=>null,gdFallback=async(song)=>{fallback.push(song);return resolveGd(song);};
+    const playOfflineSong=async()=>null,gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
     const isNotAllowed=()=>false,clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
     const playUrl=async(url,label,isolated,options)=>urls.push({url,label,isolated,options});
     const recordCompanionPlay=()=>{},maybeAutoCompanion=()=>{},applyCurrentCover=()=>{},loadLyrics=song=>lyrics.push(song.gdLyricId);
@@ -83,7 +83,7 @@ test('explicit LX playback resolves a strict QQ match and retains the original G
   const disabled = player(() => assert.fail('disabled LX should not make requests'), false);
   disabled.select(song, 'lx-tencent');
   await disabled.play(song);
-  assert.deepEqual(disabled.fallback, [song]);
+  assert.deepEqual(disabled.fallback, [['netease', 'joox', 'bilibili']]);
 });
 
 test('cross-platform matching obtains real NetEase and Kugou IDs from the selected platform', async () => {
@@ -125,25 +125,47 @@ test('LX uses at most two qualities and stops immediately for rate limits and ti
   assert.equal(timeouts, 1);
 });
 
-test('default automatic fallback tries LX only after GD fails and respects manual GD selection', async () => {
+test('default playback tries GD NetEase, then LX QQ with a matched QQ ID', async () => {
   const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
   const order = [];
   const api = player(async (url, options) => {
-    assert.deepEqual(workerQuery(url, options), { source: 'wy', id: '123', quality: '128k' });
-    order.push('LX');
+    if (url.origin === new URL(meting).origin) {
+      assert.equal(url.searchParams.get('server'), 'tencent');
+      return Response.json([{ title: song.title, author: song.artist, url: `${meting}?server=tencent&type=url&id=${songId}` }]);
+    }
+    assert.deepEqual(workerQuery(url, options), { source: 'tx', id: songId, quality: '128k' });
+    order.push('lx-tencent');
     return Response.json({ code: 0, url: 'https://cdn.test/stream' });
-  }, undefined, () => { order.push('GD'); throw Error('GD 不可用'); });
+  }, undefined, sources => { order.push(...sources); throw Error('GD 不可用'); });
   await api.play(song);
-  assert.deepEqual(order, ['GD', 'LX']);
+  assert.deepEqual(order, ['netease', 'lx-tencent']);
   assert.equal(api.urls.length, 1);
-  assert.match(api.statuses.at(-1), /LX Music · 网易云/);
+  assert.match(api.statuses.at(-1), /LX Music · QQ/);
 
-  api.select(song, 'netease');
+  api.select(song, 'joox');
   await api.play(song);
-  assert.deepEqual(order, ['GD', 'LX', 'GD']);
+  assert.deepEqual(order, ['netease', 'lx-tencent', 'joox']);
   const healthyGd = player(() => assert.fail('successful GD playback needs no LX request'), true, () => ({ offline: false }));
-  await healthyGd.play({ ...song });
-  assert.equal(healthyGd.fallback.length, 1);
+  await healthyGd.play({ ...track, source: 'bilibili' });
+  assert.deepEqual(healthyGd.fallback, [['netease']]);
+});
+
+test('a failed LX lookup leaves the remaining GD sources available unless GD is on cooldown', async () => {
+  for (const rateLimited of [false, true]) {
+    const order = [];
+    const api = player(async (url, options) => {
+      assert.deepEqual(workerQuery(url, options), { source: 'tx', id: songId, quality: '128k' });
+      order.push('lx-tencent');
+      return new Response(null, { status: 502 });
+    }, undefined, sources => {
+      order.push(...sources);
+      if (sources[0] === 'netease') throw Object.assign(Error('网易云不可用'), { retryAt: rateLimited ? Date.now() + 60000 : 0 });
+      return { source: 'joox', offline: false };
+    });
+    await api.play({ ...track, source: 'tencent', mediaId: songId, gdSource: 'tencent' });
+    assert.deepEqual(order, rateLimited ? ['netease', 'lx-tencent'] : ['netease', 'lx-tencent', 'joox', 'bilibili']);
+    if (rateLimited) assert.match(api.statuses.at(-1), /网易云不可用.*HTTP 502/);
+  }
 });
 
 test('expired addresses are skipped, fresh addresses are never persisted, and HTTP failures stop lookup', async () => {

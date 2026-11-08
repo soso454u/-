@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.47';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.48';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -645,7 +645,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}.skin-orbit.immersive .immersive-info p{margin:0 38px!important;text-align:center!important}
       #${ID}.immersive .immersive-close{position:absolute;right:0;top:8px;z-index:3;display:flex!important;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;padding:0!important;border:0!important;border-radius:50%!important;background:#ffffff0d!important;color:#f6f4f1!important;font-size:0!important;line-height:0!important;cursor:pointer}
       #${ID} .immersive-return{display:none!important}
-      #${ID}.immersive>.body>.controls{position:relative;z-index:2;display:grid!important;flex:0 0 auto!important;grid-template-columns:1fr 40px 48px 40px 1fr!important;grid-template-rows:48px 16px!important;align-items:center!important;column-gap:12px!important;row-gap:3px!important;width:100%;margin:6px 0 0!important;padding:0!important;background:none!important}
+      #${ID}.immersive>.body>.controls{position:relative;z-index:2;display:grid!important;flex:0 0 auto!important;grid-template-columns:minmax(0,1fr) 40px 48px 40px minmax(0,1fr)!important;grid-template-rows:48px 16px!important;align-items:center!important;column-gap:12px!important;row-gap:3px!important;width:100%;margin:6px 0 0!important;padding:0!important;background:none!important}
       #${ID}.immersive .controls button{display:flex!important;align-items:center!important;justify-content:center!important;grid-row:1!important;justify-self:center;width:36px!important;height:36px!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;color:#f6f4f1!important;box-shadow:none!important;font-size:0!important;line-height:0!important;transform:none!important}
       #${ID}.immersive .controls button:before{content:'';display:block;width:22px;height:22px;background:currentColor;mask:var(--control-icon) center/contain no-repeat;-webkit-mask:var(--control-icon) center/contain no-repeat;pointer-events:none}
       #${ID}.immersive .controls button:hover{background:#ffffff12!important}
@@ -657,7 +657,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}.skin-orbit.immersive>.body:after{background:linear-gradient(160deg,#ffffff0a,#251f3733)}
       #${ID}.skin-orbit.immersive .controls [data-c=play]{background:#ffffff1c!important;color:#fff4ef!important;border:1px solid #ffffff36!important;box-shadow:inset 0 1px #ffffff2a!important;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
       #${ID}.immersive .controls [data-c=next]{grid-column:4!important}
-      #${ID}.immersive .controls [data-c=mode]{grid-column:5!important;justify-self:end!important;opacity:.72}
+      #${ID}.immersive .controls [data-c=mode]{grid-column:5!important;justify-self:center!important;opacity:.72}
       #${ID}.immersive .controls .progress{grid-column:1/-1!important;grid-row:2!important;width:100%!important;margin:0!important}
       #${ID}.immersive>.body>.time{position:relative;flex:0 0 auto;min-height:15px;padding:0!important;margin:0!important;color:#ffffff9c!important;font:400 10px/15px system-ui!important;font-variant-numeric:tabular-nums;text-align:left!important}
       #${ID}.immersive>.body>.volume{position:relative;display:flex!important;flex:0 0 auto;align-self:flex-end;align-items:center;width:clamp(84px,28%,160px);min-height:15px;gap:6px;margin:-15px 0 0!important;padding:0!important;color:#ffffff80!important;font:400 10px/15px system-ui!important}
@@ -1279,10 +1279,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const source=playbackSources.get(song)??'auto';
     return source.startsWith('lx-')&&!settings.lxMusicEnabled?'auto':source;
   }
-  function playbackSourceOrder(song,selected='auto'){
-    // A manual source is a deliberate choice. Automatic mode starts with the clicked result.
-    if(GD_SOURCES.includes(selected))return [selected];
-    return [...new Set([song?.source,...GD_SOURCES].filter(source=>GD_SOURCES.includes(source)))];
+  function playbackSourceOrder(selected='auto'){
+    return GD_SOURCES.includes(selected)?[selected]:GD_SOURCES;
   }
 
   async function gdCover(s,isActive=()=>true){
@@ -1421,7 +1419,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return hit?.audio?{...s,...hit,gdSource:source,gdLyricId:hit.lyricId||hit.mediaId,source}:null;
   }
   async function resolveGdTrack(s){for(const source of GD_SOURCES){const resolved=await resolveGdSourceTrack(s,source);if(resolved)return resolved;}return null;}
-  async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set(),sources=playbackSourceOrder(s),onSource=()=>{}){
+  async function gdFallback(s,attempt=0,isActive=()=>true,excluded=new Set(),sources=GD_SOURCES,onSource=()=>{}){
     const tried=new Set(excluded),failures=new Map();
     const note=(source,reason,priority=0,evidence={})=>{
       let detail=failures.get(source);if(!detail){detail={source,reason,priority,attempts:[]};failures.set(source,detail);}
@@ -1633,24 +1631,27 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         }
         if(!isActive())return;
         if(!played&&s.source!=='direct'){
-          setStatus('正在逐一验证备用音源…');
-          try{played=await gdFallback(s,0,isActive,failedPlaybackUrls,playbackSourceOrder(s,selectedSource),source=>setStatus(`正在验证${GD_SOURCE_LABELS[source]||source}音源…`));}
-          catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
-        }
-        if(!played&&selectedSource==='auto'&&settings.lxMusicEnabled&&s.source!=='direct'&&isActive()){
-          const platform=Object.hasOwn(LX_SOURCES,s.source)?s.source:'tencent';
-          setStatus(`常规音源不可用，正在验证 ${lxSourceLabel(platform)}…`);
-          try{
-            played=await playLxSource(s,platform,isActive);
-            if(played)lxSource=platform;
-          }catch(error){
+          const noteFailure=error=>{
             if(isNotAllowed(error)||error.name==='AbortError')throw error;
-            if(lastError){
-              lastError.message=`${mediaDetail(lastError)}；${mediaDetail(error)}`;
-              lastError.lxError=error;
-              if(error.retryAt)lastError.retryAt=Math.max(lastError.retryAt||0,error.retryAt);
-            }else lastError=error;
-          }
+            const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
+            lastError=lastError?Object.assign(new AggregateError([lastError,error],`${mediaDetail(lastError)}；${mediaDetail(error)}`),{retryAt}):error;
+          };
+          let gdRetryAt=0;
+          const tryGd=async sources=>{
+            try{return await gdFallback(s,0,isActive,failedPlaybackUrls,sources,source=>setStatus(`正在验证${GD_SOURCE_LABELS[source]||source}音源…`));}
+            catch(error){gdRetryAt=error.retryAt||0;noteFailure(error);return null;}
+          };
+          const sources=playbackSourceOrder(selectedSource);
+          if(selectedSource==='auto'&&settings.lxMusicEnabled){
+            const [primary,...remaining]=sources;
+            played=await tryGd([primary]);
+            if(!played&&isActive()&&settings.lxMusicEnabled){
+              setStatus(`网易云不可用，正在验证 ${lxSourceLabel('tencent')}…`);
+              try{played=await playLxSource(s,'tencent',isActive);if(played)lxSource='tencent';}
+              catch(error){noteFailure(error);}
+            }
+            if(!played&&isActive()&&Date.now()>=gdRetryAt&&remaining.length)played=await tryGd(remaining);
+          }else played=await tryGd(sources);
         }
       }
       if(played){
@@ -2646,7 +2647,7 @@ ${latest}
         <div class="settings-heading"><h3>播放器设置 <small data-player-version>v${VERSION}</small></h3><button type="button" data-x aria-label="关闭设置">×</button></div>
         <div class="set-grid">
           <label class="set-card setting-field"><span>搜索音源</span><select name="searchSource"><option value="auto">自动 · 网易云 → JOOX → 哔哩哔哩</option>${GD_SOURCES.map(source=>`<option value="${source}">${GD_SOURCE_LABELS[source]}</option>`).join('')}</select><small>此处只选择搜索来源。播放默认自动回退；播放键左侧的双箭头图标可单独切换当前歌曲音源。</small></label>
-          <label class="set-card setting-toggle"><span>LX Music 第三方备用音源（GD 失败后尝试）</span><input type="checkbox" name="lxMusicEnabled"></label>
+          <label class="set-card setting-toggle"><span>LX Music 第三方备用音源（网易云失败后尝试 QQ）</span><input type="checkbox" name="lxMusicEnabled"></label>
           <label class="set-card setting-toggle"><span>自动读取推荐</span><input type="checkbox" name="auto"></label>
           <div class="set-card setting-field" data-keepalive-card><div class="setting-row"><b>系统媒体保活</b><small data-keepalive-state>未启动</small></div><small>未选歌时运行静音保活；选歌后由当前歌曲接管锁屏与控制中心。</small><button type="button" data-keepalive-toggle>开启自动保活</button></div>
           <label class="set-card setting-field"><span>与其他应用播放</span><select name="audioSessionMode"><option value="priority">优先播放（推荐）</option><option value="mix">允许同时播放</option></select><small>同时播放的实际效果由系统与浏览器决定。</small></label>
@@ -2966,7 +2967,7 @@ ${latest}
       #${ID}:not(.mini):not(.immersive) .controls [data-c=prev]{grid-column:2!important}
       #${ID}:not(.mini):not(.immersive) .controls [data-c=play]{grid-column:3!important;width:40px!important;height:40px!important;background:var(--smp-switch,#6a9d89)!important;color:#fff!important;font-size:17px!important}
       #${ID}:not(.mini):not(.immersive) .controls [data-c=next]{grid-column:4!important}
-      #${ID}:not(.mini):not(.immersive) .controls [data-c=mode]{grid-column:5!important;justify-self:end!important;font-size:17px!important}
+      #${ID}:not(.mini):not(.immersive) .controls [data-c=mode]{grid-column:5!important;justify-self:center!important;font-size:17px!important}
       #${ID}:not(.mini):not(.immersive) .controls .progress{grid-column:1/-1!important;grid-row:2!important;width:100%!important;height:4px!important;margin:5px 0 0!important;accent-color:var(--smp-switch,#6a9d89)}
       #${ID}:not(.mini):not(.immersive) .time{padding:5px 0 0!important;margin:0!important;font-size:10px!important;line-height:1.5!important;text-align:left!important}
       #${ID}:not(.mini):not(.immersive) .volume{align-self:flex-end!important;display:flex!important;align-items:center!important;width:38%!important;margin:-15px 0 0!important;gap:6px!important;font-size:10px!important;line-height:15px!important}
@@ -3203,7 +3204,7 @@ ${latest}
     DOC.addEventListener('pointerdown',outside,true);DOC.addEventListener('keydown',escape);ROOT.addEventListener('resize',reposition);ROOT.visualViewport?.addEventListener('resize',reposition);ROOT.visualViewport?.addEventListener('scroll',reposition);
     sourceMenuCleanup=()=>{DOC.removeEventListener('pointerdown',outside,true);DOC.removeEventListener('keydown',escape);ROOT.removeEventListener('resize',reposition);ROOT.visualViewport?.removeEventListener('resize',reposition);ROOT.visualViewport?.removeEventListener('scroll',reposition);};
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-source-style">
-      #${ID}:not(.mini) .controls [data-c=source]{grid-column:1!important;justify-self:start!important;display:flex!important;align-items:center!important;justify-content:center!important;width:32px!important;min-width:32px!important;height:32px!important;padding:0!important;border-radius:50%!important;color:inherit!important;opacity:.72}
+      #${ID}:not(.mini) .controls [data-c=source]{grid-column:1!important;justify-self:center!important;display:flex!important;align-items:center!important;justify-content:center!important;width:32px!important;min-width:32px!important;height:32px!important;padding:0!important;border-radius:50%!important;color:inherit!important;opacity:.72}
       #${ID} .controls [data-c=source]>svg{display:block!important;flex:none!important;width:20px!important;height:20px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
       #${ID}.immersive .controls [data-c=source]:before{display:none!important}
       #${ID}-source-float{position:fixed;z-index:2147483647;box-sizing:border-box;padding:12px!important;border:1px solid var(--picker-line,#ffffff26);border-radius:16px;background:var(--picker-bg,#20212afa);color:var(--picker-text,#f5f4f7);box-shadow:0 12px 36px #0005;font:12px/1.4 system-ui!important;overflow:auto;overscroll-behavior:contain}
