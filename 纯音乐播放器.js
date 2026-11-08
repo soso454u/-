@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.40';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.41';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -990,7 +990,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return score;
   }
   function bestSongHit(rows,song){return(Array.isArray(rows)?rows:[]).map(item=>({item,score:scoreSongHit(item,song)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>b.score-a.score)[0]?.item||null;}
-  // Share the GD budget with search, artwork and playback requests, including script reloads.
+  // Share upstream cooldown and request diagnostics across script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
   function gdDiagnostic(entry){
@@ -1003,7 +1003,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(!temporary&&!fresh&&cached&&cached.until>Date.now())return cached.value;
     const requestKey=fresh?`${key}#fresh`:key;
     if(gdRequests.has(requestKey))return gdRequests.get(requestKey);
-    if(artwork&&(Date.now()<gdRate.until||gdRate.times.filter(time=>Date.now()-time<300000).length>=40))return {url:''};
+    if(artwork&&Date.now()<gdRate.until)return {url:''};
     if(fresh)url.searchParams.set('_selene',String(nonce||Date.now()));
     const pending=(async()=>{
       const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),12000);dataRequestControllers.add(controller);
@@ -1040,9 +1040,6 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const requestCount=gdRate.times.length;
     if(now<gdRate.until){
       throw Object.assign(Error('GD 音乐台限流冷却中，请稍后再试'),{kind:'rate-limit',limitSource:'upstream',requestCount,retryAt:gdRate.until});
-    }
-    if(requestCount>=50){
-      throw Object.assign(Error('播放器已用完 GD 请求额度（5 分钟 50 次），请稍后再试'),{kind:'rate-limit',limitSource:'local',requestCount,retryAt:gdRate.times[0]+300000});
     }
     gdRate.times.push(now);
     const response=await fetch(url,options);
@@ -1335,7 +1332,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!isActive())return [];
       const info=await gdJson({types:'url',source,id:identity.mediaId,br},{fresh,nonce}),url=getResponseUrl(info);
       if(!/^https?:\/\//i.test(String(url||''))){const detail=info?.message||info?.msg||info?.error;if(typeof detail==='string')tracks.responseMessage=detail.slice(0,100);continue;}
-      tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),refreshed:!!fresh});
+      tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),requestedBitrate:br,refreshed:!!fresh});
       break;
     }
     return tracks;
@@ -1354,15 +1351,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     };
     const failure=error=>{
       const details=[...failures.values()],message=details.map(item=>`${GD_SOURCE_LABELS[item.source]||item.source}：${item.reason}`).join('；');
-      return Object.assign(Error(message||error?.message||'没有找到可播放音源'),{failures:details,...(error?.retryAt?{retryAt:error.retryAt}:{})});
+      return Object.assign(Error(message||error?.message||'没有找到可播放音源'),{failures:details,...(error?.retryAt?{retryAt:error.retryAt,limitSource:error.limitSource}:{})});
     };
     for(const source of sources){
       if(!isActive())return null;onSource(source);
       const excludeIds=new Set();let refreshed=false;
-      // Limit each source to the selected record and one strictly matched alternate.
-      for(let candidate=0;candidate<2;candidate++){
+      // Keep the selected record and up to two strictly matched alternates.
+      for(let candidate=0;candidate<3;candidate++){
         let identity=null,noMatch=false,target=s,refreshable=false;
-        const bitrates=candidate===0?sourceBitrates(source):source==='joox'?['320','192']:['320'];
+        const bitrates=candidate===0||source==='joox'?sourceBitrates(source):['320'];
+        const preferred=candidate===0&&s.source===source?(s.requestedBitrate||s.bitrate):'';
+        const preferredIndex=bitrates.indexOf(preferred);
+        if(preferredIndex>0)bitrates.unshift(...bitrates.splice(preferredIndex,1));
         const qualities=bitrates.map(bitrate=>({bitrate,fresh:false}));
         for(let index=0;index<qualities.length;index++){
           const {bitrate,fresh}=qualities[index];
@@ -1390,7 +1390,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             }
           }
           // One cache-busting refresh for this JOOX source, only after its ordinary qualities fail.
-          if(source==='joox'&&candidate===0&&index===qualities.length-1&&identity?.mediaId&&refreshable&&!refreshed){refreshed=true;qualities.push({bitrate:sourceBitrates(source)[0],fresh:true});}
+          if(source==='joox'&&candidate===0&&index===qualities.length-1&&identity?.mediaId&&refreshable&&!refreshed){refreshed=true;qualities.push({bitrate:bitrates[0],fresh:true});}
         }
         if(noMatch||!identity?.mediaId)break;excludeIds.add(String(identity.mediaId));
       }
@@ -1446,6 +1446,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     paintTime();
   }
   let pendingPlay=null;
+  let playbackLimitWarningUntil=0;
   function play(s,recovering=false){
     const key=JSON.stringify([s.source,s.mediaId||s.id,s.title,s.artist,s.version,s.customAudio,playbackSourceChoice(s)]);
     if(!recovering&&pendingPlay?.key===key&&pendingPlay.request===playRequest&&playbackWanted)return pendingPlay.promise;
@@ -1489,7 +1490,15 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){if(error.name==='AbortError')return;if(isNotAllowed(error)){if(isActive()){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();updatePlayButton();show(s);setStatus('浏览器阻止播放，请再次点击播放按钮');}return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
     if(!isActive())return;
     console.warn('[音乐播放器] 本轮播放失败',{request,song:{title:s.title,artist:s.artist,source:s.source,mediaId:s.mediaId},error:lastError});
-    clearFailedPlayback();const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;setStatus(detail);toast('warning',detail);
+    clearFailedPlayback();
+    const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;
+    setStatus(detail);
+    if(lastError?.retryAt){
+      const alreadyWarned=Date.now()<playbackLimitWarningUntil;
+      playbackLimitWarningUntil=Math.max(playbackLimitWarningUntil,lastError.retryAt);
+      if(alreadyWarned)return;
+    }
+    toast('warning',detail);
   }
   function parse(text){const b=String(text||'').match(/<music_recommend>([\s\S]*?)<\/music_recommend>/i);if(!b)return null;const tag=n=>b[1].match(new RegExp(`<${n}>\\s*([\\s\\S]*?)\\s*<\\/${n}>`,'i'))?.[1]?.trim()||'';const x={title:tag('title'),artist:tag('artist'),reason:tag('reason')};return x.title?x:null;}
   function recentFloorRecommendationKeys(chat,beforeIndex,limit=30){const keys=new Set();let count=0;for(let index=Math.min(Number(beforeIndex)||0,(chat?.length||0))-1;index>=0&&count<Math.max(0,Number(limit)||0);index--){const message=chat[index];if(!message||message.is_user)continue;const song=parse(message.mes);if(!song)continue;keys.add(offlineKey(song));count++;}return keys;}

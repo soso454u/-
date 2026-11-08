@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 const section=(a,b)=>{const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);};
-const matching=section('function normalizeSongText','// Share the GD budget');
+const matching=section('function normalizeSongText','// Share upstream cooldown');
 const urls=section('function getResponseUrl','async function gdCover');
 const song={title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'selected'};
 const quiet={warn(){}};
@@ -68,16 +68,21 @@ test('429 and JSON rate limits retain evidence and stop further network traffic'
   }
 });
 
-test('cached artwork remains available when further GD requests are locally blocked',async()=>{
+test('past 50 calls, playback and artwork still reach GD until GD reports a cooldown',async()=>{
   let calls=0;
   const api=requests(async()=>{calls++;return new Response('{"url":"https://cdn.test/album.jpg"}');});
   const params={types:'pic',source:'joox',id:'album'};
   await api.get(params);
   api.rate.times=Array(50).fill(Date.now());
   assert.equal((await api.get(params)).url,'https://cdn.test/album.jpg');
-  assert.equal((await api.get({...params,id:'other'})).url,'');
-  await assert.rejects(api.get({types:'url',source:'joox',id:'selected'}),e=>e.limitSource==='local'&&e.requestCount===50&&e.status===undefined);
-  assert.equal(calls,1);
+  assert.equal((await api.get({...params,id:'other'})).url,'https://cdn.test/album.jpg');
+  await api.get({types:'url',source:'joox',id:'selected'});
+  assert.equal(calls,3);
+  api.rate.until=Date.now()+120000;
+  assert.equal((await api.get(params)).url,'https://cdn.test/album.jpg');
+  assert.equal((await api.get({...params,id:'third'})).url,'');
+  await assert.rejects(api.get({types:'url',source:'joox',id:'selected'}),e=>e.limitSource==='upstream');
+  assert.equal(calls,3);
 });
 
 test('a temporary empty JOOX result gets one URL-only refresh and success stops all fallback',async()=>{
@@ -96,6 +101,36 @@ test('alternate strict-matching JOOX releases also try 192k and never use the co
   });
   assert.equal(result.mediaId,'release');assert.equal(result.bitrate,'192');assert.ok(calls.every(c=>c.id!=='cover'));
   assert.deepEqual(calls.filter(c=>c.id==='release').map(c=>c.br),['320','192']);
+});
+
+test('a third matching JOOX release can be the only one with a playable 128k address',async()=>{
+  const calls=[];
+  const result=await fallback(async params=>{
+    calls.push(params);
+    if(params.types==='search')return params.source==='joox'?[
+      {id:'cover',name:'夜曲',artist:['翻唱者']},
+      {id:'alternate',name:'夜曲',artist:['周杰倫']},
+      {id:'working',name:'夜曲',artist:['周杰倫']}
+    ]:[];
+    return {url:params.id==='working'&&params.br==='128'?'https://cdn.test/working.mp3':''};
+  });
+  assert.equal(result.mediaId,'working');
+  assert.equal(result.bitrate,'128');
+  assert.ok(calls.every(c=>c.source==='joox'&&c.id!=='cover'));
+  assert.deepEqual(calls.filter(c=>c.id==='working').map(c=>c.br),['320','192','128']);
+});
+
+test('replaying a known JOOX track requests its last successful quality with a new URL',async()=>{
+  const calls=[];
+  const resolve=async params=>{
+    calls.push(params.br);
+    return {url:params.br==='128'?'https://cdn.test/working.mp3':''};
+  };
+  const first=await fallback(resolve);
+  calls.length=0;
+  const replay=await fallback(resolve,undefined,undefined,first);
+  assert.equal(replay.requestedBitrate,'128');
+  assert.deepEqual(calls,['128']);
 });
 
 test('transport failures stop quality fan-out; rate limits also stop cross-source fallback',async()=>{
@@ -122,22 +157,31 @@ test('cancellation after search prevents a late URL request',async()=>{
   assert.equal(result,null);assert.equal(count,1);
 });
 
-function playerHarness(){
+function playerHarness(failure=Error('接口未返回播放地址')){
   const warnings=[],pending=[];let selections=0;
-  const api=new Function('wait','warnings','console',`
+  const api=new Function('wait','warnings','console','failure',`
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false,playbackRecoveryCount=0,safariBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const failedPlaybackUrls=new Set(),GD_SOURCES=['joox'],GD_SOURCE_LABELS={},settings={},audio={pause(){}},DOC={querySelector:()=>null},ID='test';
-    const playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw Error('接口未返回播放地址');},isNotAllowed=()=>false,mediaDetail=e=>e.message;
+    const playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw failure;},isNotAllowed=()=>false,mediaDetail=e=>e.message;
     const clearFailedPlayback=()=>{playbackWanted=false;},toast=(kind,message)=>warnings.push(message);
     ${section('let pendingPlay=null;','function parse(text)')};
     return {play,cancel:()=>{++playRequest;playbackWanted=false;}};
-  `)(()=>{selections++;return new Promise(resolve=>pending.push(resolve));},warnings,quiet);
+  `)(()=>{selections++;return new Promise(resolve=>pending.push(resolve));},warnings,quiet,failure);
   return {...api,warnings,pending,selections:()=>selections};
 }
 test('duplicate play calls share one selection and one warning; later deliberate retry remains available',async()=>{
   const api=playerHarness(),a=api.play({...song}),b=api.play({...song});assert.equal(a,b);assert.equal(api.selections(),1);
   api.pending[0](null);await Promise.all([a,b]);assert.equal(api.warnings.length,1);
   const retry=api.play({...song});assert.equal(api.selections(),2);api.pending[1](null);await retry;assert.equal(api.warnings.length,2);
+});
+test('separate clicks during the same GD cooldown show one warning',async()=>{
+  const api=playerHarness(Object.assign(Error('GD 冷却中'),{retryAt:Date.now()+120000,limitSource:'upstream'}));
+  for(let i=0;i<2;i++){
+    const attempt=api.play({...song,mediaId:String(i)});
+    api.pending[i](null);
+    await attempt;
+  }
+  assert.equal(api.warnings.length,1);
 });
 test('switching song, choosing a source or cancelling supersedes the old selection without a stale warning',async()=>{
   for(const next of [{...song,mediaId:'other'},{...song,choice:'joox'}]){

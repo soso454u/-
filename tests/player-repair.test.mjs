@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start);return source.slice(start,end);}
-const matching=section('function normalizeSongText','// Share the GD budget');
+const matching=section('function normalizeSongText','// Share upstream cooldown');
 const urlHelpers=section('function getResponseUrl','async function gdCover');
 
 test('GD URL payloads accept signed URLs, protocol-relative links, arrays and nested data',()=>{
@@ -122,14 +122,14 @@ test('a dead selected JOOX record tries another matched release before leaving J
   assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=9);assert.deepEqual(played,['https://cdn.test/working.mp3']);
 });
 
-test('JOOX caps unavailable releases to two identities and eight URL requests',async()=>{
+test('JOOX caps unavailable releases to three identities and sixteen URL requests',async()=>{
   const ids=[];
   const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['joox'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
     if(params.types==='search')return Array.from({length:10},(_,i)=>({id:String(i),name:'夜曲',artist:['周杰倫']}));
     ids.push(params.id);return {url:''};
   },async()=>assert.fail('empty URLs cannot be played'));
   await assert.rejects(fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'0'}),/JOOX/);
-  assert.deepEqual([...new Set(ids)],['0','1']);assert.equal(ids.length,8,'five primary qualities, one refresh and two alternate qualities');
+  assert.deepEqual([...new Set(ids)],['0','1','2']);assert.equal(ids.length,16,'five qualities per identity plus one source-wide refresh');
 });
 
 test('an API transport error does not fan out into more qualities of the same provider',async()=>{

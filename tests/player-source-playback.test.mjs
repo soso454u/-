@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
-const matching=section('function normalizeSongText','// Share the GD budget');
+const matching=section('function normalizeSongText','// Share upstream cooldown');
 function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText};`)();}
 const jay={title:'七里香',artist:'周杰伦',duration:299,album:'七里香'};
 

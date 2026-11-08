@@ -101,7 +101,7 @@ test('missing primary lyrics use only a verified cross-source candidate; failure
   assert.equal(failures, 2);
 });
 
-test('cancelled track stops fallback and GD 429/global request budget prevents more network traffic', async () => {
+test('cancelled track stops fallback and GD 429 prevents more network traffic during cooldown', async () => {
   let active = true, count = 0;
   const api = lyrics(async () => { count++; active = false; return ok({ lyric: '' }); });
   await api.resolveLyrics(song, () => active);assert.equal(count, 1);
@@ -110,10 +110,6 @@ test('cancelled track stops fallback and GD 429/global request budget prevents m
   await assert.rejects(limited.resolveLyrics(song), /限流/);
   await assert.rejects(limited.resolveLyrics({ ...song, lyricId: 'other' }), /限流/);
   assert.equal(count, 3);
-  let sent = 0;
-  const budget = lyrics(async () => { sent++; return ok({}); }, { times: Array(50).fill(Date.now()), until: 0 });
-  await assert.rejects(budget.gdFetch('https://music-api.gdstudio.xyz/api.php'), error=>error.limitSource==='local'&&error.requestCount===50);
-  assert.equal(sent, 0);
 });
 
 test('immersive empty/error/instrumental states replace loading text without a new timeline', () => {
@@ -158,7 +154,7 @@ test('preferred Meting lyrics use the returned signed URL for the exact track wi
   },{times:[],until:0},['https://meting.test/api','https://fallback.test/api']);
   const resolved=await api.resolveLyrics(song);assert.equal(resolved.original,'[00:01]same track');assert.equal(calls.length,2);
 });
-test('lyric requests can use the full shared GD budget; artwork reservation does not fake a 40-request limit',async()=>{
-  let calls=0;const api=lyrics(async()=>{calls++;return ok({lyric:'[00:01]available'});},{times:Array(40).fill(Date.now()),until:0});
+test('GD lyrics still load after 50 recent requests when GD accepts the request',async()=>{
+  let calls=0;const api=lyrics(async()=>{calls++;return ok({lyric:'[00:01]available'});},{times:Array(50).fill(Date.now()),until:0});
   const result=await api.resolveLyrics(song);assert.equal(calls,1);assert.equal(result.original,'[00:01]available');
 });
