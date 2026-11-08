@@ -45,6 +45,13 @@
 
 扩展版与脚本版建议选择一种启用，避免重复加载同一个播放器。
 
+### 可选的 LX Music 备用音源
+
+1. 在 Selene **播放器设置**打开 **LX Music 第三方备用音源**。自动播放源会先走原有 GD 回退，所有可用 GD 候选都失败后才尝试 LX。自动回退只尝试一个 LX 平台，优先使用歌曲原平台（QQ、网易云或酷狗），其余使用 QQ。也可以用播放键左侧的双箭头手选 LX。开关默认关闭，避免在用户选择前发出第三方请求。酷我和咪咕待有可用的平台 ID 查询后再开放。
+2. 如果酒馆已有内置 `/proxy/` 且该路由允许无凭据访问，可以直接使用。Selene 只通过它请求固定的 LX 取址接口，并省略登录凭据。如果内置代理不可用，将 [`server-plugin/selene-lx.mjs`](./server-plugin/selene-lx.mjs) 复制到 `SillyTavern/plugins/`，在 `config.yaml` 中启用 `enableServerPlugins: true` 并重启酒馆。专用插件安装后会优先使用。[SillyTavern 服务端插件文档](https://docs.sillytavern.app/for-contributors/server-plugins/)
+
+播放地址由第三方 [Huibq 的 LX Music 音源](https://github.com/Huibq/keep-alive) 提供，接口为 [lxmusicapi.onrender.com](https://lxmusicapi.onrender.com)。上游未开放浏览器跨域取址，因此取址需要酒馆服务端转发。需要跨平台匹配时，仅将歌曲名和歌手发给现有 Selene Meting 搜索，按歌手、版本及可用时长信息筛选真实平台 ID。取址先试 128k，只有上游明确无地址或地址已过期时才试 320k。临时地址仅用于在线播放。
+
 ### 安装或关闭异常排查
 
 - **`Directory already exists at data/default-user/extensions/-`，同时找不到 Selene**：这是本播放器的安装目录冲突。仓库名为 `-`，所以安装目录也叫 `-`，并非路径少写了名字；该报错只说明目录存在，不代表安装完整或播放器已加载。先按下方「目录已存在但扩展不可见」排查，重复点击安装不会更新或修复旧目录。
