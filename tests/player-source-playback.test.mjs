@@ -158,7 +158,7 @@ test('post-start recovery is bounded to one source-resolution pass per user sele
   recover(Error('卡住'),'one');recover(Error('再次卡住'),'two');recover(Error('旧事件'),'one');assert.equal(resolutions,1);assert.equal(pauses,1);
 });
 
-test('result artwork loads as later rows enter view and ignores a track that switched source',async()=>{
+test('visible result artwork loads one row at a time and ignores a track that switched source',async()=>{
   const rows=Array.from({length:6},(_,i)=>({...jay,source:'netease',mediaId:`N-${i}`,cover:''}));
   const images=rows.map((_,i)=>({isConnected:true,parentElement:{dataset:{i}},hasAttribute(){return !!this.src;}}));
   const observed=[],pending=[];
@@ -175,9 +175,11 @@ test('result artwork loads as later rows enter view and ignores a track that swi
   assert.equal(observed.length,6);
   assert.equal(pending.length,0);
   notify([{target:images[4],isIntersecting:true},{target:images[5],isIntersecting:true}]);
+  assert.deepEqual(pending.map(x=>x.song.mediaId),['N-4']);
+  pending[0].resolve('https://art.test/4.jpg');
+  await flush();
   assert.deepEqual(pending.map(x=>x.song.mediaId),['N-4','N-5']);
   Object.assign(rows[5],{source:'joox',mediaId:'J-7'});
-  pending[0].resolve('https://art.test/4.jpg');
   pending[1].resolve('https://art.test/old.jpg');
   await flush();
   assert.equal(images[4].src,'https://art.test/4.jpg');
@@ -188,6 +190,27 @@ test('result artwork loads as later rows enter view and ignores a track that swi
   assert.equal(images[0].src,'https://art.test/playing.jpg');
   assert.equal(images[1].src,'https://art.test/playing.jpg');
   assert.equal(images[2].src,undefined);
+});
+test('GD artwork waits for foreground playback and skips obsolete result rows',async()=>{
+  let finish,active=true;
+  const startup=new Promise(resolve=>{finish=resolve;});
+  const calls=[];
+  const gdCover=new Function('startup','gdJson',`
+    const pendingPlay={request:1,promise:startup},playRequest=1,playbackWanted=true;
+    let disposed=false,pendingPlaybackSelection=true;
+    startup.then(()=>{pendingPlaybackSelection=false;});
+    ${section('function getResponseUrl','function primeAudioFromGesture')};
+    return gdCover;
+  `)(startup,async params=>{calls.push(params.id);return {url:'https://art.test/cover.jpg'};});
+  const current=gdCover({source:'joox',coverId:'current'});
+  const old=gdCover({source:'joox',coverId:'old'},()=>active);
+  await flush();
+  assert.deepEqual(calls,[]);
+  active=false;
+  finish();
+  assert.equal(await current,'https://art.test/cover.jpg');
+  assert.equal(await old,'');
+  assert.deepEqual(calls,['current']);
 });
 test('resuming a cancelled selection resolves that selection instead of playing an older source',async()=>{
   const calls=[];

@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.43';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.44';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -813,29 +813,45 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(!box)return;
     resultCoverObserver?.disconnect();
     const images=box.querySelectorAll('img[data-result-cover]:not([src])');
-    const loading=new WeakSet();
+    const queued=new Set();
+    let loading=null;
     const load=async img=>{
-      if(disposed||results!==rows||!img.isConnected||img.hasAttribute('src')||loading.has(img))return;
+      if(disposed||results!==rows||!img.isConnected||img.hasAttribute('src'))return;
       const song=rows[Number(img.parentElement.dataset.i)];
       if(!song)return;
       const {source,mediaId}=song;
-      loading.add(img);
+      const isActive=()=>!disposed&&results===rows&&img.isConnected&&!img.hasAttribute('src')&&song.source===source&&song.mediaId===mediaId;
       try{
-        const cover=song.cover||await resolveCover({...song});
-        if(disposed||results!==rows||!img.isConnected||song.source!==source||song.mediaId!==mediaId)return;
-        if(cover){song.cover=song.cover||cover;img.src=song.cover;observer?.unobserve(img);}
+        const cover=song.cover||await resolveCover({...song},[],isActive);
+        if(!isActive()||!cover)return;
+        song.cover=song.cover||cover;
+        img.src=song.cover;
+        observer?.unobserve(img);
+        syncResultCover(song);
       }catch(error){console.warn('[音乐播放器] 候选列表封面加载失败',error);}
-      finally{loading.delete(img);}
+    };
+    const drain=async()=>{
+      if(loading)return;
+      while(queued.size&&!disposed&&results===rows){
+        const img=queued.values().next().value;
+        queued.delete(img);
+        loading=img;
+        try{await load(img);}
+        finally{loading=null;}
+      }
     };
     const observer=ROOT.IntersectionObserver?new ROOT.IntersectionObserver(entries=>{
       for(const {target,isIntersecting} of entries){
+        if(!isIntersecting){queued.delete(target);continue;}
         if(!target.isConnected||target.hasAttribute('src'))observer.unobserve(target);
-        else if(isIntersecting)void load(target);
+        else if(target!==loading)queued.add(target);
       }
+      void drain();
     },{root:box}):null;
     resultCoverObserver=observer;
     if(observer){images.forEach(img=>observer.observe(img));return;}
-    return Promise.all(Array.from(images).slice(0,4).map(load));
+    Array.from(images).slice(0,4).forEach(img=>queued.add(img));
+    return drain();
   }
   function syncResultCover(song){
     DOC.querySelectorAll(`#${ID} img[data-result-cover]:not([src])`).forEach(img=>{
@@ -1227,12 +1243,20 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return [...new Set([song?.source,...GD_SOURCES].filter(source=>GD_SOURCES.includes(source)))];
   }
 
-  async function gdCover(s){
+  async function gdCover(s,isActive=()=>true){
     try{
       if(s.cover&&/^https?:\/\//i.test(s.cover))return s.cover;
       const source=s.source||'netease',id=String(s.coverId||'').trim();if(!id)return '';
       if(source==='bilibili'){if(id.startsWith('//'))return `https:${id}`;if(/^https?:\/\//i.test(id))return id;}
-      return getResponseUrl(await gdJson({types:'pic',source,id,size:'500'}));
+      // An ongoing song selection gets the GD connection before background artwork.
+      while(!disposed&&isActive()){
+        const startup=pendingPlay;
+        if(!playbackWanted||!pendingPlaybackSelection||startup?.request!==playRequest||!startup.promise){
+          return getResponseUrl(await gdJson({types:'pic',source,id,size:'500'}));
+        }
+        await startup.promise.catch(()=>{});
+      }
+      return '';
     }catch(error){console.warn('[音乐播放器] GD 封面获取失败',error);return '';}
   }
   function primeAudioFromGesture(){
@@ -1438,11 +1462,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }return '';
   }
   function imageLoads(url,timeout=8000){return new Promise(resolve=>{if(!/^https?:\/\//i.test(String(url||'')))return resolve(false);const image=new ROOT.Image();let done=false;const finish=ok=>{if(done)return;done=true;ROOT.clearTimeout(timer);image.onload=null;image.onerror=null;resolve(ok);};const timer=ROOT.setTimeout(()=>finish(false),timeout);image.onload=()=>finish(true);image.onerror=()=>finish(false);image.src=url;});}
-  async function resolveCover(s,excluded=[]){
+  async function resolveCover(s,excluded=[],isActive=()=>true){
     const blocked=new Set(excluded.filter(Boolean).map(value=>String(value).replace(/#.*$/,''))),usable=async url=>url&&!blocked.has(String(url).replace(/#.*$/,''))&&await imageLoads(url);
     if(await usable(s.cover))return s.cover;
     const preferred=await metingCover(s,[...blocked,s.cover]);if(preferred)return preferred;
-    const cover=await gdCover({...s,cover:''});
+    const cover=await gdCover({...s,cover:''},isActive);
     return await usable(cover)?cover:'';
   }
   async function applyCurrentCover(s,request){const source=s.source,id=s.mediaId,pic=await resolveCover({...s});if(request!==playRequest||current!==s||s.source!==source||s.mediaId!==id||!pic)return;s.cover=pic;syncResultCover(s);show(s);if(settings.favorites?.includes(s))save();}
