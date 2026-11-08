@@ -133,14 +133,31 @@ test('replaying a known JOOX track requests its last successful quality with a n
   assert.deepEqual(calls,['128']);
 });
 
-test('transport failures stop quality fan-out; rate limits also stop cross-source fallback',async()=>{
+test('persistent JOOX transport failures stop quality fan-out after one retry; rate limits stop immediately',async()=>{
   for(const error of [Object.assign(Error('Load failed'),{kind:'network'}),Object.assign(Error('HTTP 503'),{kind:'http',status:503,body:'gateway'}),Object.assign(Error('limited'),{kind:'rate-limit',retryAt:Date.now()+120000})]){
     const calls=[];
     await assert.rejects(fallback(async params=>{calls.push(params);if(params.source==='joox')throw error;return [];}),e=>{
       assert.equal(e.failures[0].attempts[0].error,error);return true;
     });
-    assert.equal(calls.filter(c=>c.source==='joox').length,1);if(error.retryAt)assert.equal(calls.length,1);
+    const joox=calls.filter(c=>c.source==='joox');
+    assert.deepEqual(joox.map(c=>c.br),error.retryAt?['320']:['320','320']);
+    if(error.retryAt)assert.equal(calls.length,1);
   }
+});
+
+test('a temporary error fetching the matched JOOX alternate retries that exact ID and quality',async()=>{
+  const calls=[];
+  const result=await fallback(async(params,options)=>{
+    calls.push({...params,fresh:!!options?.fresh});
+    if(params.types==='search')return [{id:'release',name:'夜曲',artist:['周杰倫']}];
+    if(params.id==='selected')return {url:''};
+    if(!options?.fresh)throw Object.assign(TypeError('Failed to fetch'),{kind:'network'});
+    return {url:'https://cdn.test/recovered.mp3'};
+  });
+  assert.equal(result.mediaId,'release');
+  assert.equal(result.refreshed,true);
+  assert.deepEqual(calls.filter(c=>c.id==='release').map(c=>[c.br,c.fresh]),[['320',false],['320',true]]);
+  assert.ok(calls.every(c=>c.source==='joox'));
 });
 
 test('expired-media symptoms refresh once and retain the original media error without asserting expiry',async()=>{

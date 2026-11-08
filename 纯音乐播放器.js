@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.42';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.43';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1314,7 +1314,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }catch(fallbackError){if(isNotAllowed(fallbackError)||fallbackError.name==='AbortError')throw fallbackError;throw error;}
     });
   }
-  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set(),isActive=()=>true}={}){
+  async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set(),isActive=()=>true,transportRetry=null}={}){
     // Reuse a selected identity; cross-source lookup must pass strict matching first.
     let hit=s.source===source&&s.mediaId&&s.gdSource===source&&!excludeIds.has(String(s.mediaId))?s:null;
     if(!hit){
@@ -1330,9 +1330,21 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const identity=gdSong(source,hit),tracks=[];tracks.reason='empty-url';tracks.identity=identity;
     for(const br of allBitrates?sourceBitrates(source):[bitrate]){
       if(!isActive())return [];
-      const info=await gdJson({types:'url',source,id:identity.mediaId,br},{fresh,nonce}),url=getResponseUrl(info);
+      const params={types:'url',source,id:identity.mediaId,br};
+      let info,refreshed=fresh;
+      try{
+        info=await gdJson(params,{fresh,nonce});
+      }catch(error){
+        const transient=error.kind==='network'||error.kind==='timeout'||(error.status>=500&&error.status<600);
+        if(!isActive()||!transportRetry?.available||!transient||error.retryAt)throw error;
+        // Keep the exact matched ID and quality when a temporary gateway error hides the response.
+        transportRetry.available=false;
+        refreshed=true;
+        info=await gdJson(params,{fresh:true});
+      }
+      const url=getResponseUrl(info);
       if(!/^https?:\/\//i.test(String(url||''))){const detail=info?.message||info?.msg||info?.error;if(typeof detail==='string')tracks.responseMessage=detail.slice(0,100);continue;}
-      tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),requestedBitrate:br,refreshed:!!fresh});
+      tracks.push({...s,...identity,audio:url,bitrate:String(info?.br||br),requestedBitrate:br,refreshed:!!refreshed});
       break;
     }
     return tracks;
@@ -1355,7 +1367,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     };
     for(const source of sources){
       if(!isActive())return null;onSource(source);
-      const excludeIds=new Set();let refreshed=false;
+      const excludeIds=new Set(),transportRetry=source==='joox'?{available:true}:null;
+      let refreshed=false;
       // Keep the selected record and up to two strictly matched alternates.
       for(let candidate=0;candidate<3;candidate++){
         let identity=null,noMatch=false,target=s,refreshable=false;
@@ -1368,7 +1381,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           const {bitrate,fresh}=qualities[index];
           if(!isActive())return null;
           let tracks;
-          try{tracks=await resolveGdSourceTracks(target,source,false,{bitrate,fresh,excludeIds,isActive});}
+          try{tracks=await resolveGdSourceTracks(target,source,false,{bitrate,fresh,excludeIds,isActive,transportRetry});}
           catch(error){note(source,String(error.message||'请求失败').slice(0,100),error.retryAt?4:2,{kind:error.kind||'request',bitrate,fresh,error});if(error.retryAt)throw failure(error);noMatch=true;break;}
           if(!isActive())return null;
           identity=tracks.identity||identity;
