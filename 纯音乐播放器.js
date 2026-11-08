@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.48';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.49';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -132,7 +132,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchSource: 'auto', lxMusicEnabled: true, desktopLyrics: false, mobileLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: false, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -143,7 +143,22 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       return false;
     }
   }
-  try { const saved=JSON.parse(ROOT.localStorage.getItem(KEY) || '{}');settings = { ...defaults, ...saved, playlists: Array.isArray(saved.playlists)?saved.playlists:[], companionConversations:saved.companionConversations&&typeof saved.companionConversations==='object'&&!Array.isArray(saved.companionConversations)?saved.companionConversations:{}, position: { ...defaults.position, ...(saved.position || {}) }, mobilePosition: { ...defaults.mobilePosition, ...(saved.mobilePosition || {}) }, desktopPosition: { ...defaults.desktopPosition, ...(saved.desktopPosition || {}) }, mobileLyricsPosition: { ...defaults.mobileLyricsPosition, ...(saved.mobileLyricsPosition || {}) } }; if(!Number.isFinite(Number(settings.mobileLyricsPosition?.top)))settings.mobileLyricsPosition={left:Number(settings.mobileLyricsPosition?.left)||50,top:50};if(Number(saved.companionPresetVersion)!==4){const oldPreset=String(saved.companionPreset||'');if(!oldPreset||oldPreset===LEGACY_COMPANION_PRESET_V2||oldPreset===LEGACY_COMPANION_PRESET_V3)settings.companionPreset=DEFAULT_COMPANION_PRESET;settings.companionPresetVersion=4;persistSettings();} } catch { settings = { ...defaults, playlists: [], companionConversations: {} }; }
+  try {
+    const {desktopLyrics,mobileLyrics,...saved}=JSON.parse(ROOT.localStorage.getItem(KEY)||'{}');
+    settings={
+      ...defaults,...saved,
+      // Preserve visibility if lyrics were enabled on either device before the switches merged.
+      floatingLyrics:typeof saved.floatingLyrics==='boolean'?saved.floatingLyrics:desktopLyrics===true||mobileLyrics!==false,
+      playlists:Array.isArray(saved.playlists)?saved.playlists:[],
+      companionConversations:saved.companionConversations&&typeof saved.companionConversations==='object'&&!Array.isArray(saved.companionConversations)?saved.companionConversations:{},
+      position:{...defaults.position,...saved.position},
+      mobilePosition:{...defaults.mobilePosition,...saved.mobilePosition},
+      desktopPosition:{...defaults.desktopPosition,...saved.desktopPosition},
+      mobileLyricsPosition:{...defaults.mobileLyricsPosition,...saved.mobileLyricsPosition},
+    };
+    if(!Number.isFinite(Number(settings.mobileLyricsPosition?.top)))settings.mobileLyricsPosition={left:Number(settings.mobileLyricsPosition?.left)||50,top:50};
+    if(Number(saved.companionPresetVersion)!==4){const oldPreset=String(saved.companionPreset||'');if(!oldPreset||oldPreset===LEGACY_COMPANION_PRESET_V2||oldPreset===LEGACY_COMPANION_PRESET_V3)settings.companionPreset=DEFAULT_COMPANION_PRESET;settings.companionPresetVersion=4;persistSettings();}
+  }catch{settings={...defaults,playlists:[],companionConversations:{}};}
   if(settings.libraryLayoutVersion!==1){settings.actionsCollapsed=true;settings.libraryLayoutVersion=1;persistSettings();}
   if(!settings.companionRosters||typeof settings.companionRosters!=='object'||Array.isArray(settings.companionRosters))settings.companionRosters={};
   // Executing/enabling a standalone script must reveal it even after a previous
@@ -740,9 +755,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function renderDesktopLyrics(words=''){
     const el=DOC.getElementById(`${ID}-desktop-lyrics`);if(!el)return;
     updateQuickLyricsButton();
-    const mobile=isMobile(),enabled=mobile?settings.mobileLyrics!==false:settings.desktopLyrics===true,text=String(words||'').trim(),visible=enabled&&!!text;
+    const mobile=isMobile(),currentWords=words.trim(),visible=settings.floatingLyrics&&!!currentWords;
     el.classList.toggle('hidden',!visible);if(!visible)return;
-    const textEl=el.querySelector('.lyric-text');if(textEl)textEl.textContent=text;el.classList.toggle('gradient',!!settings.lyricGradient);el.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
+    const lines=currentWords.split('\n',2);
+    if(lines.length===1){
+      const next=lyricTimeline[activeLyricIndex(audio.currentTime)+1]?.lines.find(Boolean);
+      if(next)lines.push(next);
+    }
+    const textEl=el.querySelector('.lyric-text'),text=lines.join('\n');
+    if(textEl&&textEl.textContent!==text)textEl.textContent=text;
+    el.classList.toggle('gradient',!!settings.lyricGradient);el.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
     el.style.setProperty('position','fixed','important');el.style.setProperty('z-index','2147483646','important');el.style.setProperty('right','auto','important');
     if(mobile){
       el.style.setProperty('width','min(82vw,320px)','important');el.style.setProperty('max-width','calc(100vw - 24px)','important');el.style.setProperty('padding','5px 18px 5px 7px','important');el.style.setProperty('font-size',`${Math.max(10,Math.min(42,Number(settings.mobileLyricFontSize)||14))}px`,'important');el.style.setProperty('line-height','1.35','important');
@@ -3218,7 +3240,7 @@ ${latest}
   }
   function updateQuickLyricsButton(el=DOC.getElementById(ID)){
     const button=el?.querySelector('.desktop-lyric-toggle');if(!button)return;
-    button.classList.toggle('active',isMobile()?settings.mobileLyrics!==false:settings.desktopLyrics===true);button.textContent='词';button.title='歌词设置';
+    button.classList.toggle('active',settings.floatingLyrics);button.textContent='词';button.title='歌词设置';
   }
   function bindQuickLyrics(el){
     const button=el.querySelector('.desktop-lyric-toggle');if(!button)return;
@@ -3227,8 +3249,7 @@ ${latest}
     const menu=DOC.createElement('section');menu.id=`${ID}-lyrics-float`;menu.hidden=true;menu.setAttribute('role','dialog');menu.setAttribute('aria-label','歌词设置');
     menu.innerHTML=`<div class="lyrics-heading"><b>歌词设置</b><button type="button" data-lyrics-close aria-label="关闭歌词设置">×</button></div>
       <div class="lyrics-preview"><span>音乐响起，让歌词陪着你</span><small>悬浮歌词外观预览</small></div>
-      <label class="lyric-option"><span>桌面悬浮歌词</span><input name="desktopLyrics" type="checkbox"></label>
-      <label class="lyric-option"><span>手机悬浮歌词</span><input name="mobileLyrics" type="checkbox"></label>
+      <label class="lyric-option"><span>悬浮歌词</span><input name="floatingLyrics" type="checkbox"></label>
       <label class="lyric-option"><span>锁定歌词位置</span><input name="lyricsLocked" type="checkbox"></label>
       <div class="lyric-fonts">
         <label><span>桌面字号 <output data-for="desktopLyricFontSize"></output></span><input type="range" name="desktopLyricFontSize" min="12" max="68"></label>
@@ -3247,7 +3268,7 @@ ${latest}
     };
     const refresh=()=>{
       syncFloatingPanelThemes();
-      menu.querySelectorAll('input[name]').forEach(input=>{if(input.type==='checkbox')input.checked=input.name==='mobileLyrics'?settings.mobileLyrics!==false:!!settings[input.name];else input.value=settings[input.name];});preview();
+      menu.querySelectorAll('input[name]').forEach(input=>{if(input.type==='checkbox')input.checked=!!settings[input.name];else input.value=settings[input.name];});preview();
     };
     const place=()=>placeFloatingPanel(menu,button);
     const apply=event=>{
@@ -3258,7 +3279,7 @@ ${latest}
     menu.oninput=apply;menu.onchange=event=>{apply(event);save();};
     menu.querySelector('[data-lyrics-close]').onclick=close;
     menu.querySelector('[data-lyrics-reset]').onclick=()=>{
-      settings.desktopPosition={...defaults.desktopPosition};settings.mobileLyricsPosition={...defaults.mobileLyricsPosition};settings.desktopLyricFontSize=defaults.desktopLyricFontSize;settings.mobileLyricFontSize=defaults.mobileLyricFontSize;settings.mobileLyrics=true;
+      settings.desktopPosition={...defaults.desktopPosition};settings.mobileLyricsPosition={...defaults.mobileLyricsPosition};settings.desktopLyricFontSize=defaults.desktopLyricFontSize;settings.mobileLyricFontSize=defaults.mobileLyricFontSize;
       refresh();renderDesktopLyrics(currentLyricWords);save();
     };
     button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
