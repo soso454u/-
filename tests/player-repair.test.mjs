@@ -45,7 +45,7 @@ test('clearing caches aborts stale requests and cannot reset the shared GD quota
   const settings={favorites:[{title:'Saved',source:'joox',audio:'https://expired.test/file',customAudio:manual}],playlists:[{songs:[{title:'Playlist',source:'netease',audio:'https://expired.test/other'}]}],companionApiKey:'test-key',companionConversations:{keep:[{content:'keep'}]}};
   const api=new Function('ROOT','gdFetch','settings','offlineRequest',`
     const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate=ROOT.__SELENE_GD_RATE__,lyricCache=new Map(),lyricRequests=new Map(),coverResponses=new Map(),coverRequests=new Map(),failedPlaybackUrls=new Set();
-    let current=null,queue=[],results=[],searchRequest=0,safariBlobRetryUsed=false;const audioSession=null,DOC={querySelector:()=>null},ID='test',stopPlayback=()=>{},save=()=>{},paintTime=()=>{},setStatus=()=>{},toast=()=>{};
+    let current=null,queue=[],results=[],searchRequest=0,safariBlobRetryUsed=false,resultCoverObserver=null;const audioSession=null,DOC={querySelector:()=>null},ID='test',stopPlayback=()=>{},save=()=>{},paintTime=()=>{},setStatus=()=>{},toast=()=>{};
     ${section('const gdResponses=','async function gdFetch')};
     ${section('async function clearPlayerCaches','function resetPlayerDefaults')};
     return {gdJson,clearPlayerCaches,cache:gdResponses,pending:gdRequests};
@@ -122,14 +122,14 @@ test('a dead selected JOOX record tries another matched release before leaving J
   assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=9);assert.deepEqual(played,['https://cdn.test/working.mp3']);
 });
 
-test('all unavailable same-source releases are bounded to three identities',async()=>{
+test('JOOX caps unavailable releases to two identities and eight URL requests',async()=>{
   const ids=[];
   const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['joox'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
     if(params.types==='search')return Array.from({length:10},(_,i)=>({id:String(i),name:'夜曲',artist:['周杰倫']}));
     ids.push(params.id);return {url:''};
   },async()=>assert.fail('empty URLs cannot be played'));
   await assert.rejects(fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'0'}),/JOOX/);
-  assert.deepEqual([...new Set(ids)],['0','1','2']);assert.equal(ids.length,16,'five qualities per identity plus one source-wide refresh');
+  assert.deepEqual([...new Set(ids)],['0','1']);assert.equal(ids.length,8,'five primary qualities, one refresh and two alternate qualities');
 });
 
 test('an API transport error does not fan out into more qualities of the same provider',async()=>{
@@ -147,13 +147,13 @@ test('empty playback URL responses are not cached between settled requests',asyn
 
 test('broken platform artwork uses verified backup artwork without altering track or lyric IDs',async()=>{
   const song={title:'夜曲',artist:'周杰伦',album:'十一月的萧邦',duration:226,source:'joox',mediaId:'J',lyricId:'L',cover:'https://broken.test/old.jpg'},calls=[];
-  const resolve=new Function('gdCover','coverSearch','imageLoads',`${matching};${urlHelpers};const METING_COVER_APIS=['https://backup.test/api'];${section('async function metingCover','function imageLoads')};${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>{calls.push('gd');return 'https://broken.test/gd.jpg';},async()=>[
+  const resolve=new Function('gdCover','coverSearch','imageLoads',`${matching};${urlHelpers};const METING_METADATA_APIS=['https://backup.test/api'];${section('function metingSearchUrl','async function coverSearch')};${section('async function metingCover','function imageLoads')};${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>{calls.push('gd');return 'https://broken.test/gd.jpg';},async()=>[
     {name:'夜曲',artist:'翻唱者',album:song.album,pic:'https://good.test/wrong-artist.jpg'},
     {name:'夜曲',artist:'周杰倫',album:'不同专辑',pic:'https://good.test/wrong-album.jpg'},
     {name:'夜曲 (Live)',artist:'周杰倫',album:song.album,pic:'https://good.test/live.jpg'},
     {name:'夜曲',artist:'周杰倫 (Jay Chou)',album:song.album,pic:'https://good.test/original.jpg'}
   ],async url=>url.startsWith('https://good.test/'));
-  assert.equal(await resolve(song),'https://good.test/original.jpg');assert.equal(song.mediaId,'J');assert.equal(song.lyricId,'L');assert.equal(song.cover,'https://broken.test/old.jpg');assert.deepEqual(calls,['gd']);
+  assert.equal(await resolve(song),'https://good.test/original.jpg');assert.equal(song.mediaId,'J');assert.equal(song.lyricId,'L');assert.equal(song.cover,'https://broken.test/old.jpg');assert.deepEqual(calls,[]);
 });
 
 test('healthy artwork avoids all backup requests and failed backup searches are deduplicated',async()=>{

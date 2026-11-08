@@ -63,9 +63,21 @@ test('429 and JSON rate limits retain evidence and stop further network traffic'
   for(const response of [()=>new Response('slow down',{status:429,headers:{'Retry-After':'120'}}),()=>new Response('{"code":429,"message":"too many requests"}')]){
     let calls=0;const api=requests(async()=>{calls++;return response();});
     const params={types:'url',source:'joox',id:'selected'};
-    await assert.rejects(api.get(params),e=>e.kind==='rate-limit'&&e.retryAt>Date.now()&&!!e.body);
-    await assert.rejects(api.get({...params,br:'192'}),e=>e.kind==='rate-limit');assert.equal(calls,1);
+    await assert.rejects(api.get(params),e=>e.kind==='rate-limit'&&e.limitSource==='upstream'&&e.requestCount===1&&e.retryAt>Date.now()&&!!e.body);
+    await assert.rejects(api.get({...params,br:'192'}),e=>e.kind==='rate-limit'&&e.limitSource==='upstream');assert.equal(calls,1);
   }
+});
+
+test('cached artwork remains available when further GD requests are locally blocked',async()=>{
+  let calls=0;
+  const api=requests(async()=>{calls++;return new Response('{"url":"https://cdn.test/album.jpg"}');});
+  const params={types:'pic',source:'joox',id:'album'};
+  await api.get(params);
+  api.rate.times=Array(50).fill(Date.now());
+  assert.equal((await api.get(params)).url,'https://cdn.test/album.jpg');
+  assert.equal((await api.get({...params,id:'other'})).url,'');
+  await assert.rejects(api.get({types:'url',source:'joox',id:'selected'}),e=>e.limitSource==='local'&&e.requestCount===50&&e.status===undefined);
+  assert.equal(calls,1);
 });
 
 test('a temporary empty JOOX result gets one URL-only refresh and success stops all fallback',async()=>{

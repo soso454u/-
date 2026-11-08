@@ -31,7 +31,7 @@ function searchHarness(responses,settings={}){
   const calls=[],api=matcher();let played;
   const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText',`
     let searchRequest=0,disposed=false,results=[];const ID='test';
-    ${section('async function search(word','async function hydrateResultCovers')}
+    ${section('async function search(word','const coverResponses=')}
     return {search,results:()=>results};
   `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},()=>{},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText);
   return {...search,calls,played:()=>played};
@@ -158,10 +158,36 @@ test('post-start recovery is bounded to one source-resolution pass per user sele
   recover(Error('卡住'),'one');recover(Error('再次卡住'),'two');recover(Error('旧事件'),'one');assert.equal(resolutions,1);assert.equal(pauses,1);
 });
 
-test('late result artwork cannot overwrite the identity of a track that switched source',async()=>{
-  const song={...jay,source:'netease',mediaId:'N-1',cover:''},rows=[song];let complete;
-  const hydrate=new Function('rows','resolveCover',`let results=rows;const coverDelay=async()=>{},render=()=>{};${section('async function hydrateResultCovers','function render(')};return hydrateResultCovers;`)(rows,()=>new Promise(resolve=>complete=resolve));
-  const pending=hydrate(rows);Object.assign(song,{source:'joox',mediaId:'J-7',cover:''});complete('https://old.test/N.jpg');await pending;assert.equal(song.cover,'');
+test('result artwork loads as later rows enter view and ignores a track that switched source',async()=>{
+  const rows=Array.from({length:6},(_,i)=>({...jay,source:'netease',mediaId:`N-${i}`,cover:''}));
+  const images=rows.map((_,i)=>({isConnected:true,parentElement:{dataset:{i}},hasAttribute(){return !!this.src;}}));
+  const observed=[],pending=[];
+  let notify;
+  class Observer{
+    constructor(callback){notify=callback;}
+    observe(img){observed.push(img);}
+    unobserve(){}
+    disconnect(){}
+  }
+  const box={querySelectorAll:()=>images};
+  const art=new Function('rows','resolveCover','ROOT','DOC',`let results=rows,disposed=false;const ID='test';${section('let resultCoverObserver=null','function render(')};return {hydrateResultCovers,syncResultCover};`)(rows,song=>new Promise(resolve=>pending.push({song,resolve})),{IntersectionObserver:Observer},{querySelector:()=>box,querySelectorAll:()=>images.filter(img=>!img.src)});
+  art.hydrateResultCovers(rows);
+  assert.equal(observed.length,6);
+  assert.equal(pending.length,0);
+  notify([{target:images[4],isIntersecting:true},{target:images[5],isIntersecting:true}]);
+  assert.deepEqual(pending.map(x=>x.song.mediaId),['N-4','N-5']);
+  Object.assign(rows[5],{source:'joox',mediaId:'J-7'});
+  pending[0].resolve('https://art.test/4.jpg');
+  pending[1].resolve('https://art.test/old.jpg');
+  await flush();
+  assert.equal(images[4].src,'https://art.test/4.jpg');
+  assert.equal(rows[5].cover,'');
+  assert.equal(images[5].src,undefined);
+  rows[0].coverId=rows[1].coverId='same-album';
+  art.syncResultCover({...rows[0],cover:'https://art.test/playing.jpg'});
+  assert.equal(images[0].src,'https://art.test/playing.jpg');
+  assert.equal(images[1].src,'https://art.test/playing.jpg');
+  assert.equal(images[2].src,undefined);
 });
 test('resuming a cancelled selection resolves that selection instead of playing an older source',async()=>{
   const calls=[];

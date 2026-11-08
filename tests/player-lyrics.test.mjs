@@ -10,11 +10,14 @@ function section(start, end) {
 }
 function lyrics(fetch = async () => { throw Error('unexpected request'); }, rate = { times: [], until: 0 }, meting = []) {
   const ROOT = { __SELENE_GD_RATE__: rate, AbortController, setTimeout, clearTimeout };
-  return new Function('ROOT', 'fetch', 'URL', 'METING_COVER_APIS', `
+  return new Function('ROOT', 'fetch', 'URL', 'METING_METADATA_APIS', `
     const GD_API='https://music-api.gdstudio.xyz/api.php', audio={duration:240};
     let disposed=false,lyricTimeline=[];const lyricCache=new Map(),lyricRequests=new Map();
     ${section('function normalizeSongText', 'function activeLyricIndex')}
     ${section('function activeLyricIndex', 'function renderImmersiveLyrics')}
+    ${section('function getResponseUrl','function sourceBitrates')}
+    const coverResponses=new Map(),coverRequests=new Map();
+    ${section('function metingSearchUrl','async function metingCover')}
     return {parseLrcGroups,mergeLyricTimeline,scoreLyricHit,lyricFitsAudio,lyricTimelinesMatch,resolveLyrics,gdFetch,lyricJson,
       index:(rows,time)=>{lyricTimeline=rows;return activeLyricIndex(time);}};
   `)(ROOT, fetch, URL, meting);
@@ -109,7 +112,7 @@ test('cancelled track stops fallback and GD 429/global request budget prevents m
   assert.equal(count, 3);
   let sent = 0;
   const budget = lyrics(async () => { sent++; return ok({}); }, { times: Array(50).fill(Date.now()), until: 0 });
-  await assert.rejects(budget.gdFetch('https://music-api.gdstudio.xyz/api.php'), /限流/);
+  await assert.rejects(budget.gdFetch('https://music-api.gdstudio.xyz/api.php'), error=>error.limitSource==='local'&&error.requestCount===50);
   assert.equal(sent, 0);
 });
 
@@ -140,14 +143,19 @@ test('independent lyrics reject covers, other versions, and a mismatched measure
     await assert.rejects(api.resolveLyrics({...song,source:'joox'}),/限流/);
   }
 });
-test('Meting backup uses the exact provider and track ID, not an unverified search result',async()=>{
+test('preferred Meting lyrics use the returned signed URL for the exact track without spending GD quota',async()=>{
   const calls=[];
   const api=lyrics(async url=>{
     const u=new URL(url);calls.push(u);
-    if(u.hostname==='music-api.gdstudio.xyz')return {status:429,headers:{get:()=> '300'}};
+    assert.equal(u.hostname,'meting.test');
+    if(u.searchParams.get('type')==='search')return ok([
+      {lrc:'https://meting.test/api?server=netease&type=lrc&id=cover&auth=bad'},
+      {lrc:'https://meting.test/api?server=netease&type=lrc&id=track-1&auth=exact'}
+    ]);
     assert.equal(u.searchParams.get('server'),'netease');assert.equal(u.searchParams.get('id'),'track-1');assert.equal(u.searchParams.get('type'),'lrc');
+    assert.equal(u.searchParams.get('auth'),'exact');
     return {ok:true,text:async()=> '[00:01]same track'};
-  },{times:[],until:0},['https://meting.test/api']);
+  },{times:[],until:0},['https://meting.test/api','https://fallback.test/api']);
   const resolved=await api.resolveLyrics(song);assert.equal(resolved.original,'[00:01]same track');assert.equal(calls.length,2);
 });
 test('lyric requests can use the full shared GD budget; artwork reservation does not fake a 40-request limit',async()=>{
