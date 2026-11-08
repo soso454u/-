@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.44';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.45';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1006,8 +1006,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return score;
   }
   function bestSongHit(rows,song){return(Array.isArray(rows)?rows:[]).map(item=>({item,score:scoreSongHit(item,song)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>b.score-a.score)[0]?.item||null;}
-  // Share upstream cooldown and request diagnostics across script reloads.
-  const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0});
+  // Share upstream cooldown, gateway recovery and request diagnostics across script reloads.
+  const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0,gatewayDown:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
   function gdDiagnostic(entry){
     const logs=ROOT.__SELENE_GD_DIAGNOSTICS__||(ROOT.__SELENE_GD_DIAGNOSTICS__=[]);
@@ -1022,15 +1022,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(artwork&&Date.now()<gdRate.until)return {url:''};
     if(fresh)url.searchParams.set('_selene',String(nonce||Date.now()));
     const pending=(async()=>{
-      const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),12000);dataRequestControllers.add(controller);
-      let status,body='';
+      let status,body='',timedOut=false;
+      const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>{timedOut=true;controller.abort();},12000);dataRequestControllers.add(controller);
       try{
-        const response=await gdFetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'});status=response.status;
+        const response=await gdFetch(url,{signal:controller.signal,cache:'no-store',credentials:'omit'},!artwork);status=response.status;
         // Keep the actual error body, including non-JSON gateway responses.
         let value;
         if(typeof response.text==='function'){body=await response.text();if(response.ok)try{value=JSON.parse(body);}catch(cause){throw Object.assign(Error('GD 接口返回非 JSON 响应'),{kind:'invalid-response',cause});}}
         else if(response.ok)value=await response.json();
-        if(!response.ok)throw Object.assign(Error(`GD 请求失败：HTTP ${status}`),{kind:'http'});
+        if(!response.ok){
+          const gateway=status>=500&&status<600;
+          throw Object.assign(Error(`GD 请求失败：HTTP ${status}${gateway?'（上游服务暂时不可用，非本曲问题）':''}`),{kind:gateway?'gateway':'http'});
+        }
         const message=value?.message||value?.msg||value?.error,code=Number(value?.code??value?.status);
         if(code===429||typeof message==='string'&&/^(?:限流)|(?:请求|访问|触发|已被)限流|请求过于频繁|too many requests|rate limit(?: exceeded| reached)|rate limited/i.test(message)){
           gdRate.until=Math.max(gdRate.until,Date.now()+30000);
@@ -1044,21 +1047,57 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         }
         while(gdResponses.size>100)gdResponses.delete(gdResponses.keys().next().value);return value;
       }catch(error){
-        const kind=error.kind||(error.retryAt?'rate-limit':controller.signal.aborted?'timeout':'network');
+        const kind=error.kind||(error.retryAt?'rate-limit':timedOut?'timeout':controller.signal.aborted||error.name==='AbortError'?'abort':'network');
         Object.assign(error,{kind,params:{...params},status:error.status??status,body:error.body||body.slice(0,1600),requestUrl:url.href});
         gdDiagnostic({params:{...params},fresh,status:error.status,kind,name:error.name,message:error.message,body:error.body,retryAt:error.retryAt,limitSource:error.limitSource,requestCount:error.requestCount});
         console.warn('[音乐播放器] GD 请求失败',error);throw error;
       }finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);if(gdRequests.get(requestKey)===pending)gdRequests.delete(requestKey);}
     })();gdRequests.set(requestKey,pending);return pending;
   }
-  async function gdFetch(url,options={},lyric=false){
-    const now=Date.now();gdRate.times=gdRate.times.filter(time=>now-time<300000);
-    const requestCount=gdRate.times.length;
-    if(now<gdRate.until){
-      throw Object.assign(Error('GD 音乐台限流冷却中，请稍后再试'),{kind:'rate-limit',limitSource:'upstream',requestCount,retryAt:gdRate.until});
+  const GD_GATEWAY_RETRY_STATUSES=new Set([502,503,504]),GD_GATEWAY_RETRIES=3,GD_GATEWAY_WINDOW_MS=4000;
+  const gdAbortReason=signal=>signal.reason??new DOMException('GD 请求已取消','AbortError');
+  function waitForGdRetry(delay,signal){
+    return new Promise((resolve,reject)=>{
+      if(signal?.aborted){reject(gdAbortReason(signal));return;}
+      const abort=()=>{ROOT.clearTimeout(timer);reject(gdAbortReason(signal));};
+      const timer=ROOT.setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},delay);
+      signal?.addEventListener('abort',abort,{once:true});
+    });
+  }
+  async function gdTransportFetch(url,options,retry){
+    const {signal}=options;
+    for(let attempt=0;;attempt++){
+      if(signal?.aborted)throw gdAbortReason(signal);
+      const now=Date.now();gdRate.times=gdRate.times.filter(time=>now-time<300000);
+      if(now<gdRate.until){
+        throw Object.assign(Error('GD 音乐台限流冷却中，请稍后再试'),{kind:'rate-limit',limitSource:'upstream',requestCount:gdRate.times.length,retryAt:gdRate.until});
+      }
+      gdRate.times.push(now);
+      let response,fault;
+      try{response=await fetch(url,options);}
+      catch(error){
+        if(signal?.aborted)throw gdAbortReason(signal);
+        if(!(error instanceof TypeError)||error.kind||error.retryAt||error.name==='AbortError')throw error;
+        fault=error;
+      }
+      if(response&&!GD_GATEWAY_RETRY_STATUSES.has(response.status)){
+        if(response.status<500||response.status>=600)gdRate.gatewayDown=0;
+        return response;
+      }
+      // Other requests get a single recovery probe while this request owns the backoff window.
+      const failedAt=Date.now(),exhausted=attempt===GD_GATEWAY_RETRIES;
+      if(!retry||exhausted||(!attempt&&failedAt<gdRate.gatewayDown)){
+        if(exhausted)gdRate.gatewayDown=failedAt+GD_GATEWAY_WINDOW_MS;
+        if(fault)throw Object.assign(fault,{gdTransportHandled:true});
+        return response;
+      }
+      if(!attempt)gdRate.gatewayDown=failedAt+GD_GATEWAY_WINDOW_MS;
+      void response?.body?.cancel().catch(()=>{});
+      await waitForGdRetry(220*2**attempt+Math.round(Math.random()*140),signal);
     }
-    gdRate.times.push(now);
-    const response=await fetch(url,options);
+  }
+  async function gdFetch(url,options={},retry=true){
+    const response=await gdTransportFetch(url,options,retry);
     if(response.status===429){
       const retry=response.headers?.get('Retry-After'),seconds=Number(retry),receivedAt=Date.now();
       const until=retry&&Number.isFinite(seconds)?receivedAt+Math.max(0,seconds)*1000:Date.parse(retry)||receivedAt+300000;
@@ -1077,7 +1116,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const pending=(async()=>{
       const controller=new ROOT.AbortController(),timer=ROOT.setTimeout(()=>controller.abort(),10000);dataRequestControllers.add(controller);
       try{
-        const response=await gdFetch(url,{signal:controller.signal},true);if(!response.ok)throw Error(`歌词请求失败：${response.status}`);
+        const response=await gdFetch(url,{signal:controller.signal});if(!response.ok)throw Error(`歌词请求失败：${response.status}`);
         const value=await response.json(),payload=params.types==='lyric'?extractLyrics(value):null,positive=payload&&(payload.original||payload.translation);
         if(generation===dataCacheGeneration)lyricCache.set(key,{value,until:Date.now()+(positive?43200000:300000)});return value;
       }catch(error){if(generation===dataCacheGeneration)lyricCache.set(key,{error,until:Math.max(Date.now()+30000,error.retryAt||0)});throw error;}
@@ -1359,9 +1398,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       try{
         info=await gdJson(params,{fresh,nonce});
       }catch(error){
-        const transient=error.kind==='network'||error.kind==='timeout'||(error.status>=500&&error.status<600);
+        const transient=error.kind==='timeout'||error.kind==='network'&&!error.gdTransportHandled;
         if(!isActive()||!transportRetry?.available||!transient||error.retryAt)throw error;
-        // Keep the exact matched ID and quality when a temporary gateway error hides the response.
+        // Keep the exact matched ID and quality for faults outside the transport retry policy.
         transportRetry.available=false;
         refreshed=true;
         info=await gdJson(params,{fresh:true});

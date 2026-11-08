@@ -9,13 +9,17 @@ const urls=section('function getResponseUrl','async function gdCover');
 const song={title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'selected'};
 const quiet={warn(){}};
 function requests(fetch){
-  const root={AbortController,setTimeout,clearTimeout};
+  const delays=[];
+  const root={AbortController,clearTimeout,setTimeout(fn,delay){
+    if(delay<2000){delays.push(delay);return setTimeout(fn,0);}
+    return setTimeout(fn,delay);
+  }};
   const api=new Function('ROOT','fetch','console',`
     const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate={times:[],until:0};
     ${urls};${section('const gdResponses=','async function lyricJson')};
-    return {get:gdJson,cache:gdResponses,pending:gdRequests,rate:gdRate};
+    return {get:gdJson,fetch:gdFetch,cache:gdResponses,pending:gdRequests,rate:gdRate};
   `)(root,fetch,quiet);
-  return {...api,logs:()=>root.__SELENE_GD_DIAGNOSTICS__||[]};
+  return {...api,delays,logs:()=>root.__SELENE_GD_DIAGNOSTICS__||[]};
 }
 function fallback(get,play=async()=>{},active=()=>true,requested=song){
   return new Function('gdJson','playUrl','console',`
@@ -47,7 +51,8 @@ test('an explicit fresh request does not join an older ordinary request',async()
 
 test('HTTP bodies, Safari Load failed, empty URL and malformed responses remain distinct evidence',async()=>{
   const cases=[
-    {fetch:async()=>new Response('<html>upstream unavailable</html>',{status:503}),kind:'http',status:503,body:/upstream/},
+    {fetch:async()=>new Response('<html>upstream unavailable</html>',{status:503}),kind:'gateway',status:503,body:/upstream/,message:/上游服务暂时不可用，非本曲问题/},
+    {fetch:async()=>new Response('bad request',{status:400}),kind:'http',status:400,body:/bad request/},
     {fetch:async()=>{throw TypeError('Load failed');},kind:'network',message:/Load failed/},
     {fetch:async()=>new Response('upstream garbage'),kind:'invalid-response',status:200,body:/garbage/},
   ];
@@ -57,6 +62,68 @@ test('HTTP bodies, Safari Load failed, empty URL and malformed responses remain 
   });assert.equal(api.logs()[0].kind,item.kind);}
   const api=requests(async()=>new Response('{"url":"","message":"not available"}'));await api.get({types:'url',source:'joox',id:'selected'});
   assert.equal(api.logs()[0].kind,'empty-url');assert.match(api.logs()[0].body,/not available/);
+});
+
+test('transient gateway failures recover with bounded backoff and count actual requests',async()=>{
+  const replies=[502,'network',504,200];
+  const api=requests(async()=>{
+    const status=replies.shift();
+    if(status==='network')throw TypeError('Load failed');
+    return new Response(status===200?'{"url":"https://cdn.test/recovered.mp3"}':'gateway',{status});
+  });
+  const params={types:'url',source:'joox',id:'selected'};
+  assert.equal((await api.get(params)).url,'https://cdn.test/recovered.mp3');
+  assert.equal(api.rate.times.length,4);
+  assert.equal(api.delays.length,3);
+  assert.ok(api.delays.every((delay,index)=>delay>=220*2**index&&delay<=220*2**index+140));
+  assert.equal(api.rate.gatewayDown,0);
+});
+
+test('a sustained outage stops each source after its first gateway failure',async()=>{
+  const sources=[];let status=503;
+  const api=requests(async url=>{
+    sources.push(url.searchParams.get('source'));
+    return new Response(status===200?'{"url":"https://cdn.test/recovered.mp3"}':'gateway',{status});
+  });
+  await assert.rejects(fallback(api.get),error=>{
+    assert.ok(error.failures.every(source=>source.attempts.length===1&&source.attempts[0].kind==='gateway'));
+    return true;
+  });
+  assert.deepEqual(sources,['joox','joox','joox','joox','netease','bilibili']);
+  assert.ok(api.rate.gatewayDown>Date.now());
+  const params={types:'url',source:'joox',id:'selected'};
+  status=500;
+  await assert.rejects(api.get(params),error=>error.kind==='gateway'&&error.status===500);
+  assert.ok(api.rate.gatewayDown>Date.now());
+  status=200;
+  assert.equal((await api.get(params)).url,'https://cdn.test/recovered.mp3');
+  assert.equal(api.rate.gatewayDown,0);
+  assert.equal(sources.length,8);
+});
+
+test('an aborted backoff and an upstream cooldown both prevent another fetch',async()=>{
+  const controller=new AbortController();
+  let calls=0;
+  const api=requests(async()=>{
+    calls++;
+    return new Response('gateway',{status:503});
+  });
+  const pending=api.fetch(new URL('https://music-api.gdstudio.xyz/api.php'),{signal:controller.signal});
+  await Promise.resolve();
+  assert.equal(api.delays.length,1);
+  controller.abort();
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(calls,1);
+
+  let started=0;
+  const limited=requests(async()=>++started===1
+    ?new Response('gateway',{status:503})
+    :new Response('slow down',{status:429,headers:{'Retry-After':'30'}}));
+  const url=new URL('https://music-api.gdstudio.xyz/api.php');
+  const retrying=limited.fetch(url),limiting=limited.fetch(url);
+  await assert.rejects(limiting,error=>error.status===429&&error.kind==='rate-limit');
+  await assert.rejects(retrying,error=>error.kind==='rate-limit'&&error.requestCount===2);
+  assert.equal(started,2);
 });
 
 test('429 and JSON rate limits retain evidence and stop further network traffic',async()=>{
@@ -133,14 +200,14 @@ test('replaying a known JOOX track requests its last successful quality with a n
   assert.deepEqual(calls,['128']);
 });
 
-test('persistent JOOX transport failures stop quality fan-out after one retry; rate limits stop immediately',async()=>{
-  for(const error of [Object.assign(Error('Load failed'),{kind:'network'}),Object.assign(Error('HTTP 503'),{kind:'http',status:503,body:'gateway'}),Object.assign(Error('limited'),{kind:'rate-limit',retryAt:Date.now()+120000})]){
+test('JOOX only retries network faults that are outside the transport retry policy',async()=>{
+  for(const error of [Object.assign(Error('Load failed'),{kind:'network'}),Object.assign(Error('HTTP 503'),{kind:'gateway',status:503,body:'gateway'}),Object.assign(Error('limited'),{kind:'rate-limit',retryAt:Date.now()+120000})]){
     const calls=[];
     await assert.rejects(fallback(async params=>{calls.push(params);if(params.source==='joox')throw error;return [];}),e=>{
       assert.equal(e.failures[0].attempts[0].error,error);return true;
     });
     const joox=calls.filter(c=>c.source==='joox');
-    assert.deepEqual(joox.map(c=>c.br),error.retryAt?['320']:['320','320']);
+    assert.deepEqual(joox.map(c=>c.br),error.kind==='network'?['320','320']:['320']);
     if(error.retryAt)assert.equal(calls.length,1);
   }
 });
