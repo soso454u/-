@@ -24,7 +24,7 @@ async function runSeleneOrbitRegression() {
   await skin('orbit');
   assert(JSON.parse(localStorage.getItem('safe-music-player-v1')).skin === 'orbit', 'record style persists');
   assert(visible(player.querySelector('.now')), 'record view shows current song');
-  assert([...player.querySelectorAll('.actions [data-a]')].map(button => button.dataset.a).join(',') === 'rec,world-rec,offline,lock', 'more functions contain no duplicate library or cache-current entries');
+  assert([...player.querySelectorAll('.actions [data-a]')].map(button => button.dataset.a).join(',') === 'rec,world-rec,offline', 'more functions contain recommendations and offline songs');
   const disc = player.querySelector('.selene-orbit-disc');
   const cover = disc.querySelector('img');
   const artwork = cover.hasAttribute('src') ? cover : disc.querySelector('.selene-orbit-placeholder');
