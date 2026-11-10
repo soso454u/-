@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.71';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.72';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -222,7 +222,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         duration,views:rawViews!=null&&String(rawViews).trim()&&Number.isFinite(Number(rawViews))&&Number(rawViews)>=0?Number(rawViews):null,
       };
     }
-    function createFloatingWindow({initialWidth,minWidth=244,maxWidth,frameHeight,minFrameHeight,geometryKey}){
+    function createFloatingWindow({initialWidth,minWidth=244,maxWidth,frameHeight,minFrameHeight,geometryKey,fitFrame}){
       const margin=10,step=80;
       const visual=ROOT.visualViewport;
       const finePointer=geometryKey?ROOT.matchMedia('(any-pointer: fine)'):null;
@@ -264,6 +264,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             ? clamp(bounds.height,Math.min(minFrameHeight,maxHeight),maxHeight)
             : frameHeight(width,view);
           frame.style.height=`${height}px`;
+          fitFrame?.(frame);
           panel.classList.toggle('has-resize-corners',hasCorners(view));
         }
         smaller.disabled=width<=min;
@@ -337,7 +338,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }
       function mount(element,controls){
         panel=element;
-        ({smaller,larger}=controls);
+        ({smaller,larger,frame}=controls);
         smaller.onclick=()=>resize(-1);
         larger.onclick=()=>resize(1);
         bindPointer(panel.querySelector('.video-toolbar'),event=>!event.target.closest('button,a'),(dx,dy,rect,view,bounds)=>{
@@ -345,10 +346,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         });
         if(geometryKey)addResizeCorners();
         DOC.body.append(panel);
-        if(frameHeight){
-          frame=panel.querySelector('iframe');
-          frameChrome=panel.offsetHeight-frame.offsetHeight;
-        }
+        if(frame)frameChrome=panel.offsetHeight-frame.offsetHeight;
         syncFloatingPanelThemes();
         layout();
         ROOT.addEventListener('resize',layout);
@@ -432,8 +430,21 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }
       return {open,close,isOpen:()=>!!panel};
     }
+    const touchWeb=ROOT.matchMedia('(hover: none) and (pointer: coarse)');
+    const mobileSearchUA=/iPhone|iPod|Android.+Mobile/i.test(ROOT.navigator.userAgent);
+    function fitWebFrame(frame){
+      const canvas=frame.firstElementChild;
+      const baseWidth=1120;
+      // The desktop site needs about 1100px. Keep narrow touch screens readable
+      // by letting the wrapper scroll horizontally once scaling reaches its floor.
+      const fit=touchWeb.matches&&!frame.hasAttribute('data-native-search');
+      const scale=fit?Math.min(1,Math.max(.7,frame.clientWidth/baseWidth)):1;
+      canvas.style.width=scale<1?`${baseWidth*scale}px`:'';
+      if(scale<1)canvas.style.setProperty('--bili-web-scale',scale);
+      else canvas.style.removeProperty('--bili-web-scale');
+    }
     const searchWindow=createFloatingWindow({
-      initialWidth:960,minWidth:264,maxWidth:()=>1280,minFrameHeight:180,geometryKey:'bilibiliSearchWindow',
+      initialWidth:960,minWidth:264,maxWidth:()=>1280,minFrameHeight:180,geometryKey:'bilibiliSearchWindow',fitFrame:fitWebFrame,
       frameHeight:(width,view)=>Math.max(0,Math.floor(Math.min(width*(view.width<500?1.5:.76),view.height-58))),
     });
     let searchPanel;
@@ -458,18 +469,26 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           <button type="button" data-search-smaller title="缩小窗口" aria-label="缩小窗口">−</button>
           <button type="button" data-search-larger title="放大窗口" aria-label="放大窗口">+</button>
           <button type="button" data-search-close title="关闭搜索" aria-label="关闭搜索">×</button>
-        </header><iframe allowfullscreen></iframe>`;
+        </header><div class="bilibili-web-viewport"><div class="bilibili-web-canvas">
+          <iframe allow="autoplay; fullscreen" allowfullscreen></iframe>
+        </div></div>`;
         const closeButton=searchPanel.querySelector('[data-search-close]');
         closeButton.onclick=closeSearch;
         searchPanel.onkeydown=event=>{if(event.key==='Escape')closeSearch();};
         searchWindow.mount(searchPanel,{
           smaller:searchPanel.querySelector('[data-search-smaller]'),
           larger:searchPanel.querySelector('[data-search-larger]'),
+          frame:searchPanel.querySelector('.bilibili-web-viewport'),
         });
         closeButton.focus({preventScroll:true});
       }
       searchPanel.querySelector('a').href=url;
-      const iframe=searchPanel.querySelector('iframe');
+      const frame=searchPanel.querySelector('.bilibili-web-viewport');
+      // Bilibili normally redirects phone user agents to its responsive search page.
+      frame.toggleAttribute('data-native-search',!videoId&&mobileSearchUA);
+      fitWebFrame(frame);
+      frame.scrollLeft=0;
+      const iframe=frame.querySelector('iframe');
       iframe.title=videoId?'哔哩哔哩视频详情':'哔哩哔哩官方搜索';
       iframe.src=url;
     }
@@ -885,7 +904,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}-bilibili-search .video-toolbar{border-bottom:1px solid var(--picker-line);background:var(--picker-control)}
       #${ID}-bilibili-search .video-toolbar a{padding:5px 7px;border-radius:6px;color:inherit;text-decoration:none;white-space:nowrap}
       #${ID}-bilibili-search .video-toolbar a:hover{background:var(--picker-control);text-decoration:underline}
-      #${ID}-bilibili-search iframe{display:block;width:100%;border:0;background:white}
+      #${ID}-bilibili-search .bilibili-web-viewport{overflow-x:auto;overflow-y:hidden;background:white}
+      #${ID}-bilibili-search .bilibili-web-canvas{position:relative;height:100%;overflow:hidden}
+      #${ID}-bilibili-search iframe{display:block;position:absolute;top:0;left:0;width:calc(100% / var(--bili-web-scale,1));height:calc(100% / var(--bili-web-scale,1));border:0;background:white;transform:scale(var(--bili-web-scale));transform-origin:top left}
       :is(#${ID}-video,#${ID}-bilibili-search).is-pointer-active iframe{pointer-events:none}
       #${ID}-bilibili-search .video-resize-corner{display:none;position:absolute;z-index:1;width:18px;height:18px;touch-action:none;user-select:none}
       #${ID}-bilibili-search.has-resize-corners .video-resize-corner{display:block}
