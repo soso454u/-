@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.62';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.63';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -304,7 +304,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
     function createPlayer({beforeOpen,onClose}){
       const margin=10,step=80;
-      let panel,activeId='',preferredWidth=420,position,drag;
+      let panel,activeId='',preferredWidth=560,position,drag;
       const visual=ROOT.visualViewport;
       function viewport(){
         return {left:visual?.offsetLeft||0,top:visual?.offsetTop||0,width:visual?.width||ROOT.innerWidth,height:visual?.height||ROOT.innerHeight};
