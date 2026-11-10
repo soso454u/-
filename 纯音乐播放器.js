@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.54';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.55';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -317,7 +317,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   keepAliveAudio.addEventListener('error',()=>{if(settings.keepAlive&&!keepAliveSuspendedForTrack)keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lastRecommendationChat = null, lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, menuObserver = null, progressSeeking = false, pendingProgressValue = 0, currentCacheObjectUrl = '', playbackWanted = false, interruptionRetryTimer = 0, interruptionRetryCount = 0, companionBusy = false, companionRequest = 0, companionAutoSongKey = '', companionAutoCount = 0, companionMidSongDone = false, companionDragged = false, companionQueueDraining = false, companionListeningClock = null, companionListeningSavedAt = 0, companionListeningAwaitingPlay = false; const companionMessageQueue=[],lyricCache = new Map(),lyricRequests=new Map();
   let lyricState='暂无歌词',immersiveLyricsObserver=null;
-  let cancelPlaybackProbe=null,playbackPhase='idle',audioPriming=false,playbackRecoveryCount=0,pendingPlaybackSelection=false,audioPrimeUrl='',safariBlobRetryUsed=false;
+  let cancelPlaybackProbe=null,playbackPhase='idle',audioPriming=false,playbackRecoveryCount=0,pendingPlaybackSelection=false,audioPrimeUrl='',playbackBlobRetryUsed=false;
   const failedPlaybackUrls=new Set();let playbackSources=new WeakMap();
   let searchRequest=0;
   const mediaSession=ROOT.navigator?.mediaSession||null;
@@ -495,8 +495,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     try{
       const response=await fetch(candidate.audio,{cache:'no-store',credentials:'omit',redirect:'follow',referrerPolicy:'no-referrer',signal:controller.signal});
       if(!response.ok){const error=Error(`HTTP ${response.status}`);error.status=response.status;throw error;}
-      const type=String(response.headers.get('content-type')||'').toLowerCase(),length=Number(response.headers.get('content-length'));
-      if(Number.isFinite(length)&&length===0){const error=Error('空文件');error.code='empty';throw error;}
+      const type=String(response.headers.get('content-type')||'').toLowerCase(),length=response.headers.get('content-length');
+      if(length!==null&&Number(length)===0){const error=Error('空文件');error.code='empty';throw error;}
       if(/(?:text\/html|application\/(?:json|xml)|text\/plain)/i.test(type)){const error=Error(`非音频响应 ${type}`);error.code='not-audio';throw error;}
       const blob=await response.blob();
       if(!blob.size||blob.size<8192){const error=Error('音频文件为空或不完整');error.code='empty';throw error;}
@@ -712,17 +712,13 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     el.dataset.miniShape=settings.miniShape==='square'?'square':'round'; el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
     return el;
   }
-  const setStatus = (x,videoId='',persistent=false) => {
+  const setStatus = (x,persistent=false) => {
     const player=DOC.getElementById(ID),el=player?.querySelector('.status');if(!el)return;
-    const showNotice=persistent||!!videoId;
-    el.textContent=showNotice?'':x;el.classList.toggle('status-alert',!!el.textContent&&!/^(正在播放|已暂停|就绪)$/.test(String(x)));el.setAttribute('role','status');
+    el.textContent=persistent?'':x;el.classList.toggle('status-alert',!!el.textContent&&!/^(正在播放|已暂停|就绪)$/.test(String(x)));el.setAttribute('role','status');
     let notice=player.querySelector('.selene-playback-notice');
-    if(!showNotice){notice?.remove();return;}
+    if(!persistent){notice?.remove();return;}
     if(!notice){notice=DOC.createElement('small');notice.className='selene-playback-notice';notice.setAttribute('role','status');player.querySelector('.lyrics').after(notice);}
     notice.textContent=x;
-    if(videoId){
-      const link=DOC.createElement('a');link.href=`https://www.bilibili.com/video/${encodeURIComponent(videoId)}/`;link.target='_blank';link.rel='noopener noreferrer';link.textContent='在哔哩哔哩播放';link.style.color='inherit';link.style.textDecoration='underline';notice.prepend(link,' · ');
-    }
   };
   function applyTheme(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('theme-light','theme-dark');if(settings.theme==='light')el.classList.add('theme-light');if(settings.theme==='dark')el.classList.add('theme-dark');syncFloatingPanelThemes();syncCompanionAppearance();}
   function applySkin(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('skin-film','skin-red','skin-white','skin-black','skin-blue','skin-cream','skin-green','skin-albumglass','skin-orbit');el.classList.add(`skin-${settings.skin||'albumglass'}`);el.classList.remove('lyrics-focus');syncFloatingPanelThemes();syncCompanionAppearance();renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);}
@@ -824,13 +820,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function search(word,autoPlayFirst=false,showList=true,heading='',quiet=false,preferredSong=null){
     word=String(word||'').trim();if(!word)return;
-    const videoId=preferredSong?'':bilibiliVideoId(word);
-    const request=++searchRequest,strict=autoPlayFirst||!!preferredSong,selected=videoId?'bilibili':GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto',sources=selected==='auto'?GD_SOURCES:[selected];
+    const request=++searchRequest,strict=autoPlayFirst||!!preferredSong,selected=GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto',sources=selected==='auto'?GD_SOURCES:[selected];
     setStatus('正在搜索…');let found=[],lastError;
     for(const source of sources){
       try{
-        const rows=await searchSource(source,videoId||word);if(request!==searchRequest||disposed)return;
-        if(videoId){found=rows.filter(song=>String(song.mediaId)===videoId);break;}
+        const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;
         if(strict){found=querySongHits(rows,word,preferredSong);if(found.length)break;}
         else{
           found.push(...rows);
@@ -848,7 +842,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       setStatus(`${results.length} 个${strict?'匹配':'搜索'}结果`);
       if(autoPlayFirst)await play(results[0]);
       if(showList)ROOT.setTimeout(()=>{if(request===searchRequest)hydrateResultCovers(results);},0);
-    }else{const message=lastError?.message||(videoId?'搜索接口没有返回这个 B 站视频':strict?'没有找到符合歌名、歌手及版本的歌曲':'没有找到歌曲，可在设置中切换搜索源，或换个关键词');setStatus(message,videoId);if(!quiet)toast('warning',message);}
+    }else{
+      const message=lastError?.message||(strict?'没有找到符合歌名、歌手及版本的歌曲':selected==='bilibili'?'GD 哔哩哔哩音源没有返回搜索结果':'没有找到歌曲，可在设置中切换搜索源，或换个关键词');
+      setStatus(message,true);if(!quiet)toast('warning',message);
+    }
   }
 
   const coverResponses=new Map(),coverRequests=new Map();
@@ -1085,17 +1082,6 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return 500+(version===wantedVersion?100:0)+(sameAlbum?40:0)+(sameDuration?30-gap:0);
   }
   function rankedPlaybackHits(rows,song){return rows.map(item=>({item,score:scorePlaybackHit(item,song)})).filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score);}
-  function bilibiliVideoId(value){
-    const text=String(value||'').trim();
-    let id=text;
-    if(/^https?:\/\//i.test(text))try{
-      const url=new URL(text);
-      if(!['www.bilibili.com','m.bilibili.com','bilibili.com'].includes(url.hostname))return '';
-      id=url.pathname.match(/^\/video\/([^/]+)\/?$/)?.[1]||'';
-    }catch{return '';}
-    return /^BV[0-9A-Za-z]{10}$/i.test(id)?`BV${id.slice(2)}`:'';
-  }
-  function selectedBilibiliVideo(song){return song.source==='bilibili'?bilibiliVideoId(song.mediaId):'';}
   // Share upstream cooldown, gateway recovery and request diagnostics across script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0,gatewayDown:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
@@ -1364,7 +1350,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(Array.isArray(data)){for(const value of data){const url=getResponseUrl(value,depth+1);if(url)return url;}return '';}
     return getResponseUrl(data.url,depth+1)||getResponseUrl(data.data,depth+1)||getResponseUrl(data.pic,depth+1);
   }
-  function sourceBitrates(source){return source==='joox'?['320','192','128','740','999']:['320','128'];}
+  function sourceBitrates(source){
+    if(source==='joox')return ['320','192','128','740','999'];
+    if(source==='bilibili')return ['320','128','999'];
+    return ['320','128'];
+  }
   function playbackSourceChoice(song){
     const source=playbackSources.get(song)??'auto';
     return source.startsWith('lx-')&&!settings.lxMusicEnabled?'auto':source;
@@ -1410,9 +1400,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(disposed||!playbackWanted||!current)return;
     failedPlaybackUrls.add(url);
     if(playbackRecoveryCount++<1){setStatus('音源持续无进度，正在切换备用源…');void play(current,true);}
-    else{clearFailedPlayback();const detail=mediaDetail(error);setStatus(detail,selectedBilibiliVideo(current),true);toast('warning',detail);}
+    else{clearFailedPlayback();const detail=mediaDetail(error);setStatus(detail,true);toast('warning',detail);}
   }
-  function playUrl(url,label='音源',isolated=false,{resume=false,isActive=()=>true,expectedDuration=0,blobRetry=true}={}){
+  function playUrl(url,label='音源',isolated=false,{resume=false,isActive=()=>true,expectedDuration=0,blobRetry=true,allowBlobTransport=false}={}){
     if(!isolated)cancelPlaybackProbe?.();
     const pending=new Promise((resolve,reject)=>{
       const player=isolated?new ROOT.Audio():audio;
@@ -1460,19 +1450,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     });
     return pending.catch(async error=>{
       const agent=ROOT.navigator?.userAgent||'',safari=/Safari/i.test(agent)&&!/Chrome|Chromium|Edg|CriOS|FxiOS/i.test(agent);
-      if(!blobRetry||isolated||resume||!safari||safariBlobRetryUsed||isNotAllowed(error)||error.name==='AbortError'||!isActive()||!/^https?:\/\//i.test(url)||![2,4,undefined].includes(error.media?.code)||!error.media&&!/无播放进度|network|load|not.supported/i.test(error.message))throw error;
-      safariBlobRetryUsed=true;setStatus('正在尝试 Safari 兼容播放…');
+      if(!blobRetry||isolated||resume||!safari&&!allowBlobTransport||playbackBlobRetryUsed||isNotAllowed(error)||error.name==='AbortError'||!isActive()||!/^https?:\/\//i.test(url)||![2,4,undefined].includes(error.media?.code)||!error.media&&!/无播放进度|network|load|not.supported/i.test(error.message))throw error;
+      playbackBlobRetryUsed=true;setStatus(allowBlobTransport?'正在尝试哔哩哔哩兼容播放…':'正在尝试 Safari 兼容播放…');
       try{
         const blob=await fetchCacheBlob({audio:url},20000);if(!isActive())throw Object.assign(Error('播放已取消'),{name:'AbortError'});
         const objectUrl=ROOT.URL.createObjectURL(blob);releaseOfflineObjectUrl();currentCacheObjectUrl=objectUrl;
         await playUrl(objectUrl,label,false,{isActive,expectedDuration,blobRetry:false});
-      }catch(fallbackError){if(isNotAllowed(fallbackError)||fallbackError.name==='AbortError')throw fallbackError;throw error;}
+      }catch(fallbackError){if(isNotAllowed(fallbackError)||!isActive()&&fallbackError.name==='AbortError')throw fallbackError;throw error;}
     });
   }
   async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set(),isActive=()=>true,transportRetry=null}={}){
-    const exactVideo=source==='bilibili'&&selectedBilibiliVideo(s);
-    let hit=s.source===source&&s.mediaId&&(s.gdSource===source||exactVideo)&&!excludeIds.has(String(s.mediaId))?s:null;
-    if(!hit&&!exactVideo){
+    let hit=s.source===source&&s.mediaId&&(s.gdSource===source||source==='bilibili')&&!excludeIds.has(String(s.mediaId))?s:null;
+    if(!hit){
       let best=-Infinity;
       for(const name of recordingQueries(s)){
         if(!isActive())return [];
@@ -1529,7 +1518,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       let refreshed=false;
       // Keep the selected record and up to two strictly matched alternates.
       for(let candidate=0;candidate<3;candidate++){
-        let identity=null,noMatch=false,target=s,refreshable=false;
+        let identity=null,noMatch=false,target=s,refreshable=false,failedMediaBitrate='';
         const bitrates=candidate===0||source==='joox'?sourceBitrates(source):['320'];
         const preferred=candidate===0&&s.source===source?(s.requestedBitrate||s.bitrate):'';
         const preferredIndex=bitrates.indexOf(preferred);
@@ -1551,17 +1540,21 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           for(const track of tracks){
             if(!track.audio||tried.has(track.audio))continue;
             tried.add(track.audio);
-            try{await playUrl(track.audio,`${GD_SOURCE_LABELS[source]||source}音源`,false,{isActive,expectedDuration:songDuration(s)||songDuration(track)});return isActive()?{...track,offline:false}:null;}
+            try{await playUrl(track.audio,`${GD_SOURCE_LABELS[source]||source}音源`,false,{isActive,expectedDuration:songDuration(s)||songDuration(track),allowBlobTransport:source==='bilibili'});return isActive()?{...track,offline:false}:null;}
             catch(error){
               if(isNotAllowed(error)){error.track=track;throw error;}if(error.name==='AbortError')throw error;
               const evidence={kind:'media',id:track.mediaId,bitrate,fresh,url:track.audio,media:error.media,error};
               note(source,String(error.message||'音频无法播放').slice(0,100),3,evidence);console.warn('[音乐播放器] 音源候选失败',evidence);
               // A network/unsupported URL may have expired; the media element cannot prove expiry.
-              if([2,4].includes(error.media?.code)||/无播放进度|network|load failed/i.test(error.message))refreshable=true;
+              if([2,4].includes(error.media?.code)||/无播放进度|network|load failed/i.test(error.message)){
+                refreshable=true;
+                failedMediaBitrate||=bitrate;
+              }
             }
           }
-          // One cache-busting refresh for this JOOX source, only after its ordinary qualities fail.
-          if(source==='joox'&&candidate===0&&index===qualities.length-1&&identity?.mediaId&&refreshable&&!refreshed){refreshed=true;qualities.push({bitrate:bitrates[0],fresh:true});}
+          // JOOX may return an empty URL. Bilibili retries only a quality that returned an audio URL and failed to load.
+          const refreshBitrate=source==='joox'&&refreshable?bitrates[0]:source==='bilibili'?failedMediaBitrate:'';
+          if(refreshBitrate&&candidate===0&&index===qualities.length-1&&identity?.mediaId&&!refreshed){refreshed=true;qualities.push({bitrate:refreshBitrate,fresh:true});}
         }
         if(noMatch||!identity?.mediaId)break;excludeIds.add(String(identity.mediaId));
       }
@@ -1706,7 +1699,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   let playbackLimitWarningUntil=0;
   function notifyPlaybackBlocked(){
     const message='浏览器阻止播放，请再次点击播放按钮';
-    setStatus(message,'',true);toast('warning',message);
+    setStatus(message,true);toast('warning',message);
   }
   function play(s,recovering=false){
     const key=JSON.stringify([s.source,s.mediaId||s.id,s.title,s.artist,s.version,s.customAudio,playbackSourceChoice(s)]);
@@ -1716,10 +1709,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function performPlay(s,recovering=false){
     const selectedSource=playbackSourceChoice(s);
-    const videoId=selectedBilibiliVideo(s);
     let lxSource=selectedSource.startsWith('lx-')?selectedSource.slice(3):'';
     if(audio.dataset)delete audio.dataset.seleneLxSource;
-    cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;safariBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
+    cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;playbackBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
     const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
     try{
       if(lxSource){
@@ -1737,7 +1729,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         const useSavedAudio=s.source==='direct'||selectedSource===s.source||selectedSource==='auto'&&['tencent','netease','bilibili','kugou'].includes(s.source);
         if(!played&&useSavedAudio&&!failedPlaybackUrls.has(s.audio)&&/^https?:\/\//i.test(String(s?.audio||''))&&s.audio!==s.customAudio){
           setStatus('正在验证已保存音源…');
-          try{await playUrl(s.audio,'已保存音源',false,{isActive,expectedDuration:s.source==='direct'?0:songDuration(s)});played={...s,offline:false};}
+          try{await playUrl(s.audio,'已保存音源',false,{isActive,expectedDuration:s.source==='direct'?0:songDuration(s),allowBlobTransport:s.source==='bilibili'});played={...s,offline:false};}
           catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;console.warn('[音乐播放器] 已保存音源失效，切换备用源',error);}
         }
         if(!isActive())return;
@@ -1757,9 +1749,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             try{const result=await playLxSource(s,'tencent',isActive);if(result)lxSource='tencent';return result;}
             catch(error){noteFailure(error);return null;}
           };
-          const sources=playbackSourceOrder(selectedSource),auto=selectedSource==='auto';
-          if(auto&&videoId)played=await tryGd(['bilibili']);
-          else if(auto&&settings.lxMusicEnabled&&knownLxSongId(s,'tencent')){
+          const auto=selectedSource==='auto';
+          const sources=auto&&s.source==='bilibili'
+            ? ['bilibili',...GD_SOURCES.filter(source=>source!=='bilibili')]
+            : playbackSourceOrder(selectedSource);
+          if(auto&&settings.lxMusicEnabled&&knownLxSongId(s,'tencent')){
             played=await tryLxQq();
             if(!played&&isActive())played=await tryGd(sources);
           }else if(auto&&settings.lxMusicEnabled){
@@ -1784,8 +1778,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(!isActive())return;
     console.warn('[音乐播放器] 本轮播放失败',{request,song:{title:s.title,artist:s.artist,source:s.source,mediaId:s.mediaId},error:lastError});
     clearFailedPlayback();
-    const detail=`${mediaDetail(lastError)}。${videoId?'可从播放器打开 B 站原视频':'可重试、切换音源或补充 MP3 直链'}`;
-    setStatus(detail,videoId,true);
+    const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;
+    setStatus(detail,true);
     if(lastError?.retryAt){
       const alreadyWarned=Date.now()<playbackLimitWarningUntil;
       playbackLimitWarningUntil=Math.max(playbackLimitWarningUntil,lastError.retryAt);
@@ -2779,7 +2773,7 @@ ${latest}
     stopPlayback({release:true});++searchRequest;dataCacheGeneration++;
     resultCoverObserver?.disconnect();resultCoverObserver=null;
     for(const controller of dataRequestControllers)controller.abort();dataRequestControllers.clear();
-    gdResponses.clear();gdRequests.clear();lyricCache.clear();lyricRequests.clear();coverResponses.clear();coverRequests.clear();failedPlaybackUrls.clear();safariBlobRetryUsed=false;
+    gdResponses.clear();gdRequests.clear();lyricCache.clear();lyricRequests.clear();coverResponses.clear();coverRequests.clear();failedPlaybackUrls.clear();playbackBlobRetryUsed=false;
     if(audioSession)try{audioSession.type='auto';applyAudioSessionMode();}catch{}
     const songs=[current,...queue,...results,...(settings.favorites||[]),...(settings.playlists||[]).flatMap(playlist=>playlist.songs||[])];
     for(const song of new Set(songs.filter(Boolean)))if(song.source!=='direct')song.audio='';

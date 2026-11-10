@@ -45,7 +45,7 @@ test('clearing caches aborts stale requests and cannot reset the shared GD quota
   const settings={favorites:[{title:'Saved',source:'joox',audio:'https://expired.test/file',customAudio:manual}],playlists:[{songs:[{title:'Playlist',source:'netease',audio:'https://expired.test/other'}]}],companionApiKey:'test-key',companionConversations:{keep:[{content:'keep'}]}};
   const api=new Function('ROOT','gdFetch','settings','offlineRequest',`
     const GD_API='https://music-api.gdstudio.xyz/api.php',gdRate=ROOT.__SELENE_GD_RATE__,lyricCache=new Map(),lyricRequests=new Map(),coverResponses=new Map(),coverRequests=new Map(),failedPlaybackUrls=new Set();
-    let current=null,queue=[],results=[],searchRequest=0,safariBlobRetryUsed=false,resultCoverObserver=null;const audioSession=null,DOC={querySelector:()=>null},ID='test',stopPlayback=()=>{},save=()=>{},paintTime=()=>{},setStatus=()=>{},toast=()=>{};
+    let current=null,queue=[],results=[],searchRequest=0,playbackBlobRetryUsed=false,resultCoverObserver=null;const audioSession=null,DOC={querySelector:()=>null},ID='test',stopPlayback=()=>{},save=()=>{},paintTime=()=>{},setStatus=()=>{},toast=()=>{};
     ${section('const gdResponses=','async function gdFetch')};
     ${section('async function clearPlayerCaches','function resetPlayerDefaults')};
     return {gdJson,clearPlayerCaches,cache:gdResponses,pending:gdRequests};
@@ -120,6 +120,23 @@ test('a dead selected JOOX record tries another matched release before leaving J
   const song=await fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'dead'},0,()=>true,new Set(),['joox']);
   assert.equal(song.mediaId,'working');assert.equal(song.lyricId,'new-lyrics');assert.equal(song.coverId,'new-cover');
   assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=9);assert.deepEqual(played,['https://cdn.test/working.mp3']);
+});
+
+test('Bilibili refreshes a failed stream for the selected opaque GD ID and plays the new audio',async()=>{
+  const calls=[],played=[],id='recording:42';
+  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['bilibili'],GD_SOURCE_LABELS={bilibili:'哔哩哔哩'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async (params,options)=>{
+    assert.equal(params.types,'url');assert.equal(params.id,id);
+    calls.push([params.br,options.fresh]);
+    return {url:options.fresh?'https://cdn.test/fresh.m4a':params.br==='320'?'https://cdn.test/expired.m4a':''};
+  },async (url,_label,_isolated,options)=>{
+    assert.equal(options.allowBlobTransport,true);
+    played.push(url);
+    if(played.length===1)throw Object.assign(Error('expired'),{media:{code:4}});
+  });
+  const song=await fallback({title:'夜曲',artist:'翻唱歌手',source:'bilibili',mediaId:id});
+  assert.deepEqual(calls,[['320',false],['128',false],['999',false],['320',true]]);
+  assert.deepEqual(played,['https://cdn.test/expired.m4a','https://cdn.test/fresh.m4a']);
+  assert.equal(song.audio,'https://cdn.test/fresh.m4a');
 });
 
 test('JOOX caps unavailable releases to three identities and sixteen URL requests',async()=>{

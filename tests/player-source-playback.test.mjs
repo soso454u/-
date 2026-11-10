@@ -5,7 +5,7 @@ import test from 'node:test';
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
 const matching=section('function normalizeSongText','// Share upstream cooldown');
-function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText,bilibiliVideoId};`)();}
+function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText};`)();}
 const jay={title:'七里香',artist:'周杰伦',duration:299,album:'七里香'};
 
 test('explicit singers reject covers and substring identities; known Jay aliases match',()=>{
@@ -29,11 +29,11 @@ test('version, album version and available duration evidence constrain candidate
 
 function searchHarness(responses,settings={}){
   const calls=[],api=matcher();let played;
-  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','bilibiliVideoId',`
+  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText',`
     let searchRequest=0,disposed=false,results=[];const ID='test';
     ${section('async function search(word','const coverResponses=')}
     return {search,results:()=>results};
-  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},()=>{},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliVideoId);
+  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},()=>{},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText);
   return {...search,calls,played:()=>played};
 }
 test('search stops at correct Netease result; wrong singer falls through to JOOX',async()=>{
@@ -61,14 +61,13 @@ test('empty manual results fall back sequentially; structured automatic picks re
   await auto.search('七里香 周杰伦',true,true,'',false,jay);assert.deepEqual(auto.calls,['netease','joox']);assert.equal(auto.played().artist,'周杰伦');
 });
 
-test('a Bilibili video URL or BV ID finds only the exact video, even with another search source selected',async()=>{
-  const id='BV1NS4t6oEXQ',video={mediaId:id,title:'真的需要摸吗？MacBook Pro PROLED XDR上手',artist:'影视飓风',source:'bilibili'};
-  const api=searchHarness({bilibili:query=>{assert.equal(query,id);return [{...video,mediaId:'BV1NS4t6oEXR'},video];}},{searchSource:'netease'});
-  for(const query of [id,`https://www.bilibili.com/video/${id}/?spm_id_from=test`]){
-    await api.search(query);assert.deepEqual(api.results(),[video]);
-  }
-  assert.deepEqual(api.calls,['bilibili','bilibili']);
-  assert.equal(matcher().bilibiliVideoId(`https://example.test/video/${id}`),'');
+test('manual Bilibili search keeps provider results when GD uses an opaque track ID',async()=>{
+  const id='BV1NS4t6oEXQ';
+  const tracks=[{id:'bilibili:recording:1',mediaId:'recording:1',title:'歌名',artist:'歌手',source:'bilibili'}];
+  const api=searchHarness({bilibili:query=>{assert.equal(query,id);return tracks;}},{searchSource:'bilibili'});
+  await api.search(id);
+  assert.deepEqual(api.calls,['bilibili']);
+  assert.deepEqual(api.results(),tracks);
 });
 
 test('playback tolerates provider labels and omitted version tags only with recording evidence',()=>{
@@ -109,7 +108,7 @@ function playback({userAgent,fetchBlob=async()=>{throw Error('unexpected blob re
   let now=0,next=0;
   const ROOT={Audio:FakeAudio,navigator:{userAgent},URL:{createObjectURL:()=> 'blob:safari-transport'},setInterval:cb=>{callbacks.set(++next,cb);return next;},clearInterval:id=>callbacks.delete(id)};
   const api=new Function('ROOT','DOC','audio','Date','setStatus','recoverStuckPlayback','releaseOfflineObjectUrl','updatePlayButton','console','fetchCacheBlob',`
-    let cancelPlaybackProbe=null,audioPriming=false,playbackPhase='idle',companionListeningAwaitingPlay=true,safariBlobRetryUsed=false,currentCacheObjectUrl='';
+    let cancelPlaybackProbe=null,audioPriming=false,playbackPhase='idle',companionListeningAwaitingPlay=true,playbackBlobRetryUsed=false,currentCacheObjectUrl='';
     const failedPlaybackUrls=new Set(),isNotAllowed=e=>e.name==='NotAllowedError',mediaText=()=> '解码错误';
     ${section('function playUrl(','async function resolveGdSourceTracks')}
     return {playUrl,cancel:()=>cancelPlaybackProbe?.(),phase:()=>playbackPhase,failed:()=>failedPlaybackUrls};
@@ -180,7 +179,7 @@ test('Safari priming grants play synchronously using a 100ms PCM clip, not the t
 });
 test('post-start recovery is bounded to one source-resolution pass per user selection',()=>{
   let resolutions=0,pauses=0;const statuses=[];
-  const recover=new Function('play','audio','setStatus',`let disposed=false,playbackWanted=true,current={title:'七里香'},playbackRecoveryCount=0;const failedPlaybackUrls=new Set(),clearFailedPlayback=()=>{playbackWanted=false;audio.pause();},mediaDetail=e=>e.message,selectedBilibiliVideo=()=>'',toast=()=>{};${section('function recoverStuckPlayback','function playUrl(')};return recoverStuckPlayback;`)(()=>resolutions++,{pause:()=>pauses++},x=>statuses.push(x));
+  const recover=new Function('play','audio','setStatus',`let disposed=false,playbackWanted=true,current={title:'七里香'},playbackRecoveryCount=0;const failedPlaybackUrls=new Set(),clearFailedPlayback=()=>{playbackWanted=false;audio.pause();},mediaDetail=e=>e.message,toast=()=>{};${section('function recoverStuckPlayback','function playUrl(')};return recoverStuckPlayback;`)(()=>resolutions++,{pause:()=>pauses++},x=>statuses.push(x));
   recover(Error('卡住'),'one');recover(Error('再次卡住'),'two');recover(Error('旧事件'),'one');assert.equal(resolutions,1);assert.equal(pauses,1);
 });
 
@@ -259,9 +258,13 @@ test('title-only discovery includes later sources without guessing who the origi
   assert.deepEqual(api.calls,['netease','joox','bilibili']);assert.deepEqual(api.results(),[cover,other]);
 });
 
-test('Safari stalled direct media gets only one CORS-permitted Blob transport retry per selection',async()=>{
-  let fetched=0;const api=playback({userAgent:'Version/26.0 Safari/605.1.15',fetchBlob:async()=>{fetched++;return new Blob(['audio data']);}});
-  const pending=api.playUrl('https://cdn.test/remote.mp3');api.player.error={code:2};api.player.emit('error');await flush();await flush();
-  assert.equal(api.player.src,'blob:safari-transport');api.player.error=null;api.tick(250,.25);api.tick(250,.5);await pending;assert.equal(fetched,1);api.cancel();
-  const next=api.playUrl('https://cdn.test/another.mp3');api.player.error={code:2};api.player.emit('error');await assert.rejects(next);assert.equal(fetched,1);
+test('Safari direct audio and Chrome Bilibili audio each get one CORS-permitted Blob retry per selection',async()=>{
+  for(const [userAgent,allowBlobTransport] of [['Version/26.0 Safari/605.1.15',false],['Chrome/149.0.0.0 Safari/537.36',true]]){
+    let fetched=0;
+    const api=playback({userAgent,fetchBlob:async()=>{fetched++;return new Blob(['audio data']);}});
+    const start=url=>api.playUrl(url,'音源',false,{allowBlobTransport});
+    const pending=start('https://cdn.test/remote.mp3');api.player.error={code:2};api.player.emit('error');await flush();await flush();
+    assert.equal(api.player.src,'blob:safari-transport');api.player.error=null;api.tick(250,.25);api.tick(250,.5);await pending;assert.equal(fetched,1);api.cancel();
+    const next=start('https://cdn.test/another.mp3');api.player.error={code:2};api.player.emit('error');await assert.rejects(next);assert.equal(fetched,1);
+  }
 });

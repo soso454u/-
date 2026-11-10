@@ -31,7 +31,7 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
     const settings=enabled===undefined?defaults:{...defaults,lxMusicEnabled:enabled},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
     const setStatus=message=>statuses.push(message),toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
-    let playbackRecoveryCount=0,safariBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
+    let playbackRecoveryCount=0,playbackBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{};
     const playOfflineSong=async()=>null,gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
     const isNotAllowed=e=>e.name==='NotAllowedError',clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
@@ -146,7 +146,7 @@ test('default playback tries GD NetEase, then LX QQ with a matched QQ ID', async
   await api.play(song);
   assert.deepEqual(order, ['netease', 'lx-tencent', 'joox']);
   const healthyGd = player(() => assert.fail('successful GD playback needs no LX request'), true, () => ({ offline: false }));
-  await healthyGd.play({ ...track, source: 'bilibili' });
+  await healthyGd.play({ ...track, source: 'joox' });
   assert.deepEqual(healthyGd.fallback, [['netease']]);
 });
 
@@ -181,12 +181,11 @@ test('previously imported QQ rows try their saved audio and recover by exact QQ 
   assert.equal(api.urls[0].options.expectedDuration, 226);
 });
 
-test('auto playback of a selected BV video stays on Bilibili and explains a missing stream', async () => {
-  const video = { source: 'bilibili', mediaId: 'BV1NS4t6oEXQ', title: '真的需要摸吗？MacBook Pro PROLED XDR上手', artist: '影视飓风' };
-  const api = player(() => assert.fail('a video does not need LX search'), true, () => { throw Error('哔哩哔哩：接口未返回播放地址'); });
-  await api.play(video);
+test('auto playback tries the selected Bilibili track before searching other sources', async () => {
+  const song = { source: 'bilibili', mediaId: 'gd:audio:001', title: '歌名', artist: '歌手' };
+  const api = player(() => assert.fail('successful GD playback needs no LX request'), true, () => ({ offline: false }));
+  await api.play(song);
   assert.deepEqual(api.fallback, [['bilibili']]);
-  assert.match(api.statuses.at(-1), /未返回播放地址.*打开 B 站原视频/);
 });
 
 test('autoplay denial produces a visible retry warning instead of silently stopping', async () => {
