@@ -18,7 +18,7 @@ function loadSettings(saved, { extension = false, failWrite = false } = {}) {
     },
     toastr: { warning: message => notices.push(message) },
   };
-  return new Function('ROOT', 'KEY', 'defaults', 'DEFAULT_COMPANION_PRESET', 'LEGACY_COMPANION_PRESET_V2', 'LEGACY_COMPANION_PRESET_V3', 'EXTENSION_MODE', 'console', `const GD_SOURCES=['netease','joox'];${section('let settings,storageWriteWarningShown', '// Bilibili module')};return {settings,persistSettings,notices:ROOT.toastr};`)(ROOT, 'test', { enabled: true, menuEnabled: true }, 'new preset', 'old preset', 'v3 preset', extension, { warn() {} });
+  return new Function('ROOT', 'KEY', 'defaults', 'DEFAULT_COMPANION_PRESET', 'LEGACY_COMPANION_PRESET_V2', 'LEGACY_COMPANION_PRESET_V3', 'EXTENSION_MODE', 'console', `const GD_SOURCES=['netease','joox'];${section('  const SEARCH_MODES', '  const LEGACY_COMPANION_PRESET_V2')}${section('let settings,storageWriteWarningShown', '// Bilibili module')};return {settings,persistSettings,notices:ROOT.toastr};`)(ROOT, 'test', { enabled: true, menuEnabled: true, searchMode: 'gd' }, 'new preset', 'old preset', 'v3 preset', extension, { warn() {} });
 }
 
 test('explicitly enabling the standalone script reveals a previously closed player and repairs its menu', () => {
