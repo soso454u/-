@@ -191,7 +191,7 @@ test('auto playback tries the selected Bilibili track before searching other sou
 test('a BV-only entry requests its audio without title searches on other sources', async () => {
   const mediaId='BV1NS4t6oEXQ';
   const api = player(() => assert.fail('a BV-only entry cannot look up a title on LX'), true, () => { throw Error('接口未返回播放地址'); });
-  await api.play({ source:'bilibili', mediaId, title:mediaId });
+  await api.play({ source:'bilibili', mediaId, title:'' });
   assert.deepEqual(api.fallback, [['bilibili']]);
   assert.match(api.statuses.at(-1), /接口未返回播放地址/);
 });

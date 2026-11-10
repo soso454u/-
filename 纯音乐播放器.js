@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.56';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.57';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -712,13 +712,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     el.dataset.miniShape=settings.miniShape==='square'?'square':'round'; el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
     return el;
   }
-  const setStatus = (x,persistent=false) => {
+  const setStatus = (x,persistent=false,tryAudio=null) => {
     const player=DOC.getElementById(ID),el=player?.querySelector('.status');if(!el)return;
     el.textContent=persistent?'':x;el.classList.toggle('status-alert',!!el.textContent&&!/^(正在播放|已暂停|就绪)$/.test(String(x)));el.setAttribute('role','status');
     let notice=player.querySelector('.selene-playback-notice');
     if(!persistent){notice?.remove();return;}
     if(!notice){notice=DOC.createElement('small');notice.className='selene-playback-notice';notice.setAttribute('role','status');player.querySelector('.lyrics').after(notice);}
     notice.textContent=x;
+    if(tryAudio){
+      const button=DOC.createElement('button');
+      button.type='button';button.textContent='按 BV 号尝试播放';button.onclick=tryAudio;
+      notice.append(button);
+    }
   };
   function applyTheme(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('theme-light','theme-dark');if(settings.theme==='light')el.classList.add('theme-light');if(settings.theme==='dark')el.classList.add('theme-dark');syncFloatingPanelThemes();syncCompanionAppearance();}
   function applySkin(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('skin-film','skin-red','skin-white','skin-black','skin-blue','skin-cream','skin-green','skin-albumglass','skin-orbit');el.classList.add(`skin-${settings.skin||'albumglass'}`);el.classList.remove('lyrics-focus');syncFloatingPanelThemes();syncCompanionAppearance();renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);}
@@ -838,18 +843,29 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }catch(error){lastError=error;if(error.retryAt)break;}
     }
     if(request!==searchRequest||disposed)return;
-    const tryById=!!bvId&&!found.length&&!lastError?.retryAt;
-    if(tryById){
-      found.push({id:`bilibili:${bvId}`,mediaId:bvId,title:bvId,artist:'',source:'bilibili',gdSource:'bilibili'});
+    let savedBilibiliResult=false;
+    if(bvId){
+      const hasTitle=song=>song?.source==='bilibili'&&bilibiliTrackId(song.mediaId)===bvId&&String(song.title||'').trim()&&!isBilibiliIdOnly(song);
+      const history=Array.isArray(settings.bilibiliSearchMetadata)?settings.bilibiliSearchMetadata:[];
+      const exact=found.find(hasTitle);
+      if(exact){
+        settings.bilibiliSearchMetadata=[{...exact,audio:''},...history.filter(song=>song?.mediaId!==bvId)].slice(0,32);
+        save();
+      }else if(!found.length){
+        const saved=[...history,...results,current,...(settings.favorites||[]),...queue,...(settings.playlists||[]).flatMap(playlist=>playlist.songs||[])].find(hasTitle);
+        if(saved){found=[{...saved}];savedBilibiliResult=true;}
+      }
     }
     results=strict?found:rankSearchResults(found,word);
     const listBox=DOC.querySelector(`#${ID} .list`);
     if(showList)render(results,heading,'results',false);else if(listBox){listBox.hidden=true;listBox.innerHTML='';}
-    if(tryById){setStatus('GD 未返回曲目信息，点击 BV 号可尝试获取音频',true);return;}
     if(results.length){
-      setStatus(`${results.length} 个${strict?'匹配':'搜索'}结果`);
+      setStatus(savedBilibiliResult?'显示已保存的哔哩哔哩曲目信息':`${results.length} 个${strict?'匹配':'搜索'}结果`);
       if(autoPlayFirst)await play(results[0]);
       if(showList)ROOT.setTimeout(()=>{if(request===searchRequest)hydrateResultCovers(results);},0);
+    }else if(bvId&&!lastError?.retryAt){
+      const track={id:`bilibili:${bvId}`,mediaId:bvId,title:'',artist:'',source:'bilibili',gdSource:'bilibili'};
+      setStatus('GD 暂未返回曲目信息',true,()=>play(track));
     }else{
       const message=lastError?.message||(strict?'没有找到符合歌名、歌手及版本的歌曲':selected==='bilibili'?'GD 哔哩哔哩音源没有返回搜索结果':'没有找到歌曲，可在设置中切换搜索源，或换个关键词');
       setStatus(message,true);if(!quiet)toast('warning',message);
@@ -1091,11 +1107,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function rankedPlaybackHits(rows,song){return rows.map(item=>({item,score:scorePlaybackHit(item,song)})).filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score);}
   function bilibiliTrackId(value){
-    const match=String(value||'').match(/^bv([a-z0-9]{10})$/i);
+    const match=String(value||'').trim().match(/^bv([a-z0-9]{10})$/i);
     return match?`BV${match[1]}`:'';
   }
   function isBilibiliIdOnly(song){
-    return song.source==='bilibili'&&song.title===song.mediaId&&!!bilibiliTrackId(song.mediaId);
+    const id=song.source==='bilibili'&&bilibiliTrackId(song.mediaId);
+    return !!id&&(!song.title||bilibiliTrackId(song.title)===id);
   }
   // Share upstream cooldown, gateway recovery and request diagnostics across script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0,gatewayDown:0});
@@ -2790,6 +2807,7 @@ ${latest}
     resultCoverObserver?.disconnect();resultCoverObserver=null;
     for(const controller of dataRequestControllers)controller.abort();dataRequestControllers.clear();
     gdResponses.clear();gdRequests.clear();lyricCache.clear();lyricRequests.clear();coverResponses.clear();coverRequests.clear();failedPlaybackUrls.clear();playbackBlobRetryUsed=false;
+    delete settings.bilibiliSearchMetadata;
     if(audioSession)try{audioSession.type='auto';applyAudioSessionMode();}catch{}
     const songs=[current,...queue,...results,...(settings.favorites||[]),...(settings.playlists||[]).flatMap(playlist=>playlist.songs||[])];
     for(const song of new Set(songs.filter(Boolean)))if(song.source!=='direct')song.audio='';
@@ -3197,6 +3215,7 @@ ${latest}
 
       #${ID}:not(.mini):not(.immersive) .now .status.status-alert{display:block!important;color:var(--smp-muted)!important;font:10px/1.4 system-ui!important}
       #${ID} .selene-playback-notice{display:block;flex:none;max-height:4.2em;overflow:auto;margin:4px 0;color:var(--smp-muted);font:11px/1.4 system-ui;overflow-wrap:anywhere}
+      #${ID} .selene-playback-notice button{margin-inline-start:6px;font:inherit}
       #${ID}.mini .selene-playback-notice{display:none}
       #${ID} [data-library-queue-count]{font:500 9px/1 system-ui;opacity:.7}
       #${ID} [data-library-queue-count][hidden]{display:none!important}

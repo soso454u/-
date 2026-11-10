@@ -5,7 +5,7 @@ import test from 'node:test';
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
 const matching=section('function normalizeSongText','// Share upstream cooldown');
-function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText,bilibiliTrackId};`)();}
+function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText,bilibiliTrackId,isBilibiliIdOnly};`)();}
 const jay={title:'七里香',artist:'周杰伦',duration:299,album:'七里香'};
 
 test('explicit singers reject covers and substring identities; known Jay aliases match',()=>{
@@ -28,13 +28,13 @@ test('version, album version and available duration evidence constrain candidate
 });
 
 function searchHarness(responses,settings={}){
-  const calls=[],statuses=[],api=matcher();let played;
-  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','bilibiliTrackId',`
-    let searchRequest=0,disposed=false,results=[];const ID='test';
+  const calls=[],statuses=[],api=matcher();let played,tryAudio;
+  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','bilibiliTrackId','isBilibiliIdOnly',`
+    let searchRequest=0,disposed=false,results=[];const ID='test',current=null,queue=[],save=()=>{};
     ${section('async function search(word','const coverResponses=')}
     return {search,results:()=>results};
-  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},message=>statuses.push(message),()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliTrackId);
-  return {...search,calls,statuses,played:()=>played};
+  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},(message,_persistent,action)=>{statuses.push(message);tryAudio=action;},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliTrackId,api.isBilibiliIdOnly);
+  return {...search,calls,statuses,played:()=>played,tryAudio:()=>tryAudio?.()};
 }
 test('search stops at correct Netease result; wrong singer falls through to JOOX',async()=>{
   const first=searchHarness({netease:[{...jay,source:'netease'}],joox:[jay]});
@@ -70,13 +70,26 @@ test('a full BV ID searches Bilibili directly and keeps opaque GD track IDs',asy
   assert.deepEqual(api.results(),tracks);
 });
 
-test('an empty BV search displays a manual lookup entry with the original ID',async()=>{
+test('an empty BV search offers an audio lookup without creating a fake song title',async()=>{
   const id='BV1NS4t6oEXQ',api=searchHarness({});
   await api.search(`bv${id.slice(2)}`);
   assert.deepEqual(api.calls,['bilibili']);
-  assert.deepEqual(api.results(),[{id:`bilibili:${id}`,mediaId:id,title:id,artist:'',source:'bilibili',gdSource:'bilibili'}]);
-  assert.match(api.statuses.at(-1),/点击 BV 号/);
+  assert.deepEqual(api.results(),[]);
+  assert.match(api.statuses.at(-1),/暂未返回曲目信息/);
   assert.equal(api.played(),undefined);
+  await api.tryAudio();
+  assert.deepEqual(api.played(),{id:`bilibili:${id}`,mediaId:id,title:'',artist:'',source:'bilibili',gdSource:'bilibili'});
+});
+
+test('only metadata from the same BV is reused when GD search is empty',async()=>{
+  const id='BV1NS4t6oEXQ',other='BV1NS4t6oEXR',settings={};
+  const track={id:`bilibili:${id}`,mediaId:id,title:'真的需要摸吗？MacBook Pro PROLED XDR上手',artist:'影视飓风',album:'数码',coverId:'//i1.hdslb.com/cover.jpg',source:'bilibili',audio:'https://cdn.test/temporary'};
+  await searchHarness({bilibili:[track]},settings).search(id);
+  const reloaded=searchHarness({},settings);
+  await reloaded.search(id);
+  assert.deepEqual(reloaded.results(),[{...track,audio:''}]);
+  await reloaded.search(other);
+  assert.deepEqual(reloaded.results(),[]);
 });
 
 test('playback tolerates provider labels and omitted version tags only with recording evidence',()=>{
