@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.61';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.62';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -222,48 +222,86 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       const mid=uid(row?.mid),name=text(row?.uname);
       return mid&&name?{id:mid,uid:mid,title:name,cover:cover(row.upic)}:null;
     }
-    function apiError(code){
-      const status=Math.abs(Number(code));
-      if(status===412||status===352)return Error(`B 站拦截了查询（${code}）`);
-      if(status===429)return Error(`B 站请求过多（${code}），请稍后再试`);
-      if([401,403,101].includes(status))return Error(`B 站接口拒绝匿名访问（${code}）`);
-      return Error(`B 站接口暂不可用（${code}）`);
+    function endpointUrl(value){
+      try{
+        const url=new URL(String(value||'').trim());
+        const loopback=url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+        if(url.username||url.password||url.protocol!=='https:'&&!loopback)return null;
+        url.hash='';
+        return url;
+      }catch{return null;}
     }
-    async function request(path,params){
-      const url=new URL(path,'https://api.bilibili.com');
-      url.search=new URLSearchParams(params);
+    function upstreamError(code,type){
+      const status=Math.abs(code),label=type==='HTTP'?`HTTP ${code}`:`业务码 ${code}`;
+      if([429,799].includes(status))return Error(`B 站请求过多（${label}），请稍后再试`);
+      if([412,352].includes(status))return Error(`B 站风控拦截（${label}）`);
+      if([401,101].includes(status))return Error(`B 站需要授权（${label}）`);
+      if(status===403)return Error(`B 站拒绝访问（${label}）`);
+      if([404,62002].includes(status))return Error(`B 站内容不可访问（${label}）`);
+      return Error(`B 站查询失败（${label}）`);
+    }
+    async function request(route,params){
+      const configured=String(settings.bilibiliSearchEndpoint||'').trim();
+      if(!configured)throw Error('B 站查询服务尚未配置');
+      const url=endpointUrl(configured);
+      if(!url)throw Error('B 站查询服务地址无效');
+      for(const [name,value] of Object.entries({route,...params}))url.searchParams.set(name,value);
       const controller=new ROOT.AbortController();
-      const timer=ROOT.setTimeout(()=>controller.abort(),8000);
+      let timedOut=false;
+      const timer=ROOT.setTimeout(()=>{timedOut=true;controller.abort();},8500);
       dataRequestControllers.add(controller);
       try{
-        let response;
-        try{response=await fetch(url,{credentials:'omit',signal:controller.signal});}
-        catch(error){
-          if(controller.signal.aborted)throw Error('B 站查询超时');
-          throw Error('B 站查询受网络或跨域限制',{cause:error});
+        let response,body;
+        try{
+          response=await fetch(url,{credentials:'omit',signal:controller.signal});
+          body=await response.text();
+        }catch(error){
+          if(timedOut)throw Error('读取 B 站查询服务超时');
+          if(controller.signal.aborted)throw error;
+          if(ROOT.navigator?.onLine===false)throw Error('网络未连接，无法读取 B 站查询服务');
+          throw Error('浏览器无法读取 B 站查询服务响应，可能是网络或跨域限制',{cause:error});
         }
-        if(!response.ok)throw apiError(response.status);
-        const payload=await response.json().catch(()=>null);
-        if(payload?.code!==0||!payload.data)throw apiError(payload?.code??'响应格式错误');
+        let payload;
+        try{payload=JSON.parse(body);}catch{}
+        if(!response.ok){
+          if(payload?.error==='upstream-http'&&Number.isInteger(payload.upstreamStatus))throw upstreamError(payload.upstreamStatus,'HTTP');
+          const detail={
+            'upstream-timeout':'服务端请求 B 站超时',
+            'upstream-network':'服务端连接 B 站失败',
+            'upstream-verification':'B 站要求安全验证',
+            'upstream-format':'B 站返回了无法读取的数据',
+            'invalid-query':'B 站搜索参数无效',
+          }[payload?.error];
+          throw Error(`${detail||'B 站查询服务请求失败'}（HTTP ${response.status}）`);
+        }
+        if(!Number.isInteger(payload?.code))throw Error(`B 站查询服务响应格式异常（HTTP ${response.status}）`);
+        if(payload.code!==0)throw upstreamError(payload.code,'business');
+        if(!payload.data||typeof payload.data!=='object'||Array.isArray(payload.data))throw Error('B 站返回的查询资料不完整');
         return payload.data;
       }finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);}
     }
+    function parseRows(rows,normalize){
+      const parsed=rows.map(normalize).filter(Boolean);
+      if(rows.length&&!parsed.length)throw Error('B 站返回的搜索结果缺少有效资料');
+      return parsed;
+    }
     async function search({word,users,order,page,creator}){
       if(creator){
-        const size=20;
-        const data=await request('/x/space/arc/search',{mid:creator.uid,pn:page,ps:size,order:'pubdate'});
+        const data=await request('submissions',{mid:creator.uid,page});
         const rows=data.list?.vlist;
         if(!Array.isArray(rows))throw Error('B 站投稿列表响应格式异常');
-        return {rows:rows.map(row=>video({...row,mid:creator.uid})).filter(Boolean),more:page*size<Number(data.page?.count)};
+        return {rows:parseRows(rows,row=>video({...row,mid:creator.uid})),more:page*20<Number(data.page?.count)};
       }
-      const params={keyword:word,search_type:users?'bili_user':'video',page};
-      if(!users)params.order=order;
-      const data=await request('/x/web-interface/search/type',params);
+      const data=await request(users?'users':'videos',{keyword:word,page,...(users?{}:{order})});
       const rows=Array.isArray(data.result)?data.result:null;
-      if(!rows&&Number(data.numResults)!==0)throw Error('B 站搜索响应格式异常');
-      return {rows:(rows||[]).map(users?user:row=>video(row)).filter(Boolean),more:page<Number(data.numPages)};
+      if(!rows&&![0,'0'].includes(data.numResults))throw Error('B 站搜索响应格式异常');
+      return {rows:parseRows(rows||[],users?user:row=>video(row)),more:page<Number(data.numPages)};
     }
-    const view=async bvid=>video(await request('/x/web-interface/view',{bvid}),bvid);
+    async function view(bvid){
+      const data=await request('video',{bvid});
+      if(id(data.bvid)!==bvid||!text(data.title))throw Error('B 站未返回该 BV 的视频资料');
+      return video(data,bvid);
+    }
     function createPlayer({beforeOpen,onClose}){
       const margin=10,step=80;
       let panel,activeId='',preferredWidth=420,position,drag;
@@ -395,7 +433,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }
       return {open,close,hide,show,isOpen:()=>!!panel};
     }
-    return {isEntry,trackId,inputId,video,videoUrl,siteSearch,spaceUrl,search,view,createPlayer};
+    return {isEntry,trackId,inputId,video,videoUrl,siteSearch,spaceUrl,endpointUrl,search,view,createPlayer};
   })();
   const isVideoEntry=bilibili.isEntry;
   const bilibiliPlayer=bilibili.createPlayer({
@@ -1183,7 +1221,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const request=++searchRequest,box=DOC.querySelector(`#${ID} .list`);
     if(!box)return;
     const bvid=!users&&!creator?bilibili.inputId(word):'';
-    const site=creator?bilibili.spaceUrl(creator.uid):bvid?bilibili.videoUrl(bvid):bilibili.siteSearch(word,users,order);
+    const site=creator?bilibili.spaceUrl(creator.uid):bilibili.siteSearch(word,users,order);
     const title=creator?`${creator.title} · 公开投稿`:users?'B 站 UP 主':'B 站视频';
     let page=0,more=false,busy=false,error='';
     const saved=bvid?[...(settings.favorites||[]),...(settings.playlists||[]).flatMap(list=>list.songs||[]),...(Array.isArray(settings.bilibiliSearchMetadata)?settings.bilibiliSearchMetadata:[])]
@@ -1201,11 +1239,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       box.innerHTML=`<header class="bilibili-heading"><b>${esc(title)}</b><div class="bilibili-heading-actions">
         ${back?'<button type="button" data-bili-back>返回 UP 主</button>':''}
         ${!users&&!creator&&!bvid&&(!error||rows.length)?`<button type="button" data-bili-sort aria-label="切换视频排序">${order==='pubdate'?'最新发布':'综合排序'}</button>`:''}
-        <a href="${esc(site)}" target="_blank" rel="noopener noreferrer">${bvid?'在 B 站打开 ↗':creator?'去 B 站看投稿 ↗':'去 B 站搜索 ↗'}</a></div></header>
+        ${!bvid&&error?`<a href="${esc(site)}" target="_blank" rel="noopener noreferrer">${creator?'去 B 站看投稿 ↗':'去 B 站搜索 ↗'}</a>`:''}</div></header>
         ${rows.map((row,index)=>`<article class="row bilibili-result" data-bili-index="${index}" data-track-id="${esc(row.id)}">
           ${row.cover?`<img alt="" src="${esc(row.cover)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<i class="bilibili-result-placeholder" aria-hidden="true">${users?'UP':'▶'}</i>`}
           <div><b><button type="button" class="bilibili-result-title">${esc(row.title)}</button></b><span>${esc(users?`UID ${row.uid}`:row.title===row.bvid?'点击播放视频':bilibiliVideoInfo(row))}</span></div>
-          ${users?'':`<span class="row-tools">${bilibiliMenuButtons(row)}</span>`}</article>`).join('')}
+          ${users?'':`<span class="row-tools">${bilibiliMenuButtons(row,false)}</span>`}</article>`).join('')}
         ${note||more?`<p class="bilibili-search-note" role="status">${esc(note)}${!busy&&more?`<button type="button" data-bili-more>${error?'重试':'加载更多'}</button>`:''}</p>`:''}`;
       box.onclick=handleClick;
       box.scrollTop=scroll;
@@ -1308,8 +1346,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       resultCoverObserver?.unobserve(img);
     });
   }
-  function bilibiliMenuButtons(song){
-    return bilibili.trackId(song)?'<button type="button" data-bili-action="play" title="播放 B 站视频"></button><button type="button" data-bili-action="minimize" title="收起画面继续听（实验性）"></button><button type="button" data-bili-action="open" title="在 B 站打开"></button>':'';
+  function bilibiliMenuButtons(song,external=true){
+    if(!bilibili.trackId(song))return '';
+    return '<button type="button" data-bili-action="play" title="播放 B 站视频"></button><button type="button" data-bili-action="minimize" title="收起画面继续听（实验性）"></button>'+
+      (external?'<button type="button" data-bili-action="open" title="在 B 站打开"></button>':'');
   }
   function bilibiliVideoInfo(song){
     return [song.artist,song.duration>0?clock(song.duration):'',song.views!=null?`播放 ${Number(song.views).toLocaleString('zh-CN')}`:'',bilibili.trackId(song)].filter(Boolean).join(' · ')||'旧版 B 站记录';
@@ -3302,7 +3342,7 @@ ${latest}
       form.dataset.searchMode=mode.value;
       input.placeholder={gd:'歌曲名、歌手',other:'QQ 音乐歌名、歌手',video:'关键词、BV 号或链接',user:'UP 主昵称'}[mode.value];
       const list=form.parentElement.querySelector('.list');
-      if(list?.querySelector('.bilibili-heading')){list.hidden=true;list.replaceChildren();list.onclick=null;}
+      if(list?.querySelector('.bilibili-heading')){list.replaceChildren();list.onclick=null;}
     };
     form.onsubmit=event=>{
       event.preventDefault();
@@ -4187,6 +4227,12 @@ ${latest}
   }
   ROOT.__SELENE_MUSIC_PLAYER__={
     getState:publicState,
+    setBilibiliEndpoint(value){
+      const raw=String(value??'').trim(),url=raw?bilibili.endpointUrl(raw):null;
+      if(raw&&!url)throw Error('B 站查询服务需要 HTTPS 地址');
+      settings.bilibiliSearchEndpoint=url?.href||'';
+      return persistSettings();
+    },
     setVisible:setPublicVisible,
     setCompanionVisible:setPublicCompanionVisible,
     setAutoShow:setPublicAutoShow,
