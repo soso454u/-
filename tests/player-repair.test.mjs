@@ -16,7 +16,7 @@ test('GD URL payloads accept signed URLs, protocol-relative links, arrays and ne
 function jooxResolver(available){
   const calls=[],played=[];
   const api=new Function('gdJson','playUrl',`
-    const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=e=>e.name==='NotAllowedError';
+    const GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=e=>e.name==='NotAllowedError';
     ${matching};${urlHelpers};${section('function gdSong','async function searchSource')};
     ${section('async function resolveGdSourceTracks','async function gdMetadata')}
     return gdFallback;
@@ -65,13 +65,13 @@ test('GD extra_data duration participates in strict version and lyric matching',
 });
 
 test('playback defaults to automatic fallback independently of search; per-song overrides remain exclusive',()=>{
-  const {order,choices}=new Function(`const GD_SOURCES=['netease','joox','bilibili'],playbackSources=new WeakMap(),settings={searchSource:'joox'};${urlHelpers};return {order:song=>playbackSourceOrder(playbackSourceChoice(song)),choices:playbackSources};`)();
+  const {order,choices}=new Function(`const GD_SOURCES=['netease','joox'],playbackSources=new WeakMap(),settings={searchSource:'joox'};${urlHelpers};return {order:song=>playbackSourceOrder(playbackSourceChoice(song)),choices:playbackSources};`)();
   const song={source:'joox'};
-  assert.deepEqual(order(song),['netease','joox','bilibili']);
-  assert.deepEqual(order({source:'netease'}),['netease','joox','bilibili']);
+  assert.deepEqual(order(song),['netease','joox']);
+  assert.deepEqual(order({source:'netease'}),['netease','joox']);
   choices.set(song,'joox');assert.deepEqual(order(song),['joox']);
   choices.set(song,'netease');assert.deepEqual(order(song),['netease']);
-  choices.set(song,'auto');assert.deepEqual(order(song),['netease','joox','bilibili']);
+  choices.set(song,'auto');assert.deepEqual(order(song),['netease','joox']);
 });
 test('GD opaque track IDs are preserved verbatim and deprecated url_id never replaces them',async()=>{
   const id='joox:opaque+/==#',calls=[];
@@ -79,19 +79,19 @@ test('GD opaque track IDs are preserved verbatim and deprecated url_id never rep
   const track=(await resolve({source:'joox',gdSource:'joox',mediaId:id,id:`joox:${id}`,title:'夜曲',artist:'周杰倫',url_id:'obsolete-id',lyricId:'separate-lyric'},'joox',false))[0];
   assert.equal(calls[0].source,'joox');assert.equal(calls[0].id,id);assert.equal(track.mediaId,id);assert.equal(track.lyricId,'separate-lyric');
 });
-test('manual JOOX playback cannot fall through to Bilibili and identifies its own empty URL failure',async()=>{
+test('manual JOOX playback reports its own empty URL failure without falling back',async()=>{
   const calls=[];
-  const fallback=new Function('resolveGdSourceTracks',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return song=>gdFallback(song,0,()=>true,new Set(),playbackSourceOrder('joox'));`)(async(_,source)=>{calls.push(source);const tracks=[];tracks.reason='empty-url';return tracks;});
-  await assert.rejects(fallback({source:'joox'}),error=>/JOOX.*未返回播放地址/.test(error.message)&&!/哔哩哔哩/.test(error.message));
+  const fallback=new Function('resolveGdSourceTracks',`const GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云'},isNotAllowed=()=>false;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return song=>gdFallback(song,0,()=>true,new Set(),playbackSourceOrder('joox'));`)(async(_,source)=>{calls.push(source);const tracks=[];tracks.reason='empty-url';return tracks;});
+  await assert.rejects(fallback({source:'joox'}),error=>/JOOX.*未返回播放地址/.test(error.message));
   assert.deepEqual([...new Set(calls)],['joox']);assert.equal(calls.length,5);
 });
-test('a final Bilibili miss cannot overwrite an earlier JOOX playback error',async()=>{
+test('an earlier source miss cannot overwrite a JOOX playback error',async()=>{
   const calls=[];
-  const fallback=new Function('resolveGdSourceTracks','playUrl',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false,songDuration=()=>0;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return gdFallback;`)(async(_,source)=>{calls.push(source);if(source==='joox')return [{audio:'https://cdn.test/bad.mp3',source}];const tracks=[];tracks.reason='no-match';return tracks;},async()=>{throw Error('音频格式无法解码');});
+  const fallback=new Function('resolveGdSourceTracks','playUrl',`const GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云'},isNotAllowed=()=>false,songDuration=()=>0;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return gdFallback;`)(async(_,source)=>{calls.push(source);if(source==='joox')return [{audio:'https://cdn.test/bad.mp3',source}];const tracks=[];tracks.reason='no-match';return tracks;},async()=>{throw Error('音频格式无法解码');});
   await assert.rejects(fallback({source:'joox'}),error=>{
-    assert.match(error.message,/JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同一录音/);assert.deepEqual(error.failures.map(x=>x.source),['netease','joox','bilibili']);return true;
+    assert.match(error.message,/JOOX：音频格式无法解码/);assert.match(error.message,/网易云：未找到同一录音/);assert.deepEqual(error.failures.map(x=>x.source),['netease','joox']);return true;
   });
-  assert.equal(calls[0],'netease');assert.equal(calls.filter(x=>x==='bilibili').length,1,'a missing identity stops quality requests for that source');
+  assert.equal(calls[0],'netease');assert.equal(calls.filter(x=>x==='netease').length,1,'a missing identity stops quality requests for that source');
 });
 
 test('artist aliases and collaborator formatting are tolerant while identity remains explicit',()=>{
@@ -108,7 +108,7 @@ test('artist aliases and collaborator formatting are tolerant while identity rem
 
 test('a dead selected JOOX record tries another matched release before leaving JOOX',async()=>{
   const calls=[],played=[];
-  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
+  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={joox:'JOOX'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async params=>{
     calls.push(params);
     if(params.types==='search')return [
       {id:'wrong',name:'夜曲',artist:['翻唱者']},
@@ -120,23 +120,6 @@ test('a dead selected JOOX record tries another matched release before leaving J
   const song=await fallback({title:'夜曲',artist:'周杰倫',source:'joox',gdSource:'joox',mediaId:'dead'},0,()=>true,new Set(),['joox']);
   assert.equal(song.mediaId,'working');assert.equal(song.lyricId,'new-lyrics');assert.equal(song.coverId,'new-cover');
   assert.ok(calls.every(call=>call.source==='joox'));assert.ok(calls.length<=9);assert.deepEqual(played,['https://cdn.test/working.mp3']);
-});
-
-test('Bilibili refreshes a failed stream for the selected opaque GD ID and plays the new audio',async()=>{
-  const calls=[],played=[],id='recording:42';
-  const fallback=new Function('gdJson','playUrl',`const GD_SOURCES=['bilibili'],GD_SOURCE_LABELS={bilibili:'哔哩哔哩'},isNotAllowed=()=>false;${matching};${urlHelpers};${section('function gdSong','async function searchSource')};${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;`)(async (params,options)=>{
-    assert.equal(params.types,'url');assert.equal(params.id,id);
-    calls.push([params.br,options.fresh]);
-    return {url:options.fresh?'https://cdn.test/fresh.m4a':params.br==='320'?'https://cdn.test/expired.m4a':''};
-  },async (url,_label,_isolated,options)=>{
-    assert.equal(options.allowBlobTransport,true);
-    played.push(url);
-    if(played.length===1)throw Object.assign(Error('expired'),{media:{code:4}});
-  });
-  const song=await fallback({title:'夜曲',artist:'翻唱歌手',source:'bilibili',mediaId:id});
-  assert.deepEqual(calls,[['320',false],['128',false],['999',false],['320',true]]);
-  assert.deepEqual(played,['https://cdn.test/expired.m4a','https://cdn.test/fresh.m4a']);
-  assert.equal(song.audio,'https://cdn.test/fresh.m4a');
 });
 
 test('JOOX caps unavailable releases to three identities and sixteen URL requests',async()=>{
@@ -164,7 +147,7 @@ test('empty playback URL responses are not cached between settled requests',asyn
 
 test('broken platform artwork uses verified backup artwork without altering track or lyric IDs',async()=>{
   const song={title:'夜曲',artist:'周杰伦',album:'十一月的萧邦',duration:226,source:'joox',mediaId:'J',lyricId:'L',cover:'https://broken.test/old.jpg'},calls=[];
-  const resolve=new Function('gdCover','coverSearch','imageLoads',`${matching};${urlHelpers};const METING_METADATA_APIS=['https://backup.test/api'];${section('function metingSearchUrl','async function coverSearch')};${section('async function metingCover','function imageLoads')};${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>{calls.push('gd');return 'https://broken.test/gd.jpg';},async()=>[
+  const resolve=new Function('gdCover','coverSearch','imageLoads',`${matching};${urlHelpers};const isVideoEntry=()=>false,METING_METADATA_APIS=['https://backup.test/api'];${section('function metingSearchUrl','async function coverSearch')};${section('async function metingCover','function imageLoads')};${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>{calls.push('gd');return 'https://broken.test/gd.jpg';},async()=>[
     {name:'夜曲',artist:'翻唱者',album:song.album,pic:'https://good.test/wrong-artist.jpg'},
     {name:'夜曲',artist:'周杰倫',album:'不同专辑',pic:'https://good.test/wrong-album.jpg'},
     {name:'夜曲 (Live)',artist:'周杰倫',album:song.album,pic:'https://good.test/live.jpg'},
@@ -174,7 +157,7 @@ test('broken platform artwork uses verified backup artwork without altering trac
 });
 
 test('healthy artwork avoids all backup requests and failed backup searches are deduplicated',async()=>{
-  const resolve=new Function('imageLoads','gdCover','metingCover',`${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>true,()=>assert.fail('unnecessary GD call'),()=>assert.fail('unnecessary backup call'));
+  const resolve=new Function('imageLoads','gdCover','metingCover',`const isVideoEntry=()=>false;${section('async function resolveCover','async function applyCurrentCover')};return resolveCover;`)(async()=>true,()=>assert.fail('unnecessary GD call'),()=>assert.fail('unnecessary backup call'));
   assert.equal(await resolve({cover:'https://good.test/cover.jpg'}),'https://good.test/cover.jpg');
   let calls=0;
   const search=new Function('ROOT','fetch',`let dataCacheGeneration=0;const coverResponses=new Map(),coverRequests=new Map(),dataRequestControllers=new Set();${section('async function coverSearch','async function metingCover')};return coverSearch;`)({AbortController,setTimeout,clearTimeout},async()=>{calls++;return {ok:false,status:503};});

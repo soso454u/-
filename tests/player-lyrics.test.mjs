@@ -11,7 +11,7 @@ function section(start, end) {
 function lyrics(fetch = async () => { throw Error('unexpected request'); }, rate = { times: [], until: 0 }, meting = []) {
   const ROOT = { __SELENE_GD_RATE__: rate, AbortController, setTimeout, clearTimeout };
   return new Function('ROOT', 'fetch', 'URL', 'METING_METADATA_APIS', `
-    const GD_API='https://music-api.gdstudio.xyz/api.php', audio={duration:240};
+    const GD_API='https://music-api.gdstudio.xyz/api.php', GD_SOURCES=['netease','joox'],isVideoEntry=()=>false,audio={duration:240};
     let disposed=false,lyricTimeline=[];const lyricCache=new Map(),lyricRequests=new Map();
     ${section('function normalizeSongText', 'function activeLyricIndex')}
     ${section('function activeLyricIndex', 'function renderImmersiveLyrics')}

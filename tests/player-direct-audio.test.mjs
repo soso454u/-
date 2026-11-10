@@ -55,8 +55,8 @@ test('replacing and clearing manual audio updates saved copies without losing pl
 });
 
 const fallbackSource = section('async function gdFallback', 'async function gdMetadata');
-function fallback({ gd, meting = async () => null, play, sources = ['netease', 'joox', 'bilibili'] }) {
-  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'resolveMetingSourceTrack', 'playUrl', 'isNotAllowed', 'console', 'songDuration', 'sourceBitrates', 'playbackSourceOrder', `${fallbackSource};return gdFallback;`)(sources, {}, gd, meting, play, error => error.name === 'NotAllowedError', { warn() {} }, song => Number(song.duration)||0, source => source==='joox'?['320','192','128','740','999']:['320','128'], song => [...new Set([song.source,...sources].filter(source=>sources.includes(source)))]);
+function fallback({ gd, play, sources = ['netease', 'joox'] }) {
+  return new Function('GD_SOURCES', 'GD_SOURCE_LABELS', 'resolveGdSourceTracks', 'playUrl', 'isNotAllowed', 'console', 'songDuration', 'sourceBitrates', 'playbackSourceOrder', `${fallbackSource};return gdFallback;`)(sources, {}, gd, play, error => error.name === 'NotAllowedError', { warn() {} }, song => Number(song.duration)||0, source => source==='joox'?['320','192','128','740','999']:['320','128'], song => [...new Set([song.source,...sources].filter(source=>sources.includes(source)))]);
 }
 
 test('unplayable 320k and duplicate candidates do not prevent lower bitrate playback', async () => {
@@ -70,7 +70,7 @@ test('unplayable 320k and duplicate candidates do not prevent lower bitrate play
 
 test('failed GD playback proceeds to JOOX without requesting Meting', async () => {
   const tried = [];
-  const gdFallback = fallback({ gd: async (_, source) => [{ source, audio: `${source}-gd` }], meting: async (_, source) => ({ source, audio: `${source}-meting` }), play: async url => { tried.push(url); if (url !== 'joox-gd') throw Error('unplayable'); } });
+  const gdFallback = fallback({ gd: async (_, source) => [{ source, audio: `${source}-gd` }], play: async url => { tried.push(url); if (url !== 'joox-gd') throw Error('unplayable'); } });
   const result = await gdFallback({ source: 'netease' });
   assert.deepEqual(tried, ['netease-gd', 'joox-gd']);
   assert.equal(result.source, 'joox');

@@ -26,8 +26,10 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
   const audio = { dataset: {}, duration: 226, pause() {} };
   const urls = [], lyrics = [], fallback = [], statuses = [];
   const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', `
-    const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'};
+    const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'},METING_METADATA_APIS=[SELENE_METING_API];
+    const getResponseUrl=value=>value||'';
     ${section('const defaults =', 'const KEEPALIVE_NAME').replace('DEFAULT_COMPANION_PRESET', "''")}
+    const isVideoEntry=()=>false,bilibiliPlayer={close(){}};
     const settings=enabled===undefined?defaults:{...defaults,lxMusicEnabled:enabled},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
     const setStatus=message=>statuses.push(message),toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
@@ -42,7 +44,7 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
     ${section('function metingSearchUrl', 'async function coverSearch')}
     ${section('function playbackSourceChoice', 'async function gdCover')}
     ${section('const LX_SOURCES=', 'function parse(text)')}
-    return {play,playLxSource,select:(song,source)=>playbackSources.set(song,source)};
+    return {play,playLxSource,searchMetingSource,select:(song,source)=>playbackSources.set(song,source)};
   `);
   return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia), urls, lyrics, fallback, statuses };
 }
@@ -83,7 +85,7 @@ test('explicit LX playback resolves a strict QQ match and retains the original G
   const disabled = player(() => assert.fail('disabled LX should not make requests'), false);
   disabled.select(song, 'lx-tencent');
   await disabled.play(song);
-  assert.deepEqual(disabled.fallback, [['netease', 'joox', 'bilibili']]);
+  assert.deepEqual(disabled.fallback, [['netease', 'joox']]);
 });
 
 test('cross-platform matching obtains real NetEase and Kugou IDs from the selected platform', async () => {
@@ -163,7 +165,7 @@ test('a failed LX lookup leaves the remaining GD sources available unless GD is 
       return { source: 'joox', offline: false };
     });
     await api.play({ ...track, source: 'tencent', mediaId: songId, gdSource: 'tencent' });
-    assert.deepEqual(order, ['lx-tencent', 'netease', 'joox', 'bilibili']);
+    assert.deepEqual(order, ['lx-tencent', 'netease', 'joox']);
     if (rateLimited) assert.match(api.statuses.at(-1), /HTTP 502.*网易云不可用/);
   }
 });
@@ -179,21 +181,6 @@ test('previously imported QQ rows try their saved audio and recover by exact QQ 
   await api.play({ ...song });
   assert.deepEqual(api.urls.map(({ url }) => url), [audio, 'https://cdn.test/live.m4a']);
   assert.equal(api.urls[0].options.expectedDuration, 226);
-});
-
-test('auto playback tries the selected Bilibili track before searching other sources', async () => {
-  const song = { source: 'bilibili', mediaId: 'gd:audio:001', title: '歌名', artist: '歌手' };
-  const api = player(() => assert.fail('successful GD playback needs no LX request'), true, () => ({ offline: false }));
-  await api.play(song);
-  assert.deepEqual(api.fallback, [['bilibili']]);
-});
-
-test('a BV-only entry requests its audio without title searches on other sources', async () => {
-  const mediaId='BV1NS4t6oEXQ';
-  const api = player(() => assert.fail('a BV-only entry cannot look up a title on LX'), true, () => { throw Error('接口未返回播放地址'); });
-  await api.play({ source:'bilibili', mediaId, title:'' });
-  assert.deepEqual(api.fallback, [['bilibili']]);
-  assert.match(api.statuses.at(-1), /接口未返回播放地址/);
 });
 
 test('autoplay denial produces a visible retry warning instead of silently stopping', async () => {
@@ -221,4 +208,31 @@ test('expired addresses are skipped, fresh addresses are never persisted, and HT
   const broken = player(async () => { failures++; return new Response(null, { status: 502 }); });
   await assert.rejects(broken.playLxSource(song, 'netease', () => true), /HTTP 502/);
   assert.equal(failures, 1);
+});
+
+test('QQ search keeps the exact playable ID and uses the existing LX Worker on selection', async () => {
+  const calls=[];
+  const api=player(async (url,options)=>{
+    calls.push(url);
+    if(url.origin===new URL(meting).origin){
+      assert.equal(url.searchParams.get('type'),'search');
+      assert.equal(url.searchParams.get('server'),'tencent');
+      return Response.json([
+        {title:'Bad ID',url:`${meting}?type=url&server=tencent&id=1`},
+        {title:'Album ID',pic:`${meting}?type=pic&server=tencent&id=${songId}`},
+        {title:'Wrong service',url:`${meting}?type=url&server=netease&id=${songId}`},
+        {title:'歌名',author:'歌手',url:`${meting}?type=url&server=tencent&id=${songId}&auth=demo`},
+      ]);
+    }
+    assert.deepEqual(workerQuery(url,options),{source:'tx',id:songId,quality:'128k'});
+    return Response.json({code:0,url:'https://cdn.test/qq.mp3'});
+  },true,()=>assert.fail('QQ discovery should use its exact LX ID'));
+  const [song,...extra]=await api.searchMetingSource('tencent','歌名');
+  assert.deepEqual(extra,[]);
+  assert.equal(song.id,`tencent:${songId}`);
+  assert.equal(song.mediaId,songId);
+  assert.equal(song.audio,'');
+  await api.play(song);
+  assert.equal(calls.length,2);
+  assert.equal(api.urls[0].url,'https://cdn.test/qq.mp3');
 });

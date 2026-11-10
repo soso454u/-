@@ -23,10 +23,10 @@ function requests(fetch){
 }
 function fallback(get,play=async()=>{},active=()=>true,requested=song){
   return new Function('gdJson','playUrl','console',`
-    const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=e=>e.name==='NotAllowedError';
+    const GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云'},isNotAllowed=e=>e.name==='NotAllowedError';
     ${matching};${urls};${section('function gdSong','async function searchSource')};
     ${section('async function resolveGdSourceTracks','async function gdMetadata')};return gdFallback;
-  `)(get,play,quiet)(requested,0,active,new Set(),['joox','netease','bilibili']);
+  `)(get,play,quiet)(requested,0,active,new Set(),['joox','netease']);
 }
 
 test('signed and empty URL responses share only in-flight work, while searches retain caching',async()=>{
@@ -89,7 +89,7 @@ test('a sustained outage stops each source after its first gateway failure',asyn
     assert.ok(error.failures.every(source=>source.attempts.length===1&&source.attempts[0].kind==='gateway'));
     return true;
   });
-  assert.deepEqual(sources,['joox','joox','joox','joox','netease','bilibili']);
+  assert.deepEqual(sources,['joox','joox','joox','joox','netease']);
   assert.ok(api.rate.gatewayDown>Date.now());
   const params={types:'url',source:'joox',id:'selected'};
   status=500;
@@ -98,7 +98,7 @@ test('a sustained outage stops each source after its first gateway failure',asyn
   status=200;
   assert.equal((await api.get(params)).url,'https://cdn.test/recovered.mp3');
   assert.equal(api.rate.gatewayDown,0);
-  assert.equal(sources.length,8);
+  assert.equal(sources.length,7);
 });
 
 test('an aborted backoff and an upstream cooldown both prevent another fetch',async()=>{
@@ -246,7 +246,7 @@ function playerHarness(failure=Error('接口未返回播放地址')){
   const api=new Function('wait','warnings','console','failure',`
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false,playbackRecoveryCount=0,playbackBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const failedPlaybackUrls=new Set(),GD_SOURCES=['joox'],GD_SOURCE_LABELS={},settings={},audio={pause(){}},DOC={querySelector:()=>null},ID='test';
-    const playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw failure;},isNotAllowed=()=>false,mediaDetail=e=>e.message;
+    const isVideoEntry=()=>false,bilibiliPlayer={close(){}},playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw failure;},isNotAllowed=()=>false,mediaDetail=e=>e.message;
     const clearFailedPlayback=()=>{playbackWanted=false;},toast=(kind,message)=>warnings.push(message);
     ${matching};
     ${section('let pendingPlay=null;','function parse(text)')};
