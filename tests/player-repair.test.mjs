@@ -89,7 +89,7 @@ test('a final Bilibili miss cannot overwrite an earlier JOOX playback error',asy
   const calls=[];
   const fallback=new Function('resolveGdSourceTracks','playUrl',`const GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={joox:'JOOX',netease:'网易云',bilibili:'哔哩哔哩'},isNotAllowed=()=>false,songDuration=()=>0;${urlHelpers};${section('async function gdFallback','async function gdMetadata')};return gdFallback;`)(async(_,source)=>{calls.push(source);if(source==='joox')return [{audio:'https://cdn.test/bad.mp3',source}];const tracks=[];tracks.reason='no-match';return tracks;},async()=>{throw Error('音频格式无法解码');});
   await assert.rejects(fallback({source:'joox'}),error=>{
-    assert.match(error.message,/JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同歌手/);assert.deepEqual(error.failures.map(x=>x.source),['netease','joox','bilibili']);return true;
+    assert.match(error.message,/JOOX：音频格式无法解码/);assert.match(error.message,/哔哩哔哩：未找到同一录音/);assert.deepEqual(error.failures.map(x=>x.source),['netease','joox','bilibili']);return true;
   });
   assert.equal(calls[0],'netease');assert.equal(calls.filter(x=>x==='bilibili').length,1,'a missing identity stops quality requests for that source');
 });

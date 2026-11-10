@@ -101,13 +101,27 @@ test('fallback starts at the default quality without forced refresh rounds', asy
 const importSource = section('function playlistSongsFromRows', 'let activeCompanionWorldText');
 function importer(settings) {
   const rows = [{ title: '稻香', author: '周杰伦', pic: '', url: 'https://cdn.test/official.mp3?id=1' }];
-  return new Function('settings', 'offlineKey', 'strip', 'PLAYLIST_IMPORT_LIMIT', 'playlistInputUrl', 'resolvePlaylistShareLink', 'playlistLinkInfo', 'METING_COVER_APIS', 'fetch', 'playlistMatchesImport', 'save', 'showPlaylists', 'setStatus', 'toast', `${importSource};return {importPlaylist,playlistSongsFromRows};`)(settings, offlineKey, strip, 1000, value => new URL(value).href, async url => ({ url }), () => ({ u: new URL('https://music.163.com/playlist?id=123'), source: 'netease', id: '123', rawId: '123', sourceLabel: '网易云' }), ['https://api.test/'], async () => ({ ok: true, json: async () => rows }), () => true, () => {}, () => {}, () => {}, () => {});
+  return new Function('settings', 'offlineKey', 'strip', 'PLAYLIST_IMPORT_LIMIT', 'playlistInputUrl', 'resolvePlaylistShareLink', 'playlistLinkInfo', 'METING_COVER_APIS', 'fetch', 'playlistMatchesImport', 'save', 'showPlaylists', 'setStatus', 'toast', `${section('function normalizeSongText','// Share upstream cooldown')};${section('function getResponseUrl','function sourceBitrates')};${importSource};return {importPlaylist,playlistSongsFromRows};`)(settings, offlineKey, strip, 1000, value => new URL(value).href, async url => ({ url }), () => ({ u: new URL('https://music.163.com/playlist?id=123'), source: 'netease', id: '123', rawId: '123', sourceLabel: '网易云' }), ['https://api.test/'], async () => ({ ok: true, json: async () => rows }), () => true, () => {}, () => {}, () => {}, () => {});
 }
 
 test('platform imports retain playable URLs instead of discarding them', () => {
   const { playlistSongsFromRows } = importer({ playlists: [] });
   assert.equal(playlistSongsFromRows([{ title: '稻香', author: '周杰伦', url: 'https://cdn.test/official.mp3?id=1' }], 'netease')[0].audio, 'https://cdn.test/official.mp3?id=1');
   assert.equal(playlistSongsFromRows([{ title: '稻香', author: '周杰伦', url: 'javascript:alert(1)' }], 'netease')[0].audio, '');
+});
+
+test('QQ import preserves distinct recordings, duration, performer and platform ID', () => {
+  const { playlistSongsFromRows } = importer({ playlists: [] });
+  const rows = [
+    { name: '夜曲', singer: [{ name: '翻唱歌手' }], album: { name: '巡演纪念' }, version: 'Live', interval: 228, songmid: '00000000000001' },
+    { title: '夜曲', author: '翻唱歌手', duration: '03:37', url: '//meting.test/api?server=tencent&type=url&id=00000000000002' },
+  ];
+  const songs = playlistSongsFromRows([...rows, rows[1]], 'tencent');
+  assert.deepEqual(songs.map(({ mediaId, title, artist, album, version, duration }) => ({ mediaId, title, artist, album, version, duration })), [
+    { mediaId: '00000000000001', title: '夜曲', artist: '翻唱歌手', album: '巡演纪念', version: 'Live', duration: 228 },
+    { mediaId: '00000000000002', title: '夜曲', artist: '翻唱歌手', album: '', version: '', duration: 217 },
+  ]);
+  assert.match(songs[1].audio, /^https:/);
 });
 
 test('platform sync preserves manual audio and existing playlist identity', async () => {

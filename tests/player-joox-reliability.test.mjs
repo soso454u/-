@@ -248,6 +248,7 @@ function playerHarness(failure=Error('接口未返回播放地址')){
     const failedPlaybackUrls=new Set(),GD_SOURCES=['joox'],GD_SOURCE_LABELS={},settings={},audio={pause(){}},DOC={querySelector:()=>null},ID='test';
     const playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw failure;},isNotAllowed=()=>false,mediaDetail=e=>e.message;
     const clearFailedPlayback=()=>{playbackWanted=false;},toast=(kind,message)=>warnings.push(message);
+    ${matching};
     ${section('let pendingPlay=null;','function parse(text)')};
     return {play,cancel:()=>{++playRequest;playbackWanted=false;}};
   `)(()=>{selections++;return new Promise(resolve=>pending.push(resolve));},warnings,quiet,failure);

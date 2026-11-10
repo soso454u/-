@@ -22,10 +22,10 @@ function workerQuery(url, options) {
   assert.equal(options.body, undefined);
   return Object.fromEntries(url.searchParams);
 }
-function player(fetch, enabled, resolveGd = () => null) {
+function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
   const audio = { dataset: {}, duration: 226, pause() {} };
   const urls = [], lyrics = [], fallback = [], statuses = [];
-  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', `
+  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', `
     const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox','bilibili'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'};
     ${section('const defaults =', 'const KEEPALIVE_NAME').replace('DEFAULT_COMPANION_PRESET', "''")}
     const settings=enabled===undefined?defaults:{...defaults,lxMusicEnabled:enabled},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
@@ -34,8 +34,8 @@ function player(fetch, enabled, resolveGd = () => null) {
     let playbackRecoveryCount=0,safariBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{};
     const playOfflineSong=async()=>null,gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
-    const isNotAllowed=()=>false,clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
-    const playUrl=async(url,label,isolated,options)=>urls.push({url,label,isolated,options});
+    const isNotAllowed=e=>e.name==='NotAllowedError',clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
+    const playUrl=async(url,label,isolated,options)=>{urls.push({url,label,isolated,options});return playMedia(url);};
     const recordCompanionPlay=()=>{},maybeAutoCompanion=()=>{},applyCurrentCover=()=>{},loadLyrics=song=>lyrics.push(song.gdLyricId);
     const console={warn(){}};
     ${section('function normalizeSongText', '// Share upstream cooldown')}
@@ -44,7 +44,7 @@ function player(fetch, enabled, resolveGd = () => null) {
     ${section('const LX_SOURCES=', 'function parse(text)')}
     return {play,playLxSource,select:(song,source)=>playbackSources.set(song,source)};
   `);
-  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd), urls, lyrics, fallback, statuses };
+  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia), urls, lyrics, fallback, statuses };
 }
 
 test('explicit LX playback resolves a strict QQ match and retains the original GD song identity', async () => {
@@ -159,13 +159,40 @@ test('a failed LX lookup leaves the remaining GD sources available unless GD is 
       return new Response(null, { status: 502 });
     }, undefined, sources => {
       order.push(...sources);
-      if (sources[0] === 'netease') throw Object.assign(Error('网易云不可用'), { retryAt: rateLimited ? Date.now() + 60000 : 0 });
+      if (rateLimited) throw Object.assign(Error('网易云不可用'), { retryAt: Date.now() + 60000 });
       return { source: 'joox', offline: false };
     });
     await api.play({ ...track, source: 'tencent', mediaId: songId, gdSource: 'tencent' });
-    assert.deepEqual(order, rateLimited ? ['netease', 'lx-tencent'] : ['netease', 'lx-tencent', 'joox', 'bilibili']);
-    if (rateLimited) assert.match(api.statuses.at(-1), /网易云不可用.*HTTP 502/);
+    assert.deepEqual(order, ['lx-tencent', 'netease', 'joox', 'bilibili']);
+    if (rateLimited) assert.match(api.statuses.at(-1), /HTTP 502.*网易云不可用/);
   }
+});
+
+test('previously imported QQ rows try their saved audio and recover by exact QQ ID without searching for a singer', async () => {
+  const audio = 'https://meting.test/api?server=tencent&type=url&id=00000000000001';
+  const song = { source: 'tencent', id: `tencent:${songId}:翻唱歌手`, mediaId: songId, title: '夜曲（现场）', artist: '翻唱歌手', duration: 226, audio };
+  const fetch = async (url, options) => {
+    assert.deepEqual(workerQuery(url, options), { source: 'tx', id: songId, quality: '128k' });
+    return Response.json({ code: 0, url: 'https://cdn.test/live.m4a' });
+  };
+  const api = player(fetch, true, () => assert.fail('the exact QQ recording should be attempted before GD'), url => { if (url === audio) throw Error('old link expired'); });
+  await api.play({ ...song });
+  assert.deepEqual(api.urls.map(({ url }) => url), [audio, 'https://cdn.test/live.m4a']);
+  assert.equal(api.urls[0].options.expectedDuration, 226);
+});
+
+test('auto playback of a selected BV video stays on Bilibili and explains a missing stream', async () => {
+  const video = { source: 'bilibili', mediaId: 'BV1NS4t6oEXQ', title: '真的需要摸吗？MacBook Pro PROLED XDR上手', artist: '影视飓风' };
+  const api = player(() => assert.fail('a video does not need LX search'), true, () => { throw Error('哔哩哔哩：接口未返回播放地址'); });
+  await api.play(video);
+  assert.deepEqual(api.fallback, [['bilibili']]);
+  assert.match(api.statuses.at(-1), /未返回播放地址.*打开 B 站原视频/);
+});
+
+test('autoplay denial produces a visible retry warning instead of silently stopping', async () => {
+  const api = player(() => assert.fail('autoplay denial is not a provider failure'), true, () => assert.fail('no fallback'), () => { throw new DOMException('denied', 'NotAllowedError'); });
+  await api.play({ ...track, customAudio: 'https://cdn.test/live.m4a' });
+  assert.match(api.statuses.at(-1), /浏览器阻止播放，请再次点击播放按钮/);
 });
 
 test('expired addresses are skipped, fresh addresses are never persisted, and HTTP failures stop lookup', async () => {
