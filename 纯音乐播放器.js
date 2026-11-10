@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.67';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.68';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -785,8 +785,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID} .selene-search-form{position:relative;--search-source-width:63px}
       #${ID} .search-source-picker{position:absolute;z-index:1;inset-inline-start:5px;top:50%;transform:translateY(-50%);width:var(--search-source-width);height:24px;display:flex;align-items:center;color:var(--smp-muted,inherit)}
       #${ID} .search-source-picker::before{content:'';position:absolute;inset-inline-end:0;top:6px;height:12px;border-inline-end:1px solid currentColor;opacity:.3;pointer-events:none}
-      #${ID} .search-source-picker::after{content:'';position:absolute;inset-inline-end:7px;top:8px;width:4px;height:4px;border:solid currentColor;border-width:0 1px 1px 0;transform:rotate(45deg);pointer-events:none}
-      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:100%;padding:0 14px 0 3px!important;color:inherit!important;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important;font:500 11px/1.2 system-ui,sans-serif;text-align:center;text-align-last:center;cursor:pointer}
+      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:100%;padding:0 4px!important;color:inherit!important;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important;font:500 12px/normal system-ui,sans-serif;text-align:center;text-align-last:center;cursor:pointer}
       #${ID} .search-mode:hover{color:var(--smp-text,currentColor)!important}
       #${ID} .search-mode:focus-visible{text-decoration:underline;text-underline-offset:3px}
       #${ID} .search-mode option{color:CanvasText;background:Canvas}
