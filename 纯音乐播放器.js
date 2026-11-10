@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.59';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.60';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -701,8 +701,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID} .selene-search-form{position:relative;--search-source-width:65px}
       #${ID} .search-source-picker{position:absolute;z-index:1;inset-inline-start:7px;top:50%;transform:translateY(-50%);width:var(--search-source-width);height:22px;display:flex;align-items:center;border-inline-end:1px solid var(--smp-control-border,#8884);color:var(--smp-text,inherit)}
       #${ID} .search-source-picker::after{content:'';position:absolute;inset-inline-end:8px;top:8px;width:4px;height:4px;border:solid currentColor;border-width:0 1px 1px 0;transform:rotate(45deg);opacity:.65;pointer-events:none}
-      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:26px;padding:0 14px 0 3px!important;color:inherit!important;opacity:.78;background:transparent!important;border:0!important;border-radius:5px;box-shadow:none!important;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer}
-      #${ID} .search-mode:focus-visible{outline:1px solid color-mix(in srgb,currentColor 50%,transparent);outline-offset:-1px}
+      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:26px;padding:0 14px 0 3px!important;color:inherit!important;opacity:.78;background:transparent!important;border:0!important;border-radius:0;outline:0!important;box-shadow:none!important;font:500 11px/1.2 system-ui,sans-serif;cursor:pointer}
+      #${ID} .search-mode:focus-visible{opacity:1;text-decoration:underline;text-underline-offset:3px}
       #${ID} .search-mode option{color:CanvasText;background:Canvas}
       #${ID}:not(.mini):not(.immersive)>.body>form.selene-search-form>.search-query{min-width:0;padding-inline-start:calc(var(--search-source-width) + 15px)!important}
       #${ID} .bilibili-heading{flex-wrap:wrap}
