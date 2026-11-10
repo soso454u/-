@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.66';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.67';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -187,13 +187,6 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       return id(song?.bvid)||(isEntry(song)?id(song.mediaId)||id(String(song.id??'').replace(/^bilibili(?:-video)?:/,'')):'');
     }
     const videoUrl=bvid=>`https://www.bilibili.com/video/${bvid}/`;
-    const spaceUrl=uid=>`https://space.bilibili.com/${uid}/video`;
-    function siteSearch(word,users,order){
-      const url=new URL(users?'https://search.bilibili.com/upuser':'https://search.bilibili.com/video');
-      url.searchParams.set('keyword',word);
-      if(!users&&order==='pubdate')url.searchParams.set('order',order);
-      return url.href;
-    }
     function text(value){
       const plain=String(value??'').replace(/<\/?em\b[^>]*>/gi,'');
       const entities={'&amp;':'&','&quot;':'"','&#39;':"'",'&lt;':'<','&gt;':'>'};
@@ -218,100 +211,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         duration,views:rawViews!=null&&String(rawViews).trim()&&Number.isFinite(Number(rawViews))&&Number(rawViews)>=0?Number(rawViews):null,
       };
     }
-    function user(row){
-      const mid=uid(row?.mid),name=text(row?.uname);
-      return mid&&name?{id:mid,uid:mid,title:name,cover:cover(row.upic)}:null;
-    }
-    function endpointUrl(value){
-      try{
-        const url=new URL(String(value||'').trim());
-        const loopback=url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname);
-        if(url.username||url.password||url.protocol!=='https:'&&!loopback)return null;
-        url.hash='';
-        return url;
-      }catch{return null;}
-    }
-    function upstreamError(code,type){
-      const status=Math.abs(code),label=type==='HTTP'?`HTTP ${code}`:`业务码 ${code}`;
-      if([429,799].includes(status))return Error(`B 站请求过多（${label}），请稍后再试`);
-      if([412,352].includes(status))return Error(`B 站风控拦截（${label}）`);
-      if([401,101].includes(status))return Error(`B 站需要授权（${label}）`);
-      if(status===403)return Error(`B 站拒绝访问（${label}）`);
-      if([404,62002].includes(status))return Error(`B 站内容不可访问（${label}）`);
-      return Error(`B 站查询失败（${label}）`);
-    }
-    async function request(route,params){
-      const configured=String(settings.bilibiliSearchEndpoint||'').trim();
-      if(!configured)throw Error('B 站查询服务尚未配置');
-      const url=endpointUrl(configured);
-      if(!url)throw Error('B 站查询服务地址无效');
-      for(const [name,value] of Object.entries({route,...params}))url.searchParams.set(name,value);
-      const controller=new ROOT.AbortController();
-      let timedOut=false;
-      const timer=ROOT.setTimeout(()=>{timedOut=true;controller.abort();},8500);
-      dataRequestControllers.add(controller);
-      try{
-        let response,body;
-        try{
-          response=await fetch(url,{credentials:'omit',signal:controller.signal});
-          body=await response.text();
-        }catch(error){
-          if(timedOut)throw Error('读取 B 站查询服务超时');
-          if(controller.signal.aborted)throw error;
-          if(ROOT.navigator?.onLine===false)throw Error('网络未连接，无法读取 B 站查询服务');
-          throw Error('浏览器无法读取 B 站查询服务响应，可能是网络或跨域限制',{cause:error});
-        }
-        let payload;
-        try{payload=JSON.parse(body);}catch{}
-        if(!response.ok){
-          if(payload?.error==='upstream-http'&&Number.isInteger(payload.upstreamStatus))throw upstreamError(payload.upstreamStatus,'HTTP');
-          const detail={
-            'upstream-timeout':'服务端请求 B 站超时',
-            'upstream-network':'服务端连接 B 站失败',
-            'upstream-verification':'B 站要求安全验证',
-            'upstream-format':'B 站返回了无法读取的数据',
-            'invalid-query':'B 站搜索参数无效',
-          }[payload?.error];
-          throw Error(`${detail||'B 站查询服务请求失败'}（HTTP ${response.status}）`);
-        }
-        if(!Number.isInteger(payload?.code))throw Error(`B 站查询服务响应格式异常（HTTP ${response.status}）`);
-        if(payload.code!==0)throw upstreamError(payload.code,'business');
-        if(!payload.data||typeof payload.data!=='object'||Array.isArray(payload.data))throw Error('B 站返回的查询资料不完整');
-        return payload.data;
-      }finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);}
-    }
-    function parseRows(rows,normalize){
-      const parsed=rows.map(normalize).filter(Boolean);
-      if(rows.length&&!parsed.length)throw Error('B 站返回的搜索结果缺少有效资料');
-      return parsed;
-    }
-    async function search({word,users,order,page,creator}){
-      if(creator){
-        const data=await request('submissions',{mid:creator.uid,page});
-        const rows=data.list?.vlist;
-        if(!Array.isArray(rows))throw Error('B 站投稿列表响应格式异常');
-        return {rows:parseRows(rows,row=>video({...row,mid:creator.uid})),more:page*20<Number(data.page?.count)};
-      }
-      const data=await request(users?'users':'videos',{keyword:word,page,...(users?{}:{order})});
-      const rows=Array.isArray(data.result)?data.result:null;
-      if(!rows&&![0,'0'].includes(data.numResults))throw Error('B 站搜索响应格式异常');
-      return {rows:parseRows(rows||[],users?user:row=>video(row)),more:page<Number(data.numPages)};
-    }
-    async function view(bvid){
-      const data=await request('video',{bvid});
-      if(id(data.bvid)!==bvid||!text(data.title))throw Error('B 站未返回该 BV 的视频资料');
-      return video(data,bvid);
-    }
-    function createPlayer({beforeOpen,onClose}){
+    function createFloatingWindow({initialWidth,minWidth=244,maxWidth,frameHeight}){
       const margin=10,step=80;
-      let panel,activeId='',preferredWidth=560,position,drag;
       const visual=ROOT.visualViewport;
+      let panel,position,drag,smaller,larger,preferredWidth=initialWidth;
       function viewport(){
         return {left:visual?.offsetLeft||0,top:visual?.offsetTop||0,width:visual?.width||ROOT.innerWidth,height:visual?.height||ROOT.innerHeight};
       }
       function limits(view){
-        const max=Math.max(1,Math.floor(Math.min(760,view.width-2*margin,(view.height-58)*16/9)));
-        return {min:Math.min(244,max),max};
+        const max=Math.max(1,Math.floor(Math.min(maxWidth(view),view.width-2*margin)));
+        return {min:Math.min(minWidth,max),max};
       }
       function place(left,top,view=viewport()){
         const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
@@ -326,8 +235,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         if(!panel)return;
         const view=viewport(),{min,max}=limits(view),width=Math.max(min,Math.min(max,preferredWidth));
         panel.style.width=`${width}px`;
-        panel.querySelector('[data-video-smaller]').disabled=width<=min;
-        panel.querySelector('[data-video-larger]').disabled=width>=max;
+        if(frameHeight)panel.querySelector('iframe').style.height=`${frameHeight(width,view)}px`;
+        smaller.disabled=width<=min;
+        larger.disabled=width>=max;
         const player=DOC.getElementById(ID)?.getBoundingClientRect();
         const beside=player?.width&&player.left-view.left>=panel.offsetWidth+2*margin;
         const left=beside?player.left-panel.offsetWidth-margin:view.left+view.width-panel.offsetWidth-margin;
@@ -339,14 +249,54 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         preferredWidth=Math.max(min,Math.min(max,panel.offsetWidth+direction*step));
         layout();
       }
-      function inlineControls(){return DOC.querySelector(`#${ID} .selene-video-inline`);}
+      function bindDrag(header){
+        header.onpointerdown=event=>{
+          if(event.button!==0||!event.isPrimary||event.target.closest('button,a'))return;
+          drag={id:event.pointerId,x:event.clientX-position.left,y:event.clientY-position.top};
+          header.setPointerCapture(event.pointerId);
+          header.classList.add('is-dragging');
+          event.preventDefault();
+        };
+        header.onpointermove=event=>{
+          if(drag?.id===event.pointerId)place(event.clientX-drag.x,event.clientY-drag.y);
+        };
+        header.onpointerup=header.onpointercancel=header.onlostpointercapture=event=>{
+          if(drag?.id!==event.pointerId)return;
+          drag=null;
+          header.classList.remove('is-dragging');
+        };
+      }
+      function mount(element,controls){
+        panel=element;
+        ({smaller,larger}=controls);
+        smaller.onclick=()=>resize(-1);
+        larger.onclick=()=>resize(1);
+        bindDrag(panel.querySelector('.video-toolbar'));
+        DOC.body.append(panel);
+        syncFloatingPanelThemes();
+        layout();
+        ROOT.addEventListener('resize',layout);
+        visual?.addEventListener('resize',layout);
+        visual?.addEventListener('scroll',layout);
+      }
       function close(){
         if(!panel)return;
         ROOT.removeEventListener('resize',layout);
         visual?.removeEventListener('resize',layout);
         visual?.removeEventListener('scroll',layout);
         panel.remove();
-        panel=null;activeId='';drag=null;
+        panel=drag=smaller=larger=null;
+      }
+      return {mount,layout,close};
+    }
+    function createPlayer({beforeOpen,onClose}){
+      const floating=createFloatingWindow({initialWidth:560,maxWidth:view=>Math.min(760,(view.height-58)*16/9)});
+      let panel,activeId='';
+      function inlineControls(){return DOC.querySelector(`#${ID} .selene-video-inline`);}
+      function close(){
+        if(!panel)return;
+        floating.close();
+        panel=null;activeId='';
         const inline=inlineControls();
         if(inline)inline.hidden=true;
         onClose();
@@ -363,24 +313,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         panel.classList.toggle('is-picture-hidden',hidden);
         panel.inert=hidden;
         if(hidden)panel.setAttribute('aria-hidden','true');
-        else{panel.removeAttribute('aria-hidden');layout();}
-      }
-      function bindDrag(header){
-        header.onpointerdown=event=>{
-          if(event.button!==0||!event.isPrimary||event.target.closest('button'))return;
-          drag={id:event.pointerId,x:event.clientX-position.left,y:event.clientY-position.top};
-          header.setPointerCapture(event.pointerId);
-          header.classList.add('is-dragging');
-          event.preventDefault();
-        };
-        header.onpointermove=event=>{
-          if(drag?.id===event.pointerId)place(event.clientX-drag.x,event.clientY-drag.y);
-        };
-        header.onpointerup=header.onpointercancel=header.onlostpointercapture=event=>{
-          if(drag?.id!==event.pointerId)return;
-          drag=null;
-          header.classList.remove('is-dragging');
-        };
+        else{panel.removeAttribute('aria-hidden');floating.layout();}
       }
       function open(bvid,title,{showPicture=false}={}){
         if(!id(bvid))return;
@@ -407,24 +340,54 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         iframe.allowFullscreen=true;
         iframe.src=`https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&muted=0`;
         panel.querySelector('.video-frame').append(iframe);
-        panel.querySelector('[data-video-smaller]').onclick=()=>resize(-1);
-        panel.querySelector('[data-video-larger]').onclick=()=>resize(1);
         panel.querySelector('[data-video-close]').onclick=close;
         panel.querySelector('[data-video-hide]').onclick=()=>setPictureHidden(true);
         panel.onkeydown=event=>{if(event.key==='Escape')setPictureHidden(true);};
-        bindDrag(panel.querySelector('.video-toolbar'));
         if(!showPicture)setPictureHidden(true);
-        DOC.body.append(panel);
         activeId=bvid;
-        syncFloatingPanelThemes();
-        layout();
-        ROOT.addEventListener('resize',layout);
-        visual?.addEventListener('resize',layout);
-        visual?.addEventListener('scroll',layout);
+        floating.mount(panel,{
+          smaller:panel.querySelector('[data-video-smaller]'),
+          larger:panel.querySelector('[data-video-larger]'),
+        });
       }
       return {open,close,isOpen:()=>!!panel};
     }
-    return {isEntry,trackId,inputId,video,videoUrl,siteSearch,spaceUrl,endpointUrl,search,view,createPlayer};
+    const searchWindow=createFloatingWindow({
+      initialWidth:960,minWidth:264,maxWidth:()=>1280,
+      frameHeight:(width,view)=>Math.max(0,Math.floor(Math.min(width*(view.width<500?1.5:.76),view.height-58))),
+    });
+    let searchPanel;
+    function closeSearch(){
+      searchWindow.close();
+      searchPanel=null;
+    }
+    function openSearch(keyword){
+      const url=`https://search.bilibili.com/video?keyword=${encodeURIComponent(keyword)}`;
+      if(!searchPanel){
+        searchPanel=DOC.createElement('section');
+        searchPanel.id=`${ID}-bilibili-search`;
+        searchPanel.setAttribute('role','dialog');
+        searchPanel.setAttribute('aria-label','B站网页');
+        searchPanel.innerHTML=`<header class="video-toolbar" title="拖动标题栏移动窗口">
+          <b>B站网页</b>
+          <a target="_blank" rel="noopener noreferrer">在 B站打开 ↗</a>
+          <button type="button" data-search-smaller title="缩小窗口" aria-label="缩小窗口">−</button>
+          <button type="button" data-search-larger title="放大窗口" aria-label="放大窗口">+</button>
+          <button type="button" data-search-close title="关闭搜索" aria-label="关闭搜索">×</button>
+        </header><iframe title="哔哩哔哩官方搜索"></iframe>`;
+        const closeButton=searchPanel.querySelector('[data-search-close]');
+        closeButton.onclick=closeSearch;
+        searchPanel.onkeydown=event=>{if(event.key==='Escape')closeSearch();};
+        searchWindow.mount(searchPanel,{
+          smaller:searchPanel.querySelector('[data-search-smaller]'),
+          larger:searchPanel.querySelector('[data-search-larger]'),
+        });
+        closeButton.focus({preventScroll:true});
+      }
+      searchPanel.querySelector('a').href=url;
+      searchPanel.querySelector('iframe').src=url;
+    }
+    return {isEntry,trackId,inputId,video,videoUrl,createPlayer,openSearch,closeSearch};
   })();
   const isVideoEntry=bilibili.isEntry;
   const bilibiliPlayer=bilibili.createPlayer({
@@ -810,7 +773,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     DOC.getElementById(`${ID}-companion`)?.remove(); DOC.getElementById(`${ID}-companion-style`)?.remove();
     DOC.getElementById(ID)?.remove(); DOC.getElementById(`${ID}-style`)?.remove(); DOC.getElementById(`${ID}-theme-style`)?.remove(); DOC.getElementById(`${ID}-polish-style`)?.remove(); DOC.getElementById(`${ID}-skin-style`)?.remove(); DOC.getElementById(`${ID}-mobile-style`)?.remove(); DOC.getElementById(`${ID}-mobile-ux-style`)?.remove(); DOC.getElementById(`${ID}-current-favorite-style`)?.remove(); DOC.getElementById(`${ID}-desktop-lyrics`)?.remove(); DOC.getElementById(`${ID}-desktop-style`)?.remove(); DOC.getElementById(`${ID}-feature-style`)?.remove(); DOC.getElementById(`${ID}-immersive-style`)?.remove(); DOC.getElementById(`${ID}-adaptive-style`)?.remove(); DOC.getElementById(`${ID}-album-glass-style`)?.remove(); DOC.getElementById(`${ID}-album-glass-fix`)?.remove(); DOC.getElementById(`${ID}-responsive-content-style`)?.remove(); DOC.getElementById(`${ID}-skin-restore-style`)?.remove(); DOC.getElementById(`${ID}-compact-controls-style`)?.remove(); DOC.getElementById(`${ID}-size-preset-style`)?.remove(); DOC.getElementById(`${ID}-custom-scale-style`)?.remove(); DOC.getElementById(`${ID}-custom-scale-priority`)?.remove(); DOC.getElementById(`${ID}-small-priority-style`)?.remove(); DOC.getElementById(`${ID}-mini-style`)?.remove(); DOC.getElementById(`${ID}-skin-float`)?.remove(); DOC.getElementById(`${ID}-lyrics-float`)?.remove(); DOC.getElementById(`${ID}-source-float`)?.remove(); DOC.getElementById(`${ID}-gesture-batch-style`)?.remove(); DOC.getElementById(`${ID}-heading-actions-style`)?.remove(); DOC.getElementById(`${ID}-interaction-polish-style`)?.remove();
     if(!audio.isConnected)DOC.body.appendChild(audio);
-    DOC.body.insertAdjacentHTML('beforeend', `<section id="${ID}" class="${settings.enabled ? '' : 'hidden'}"><div class="selene-player-head" role="toolbar" aria-label="播放器操作" title="拖动移动"><button type="button" class="selene-player-close">×</button><b>♫ 「Selene」播放器</b><button type="button" class="skin" title="选择外观">✦</button><button type="button" class="gear">⚙</button></div><div class="skin-picker hidden"><button data-skin="albumglass">专辑玻璃</button><button data-skin="film">胶片</button><button data-skin="red">中国红</button><button data-skin="white">简约白</button><button data-skin="black">简约黑</button><button data-skin="blue">深海蓝</button><button data-skin="cream">INS 奶油</button><button data-skin="green">森系绿</button></div><div class="body"><div class="now"><img><div><b class="title">尚未选择歌曲</b><span class="artist">搜索歌曲，或读取本层推荐</span><small class="reason"></small><small class="status"></small></div><button type="button" class="current-favorite" aria-label="收藏当前歌曲" aria-pressed="false" title="收藏当前歌曲" disabled>♡</button></div><form class="selene-search-form"><span class="search-source-picker"><select class="search-mode" aria-label="搜索来源"><option value="gd">GD 音乐</option><option value="other">其他音乐</option><option value="video">B站视频</option><option value="user">UP主</option></select></span><input class="search-query" placeholder="歌曲名、歌手" aria-label="搜索关键词"><button>搜索</button></form><div class="actions"><button data-a="rec">本层推荐</button><button data-a="world-rec">读取推荐</button><button data-a="offline">离线歌曲</button></div><div class="list" hidden></div><div class="selene-video-inline" role="group" aria-label="B 站视频" hidden><span>B 站 · 仅听声音</span><button type="button" data-video-stop title="停止播放" aria-label="停止 B 站播放">×</button></div><div class="lyrics" aria-live="polite">暂无歌词</div><div class="controls"><button data-c="prev" title="上一首" aria-label="上一首">‹‹</button><button data-c="play" title="播放或暂停" aria-label="播放或暂停">▶</button><button data-c="mode" class="play-mode-icon" data-mode="loop" title="播放模式 · 顺序循环" aria-label="播放模式 · 顺序循环"></button><button data-c="next" title="下一首" aria-label="下一首">››</button><input class="progress" type="range" min="0" max="1000" value="0"></div><div class="time">00:00 / 00:00</div><div class="volume">音量 <input type="range" min="0" max="100" value="${settings.volume * 100}"></div></div></section>`);
+    DOC.body.insertAdjacentHTML('beforeend', `<section id="${ID}" class="${settings.enabled ? '' : 'hidden'}"><div class="selene-player-head" role="toolbar" aria-label="播放器操作" title="拖动移动"><button type="button" class="selene-player-close">×</button><b>♫ 「Selene」播放器</b><button type="button" class="skin" title="选择外观">✦</button><button type="button" class="gear">⚙</button></div><div class="skin-picker hidden"><button data-skin="albumglass">专辑玻璃</button><button data-skin="film">胶片</button><button data-skin="red">中国红</button><button data-skin="white">简约白</button><button data-skin="black">简约黑</button><button data-skin="blue">深海蓝</button><button data-skin="cream">INS 奶油</button><button data-skin="green">森系绿</button></div><div class="body"><div class="now"><img><div><b class="title">尚未选择歌曲</b><span class="artist">搜索歌曲，或读取本层推荐</span><small class="reason"></small><small class="status"></small></div><button type="button" class="current-favorite" aria-label="收藏当前歌曲" aria-pressed="false" title="收藏当前歌曲" disabled>♡</button></div><form class="selene-search-form"><span class="search-source-picker"><select class="search-mode" aria-label="搜索来源"><option value="gd">GD 音乐</option><option value="other">其他音乐</option><option value="bilibili-web">B站网页</option></select></span><input class="search-query" placeholder="歌曲名、歌手" aria-label="搜索关键词"><button>搜索</button></form><div class="actions"><button data-a="rec">本层推荐</button><button data-a="world-rec">读取推荐</button><button data-a="offline">离线歌曲</button></div><div class="list" hidden></div><div class="selene-video-inline" role="group" aria-label="B 站视频" hidden><span>B 站 · 仅听声音</span><button type="button" data-video-stop title="停止播放" aria-label="停止 B 站播放">×</button></div><div class="lyrics" aria-live="polite">暂无歌词</div><div class="controls"><button data-c="prev" title="上一首" aria-label="上一首">‹‹</button><button data-c="play" title="播放或暂停" aria-label="播放或暂停">▶</button><button data-c="mode" class="play-mode-icon" data-mode="loop" title="播放模式 · 顺序循环" aria-label="播放模式 · 顺序循环"></button><button data-c="next" title="下一首" aria-label="下一首">››</button><input class="progress" type="range" min="0" max="1000" value="0"></div><div class="time">00:00 / 00:00</div><div class="volume">音量 <input type="range" min="0" max="100" value="${settings.volume * 100}"></div></div></section>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-style">#${ID}{position:fixed;z-index:10000;width:min(365px,calc(100vw - 24px));right:18px;bottom:90px;background:#20232bf0;color:#eee;border:1px solid #ffffff28;border-radius:14px;box-shadow:0 8px 25px #0008;font:14px system-ui;overflow:hidden}#${ID}.hidden,#${ID}[hidden]{display:none!important;visibility:hidden!important;pointer-events:none!important}#${ID} *{box-sizing:border-box}#${ID} button{color:inherit;background:#ffffff14;border:1px solid #ffffff24;border-radius:7px;padding:5px 8px;cursor:pointer}.selene-player-head{height:39px;display:flex;align-items:center;gap:8px;padding:0 9px;background:#ffffff0b;cursor:move}.selene-player-head .selene-player-close{border:0;background:transparent;font-size:18px}.selene-player-head .gear{margin-left:auto;border:0;background:transparent}.body{padding:10px}.now{display:flex;gap:9px;min-height:58px}.now img{width:58px;height:58px;border-radius:8px;object-fit:cover;background:#ffffff12}.now div{min-width:0;display:flex;flex:1;flex-direction:column;gap:3px;justify-content:center}.title,.artist,.reason,.status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{color:#c4c4ce}.reason{color:#d8bc78}.status{color:#9eb8ff;font-size:11px;min-height:14px}form{display:flex;gap:6px;margin:9px 0}form input{min-width:0;flex:1;color:inherit;background:#0003;border:1px solid #ffffff30;border-radius:7px;padding:7px}.actions{display:flex;gap:5px}.list{max-height:210px;overflow:auto;margin-top:8px;border-top:1px solid #ffffff18}.row{display:flex;gap:7px;align-items:center;padding:7px 1px;border-bottom:1px solid #ffffff12;cursor:pointer}.row img{width:32px;height:32px;border-radius:5px;object-fit:cover}.row div{min-width:0;flex:1}.row b,.row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row span{font-size:12px;color:#bfc0c9}.lyrics{height:38px;margin-top:8px;padding:9px 6px;text-align:center;color:#d8d9e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#0002;border-radius:7px}.controls{display:flex;gap:5px;align-items:center;margin-top:9px}.controls input,.volume input{min-width:0;flex:1;accent-color:#9db4f7}.time{text-align:center;font-variant-numeric:tabular-nums;color:#bfc0c9;font-size:12px;margin-top:4px}.volume{display:flex;gap:7px;align-items:center;margin-top:6px;color:#ccc}@media(prefers-color-scheme:light){#${ID}{background:#f6f7fbf2;color:#20232b;border-color:#0000001c;box-shadow:0 8px 25px #0003}.selene-player-head{background:#00000008}.artist,.volume,.time{color:#555866}.lyrics{background:#00000008;color:#343746}}@media(max-width:480px){#${ID}{right:12px!important;bottom:12px!important;width:calc(100vw - 24px)}}</style>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-theme-style">#${ID}.theme-light{background:#f6f7fbf2;color:#20232b;border-color:#0000001c;box-shadow:0 8px 25px #0003}#${ID}.theme-light .selene-player-head,#${ID}.theme-light .lyrics{background:#00000008}#${ID}.theme-light .artist,#${ID}.theme-light .volume,#${ID}.theme-light .time{color:#555866}#${ID}.theme-dark{background:#20232bf0;color:#eee;border-color:#ffffff28;box-shadow:0 8px 25px #0008}#${ID}.theme-dark .selene-player-head{background:#ffffff0b}#${ID}.theme-dark .lyrics{background:#0002}#${ID}.theme-dark .artist,#${ID}.theme-dark .volume,#${ID}.theme-dark .time{color:#c4c4ce}</style>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-polish-style">#${ID}{border-radius:18px;border-color:#d7bc6f55;box-shadow:0 18px 48px #0009}#${ID}::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.16;background:repeating-linear-gradient(0deg,#fff1 0 1px,transparent 1px 4px);z-index:1}#${ID} .selene-player-head,#${ID} .body{position:relative;z-index:2}#${ID} .selene-player-head{height:45px;background:linear-gradient(100deg,#3f2b26,#181a24 55%,#342d22);letter-spacing:.4px;border-bottom:1px solid #d7bc6f44}#${ID} .selene-player-head b{font-family:Georgia,serif;font-size:16px;letter-spacing:1px}#${ID} button{transition:transform .15s,background .15s,border-color .15s}#${ID} button:hover{transform:translateY(-1px);background:#d7bc6f24;border-color:#e8cd7c99}#${ID} .now img{border:1px solid #d7bc6f77;box-shadow:inset 0 0 0 3px #0004,0 4px 12px #0008}#${ID} .lyrics{border:1px solid #d7bc6f33;font-family:Georgia,serif;font-style:italic;white-space:pre-line;height:auto;min-height:38px;line-height:1.45}#${ID} .settings-panel{background:linear-gradient(145deg,#29202a,#161923)!important;border-top:1px solid #d7bc6f55}#${ID} .settings-panel h3{font-family:Georgia,serif;letter-spacing:1px;color:#f0d98c}#${ID} .settings-panel select,#${ID} .settings-panel input[type=range]{accent-color:#d7bc6f}#${ID} .settings-panel .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}#${ID} .settings-panel .set-card{padding:9px;border:1px solid #ffffff18;border-radius:10px;background:#0003}</style>`);
@@ -820,36 +783,32 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     DOC.body.insertAdjacentHTML('beforeend', `<div id="${ID}-desktop-lyrics" class="hidden" aria-live="polite"><span class="lyric-text"></span></div>`); DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-desktop-style">#${ID}-desktop-lyrics{position:fixed;z-index:10002;left:50%;bottom:11vh;transform:translateX(-50%);max-width:88vw;padding:4px 18px 4px 10px;text-align:center;font:600 22px/1.35 system-ui;text-shadow:none;-webkit-text-stroke:0}#${ID}-desktop-lyrics.hidden{display:none}#${ID}-desktop-lyrics .lyric-text{display:inline-block;max-width:100%;white-space:inherit;text-shadow:none!important;-webkit-text-stroke:0!important;filter:none!important}#${ID}-desktop-lyrics.gradient .lyric-text{color:transparent!important;background-clip:text!important;-webkit-background-clip:text!important;background-repeat:no-repeat!important;background-size:100% 100%!important;text-shadow:none!important;-webkit-text-stroke:0!important;filter:none!important}@media(max-width:480px),(max-width:1024px) and (hover:none) and (pointer:coarse){#${ID}-desktop-lyrics{left:50%;top:50dvh;right:auto;bottom:auto;width:min(82vw,320px);max-width:calc(100vw - 24px);padding:5px 18px 5px 7px;font-size:14px;line-height:1.35;white-space:pre-line;overflow-wrap:anywhere;touch-action:none;box-sizing:border-box;transform:translate(-50%,-50%)}}</style>`);
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-search-video-style">
       #${ID} .selene-search-form{position:relative;--search-source-width:63px}
-      #${ID} .selene-search-form[data-search-mode="user"]{--search-source-width:47px}
       #${ID} .search-source-picker{position:absolute;z-index:1;inset-inline-start:5px;top:50%;transform:translateY(-50%);width:var(--search-source-width);height:24px;display:flex;align-items:center;color:var(--smp-muted,inherit)}
-      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:100%;padding:0 4px!important;color:inherit!important;background:var(--smp-control-bg,#ffffff14)!important;border:0!important;border-radius:8px;outline:0!important;box-shadow:none!important;font:500 11px/1.2 system-ui,sans-serif;text-align:center;text-align-last:center;cursor:pointer}
+      #${ID} .search-source-picker::before{content:'';position:absolute;inset-inline-end:0;top:6px;height:12px;border-inline-end:1px solid currentColor;opacity:.3;pointer-events:none}
+      #${ID} .search-source-picker::after{content:'';position:absolute;inset-inline-end:7px;top:8px;width:4px;height:4px;border:solid currentColor;border-width:0 1px 1px 0;transform:rotate(45deg);pointer-events:none}
+      #${ID} .search-mode{appearance:none;min-width:0;width:100%;height:100%;padding:0 14px 0 3px!important;color:inherit!important;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important;font:500 11px/1.2 system-ui,sans-serif;text-align:center;text-align-last:center;cursor:pointer}
       #${ID} .search-mode:hover{color:var(--smp-text,currentColor)!important}
       #${ID} .search-mode:focus-visible{text-decoration:underline;text-underline-offset:3px}
       #${ID} .search-mode option{color:CanvasText;background:Canvas}
       #${ID}:not(.mini):not(.immersive)>.body>form.selene-search-form>.search-query{min-width:0;padding-inline-start:calc(var(--search-source-width) + 12px)!important}
-      #${ID} .bilibili-heading{display:flex;align-items:center;justify-content:space-between;gap:5px 8px;flex-wrap:wrap;padding:6px 2px;font:600 12px/1.4 system-ui,sans-serif}
-      #${ID} .bilibili-heading>b{flex:1 1 70px;min-width:0;overflow-wrap:anywhere}
-      #${ID} .bilibili-heading-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
-      #${ID} .bilibili-heading-actions button,#${ID} .bilibili-heading-actions a,#${ID} .bilibili-search-note button{color:var(--smp-switch,currentColor)!important;background:none!important;border:0!important;box-shadow:none!important;padding:4px 1px!important;font:500 11px/1.3 system-ui,sans-serif!important;text-decoration:none}
-      #${ID} .bilibili-heading-actions a:hover,#${ID} .bilibili-heading-actions button:hover,#${ID} .bilibili-search-note button:hover{text-decoration:underline;background:none!important;transform:none}
-      #${ID} .bilibili-search-note{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 2px 8px;margin:0;color:var(--smp-muted,currentColor);font:11px/1.45 system-ui,sans-serif;overflow-wrap:anywhere}
-      #${ID} .row.bilibili-result>div{min-width:0}
-      #${ID} .row.bilibili-result>div>span{white-space:normal!important;overflow-wrap:anywhere}
       #${ID} .bilibili-result-title{padding:0!important;border:0!important;background:none!important;color:inherit;font:inherit!important;text-align:left;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      #${ID} .bilibili-result-placeholder{display:grid;place-items:center;width:36px;height:36px;flex:0 0 36px;border-radius:7px;background:var(--smp-control-bg);color:var(--smp-muted);font-size:10px}
       #${ID} .selene-video-inline{display:inline-flex;flex:0 0 auto;align-self:flex-start;align-items:center;gap:5px;width:max-content;max-width:100%;padding:1px 2px 1px 9px;border:1px solid var(--smp-control-border,#ffffff26);border-radius:999px;background:var(--smp-control-bg,#ffffff14);color:var(--smp-text,inherit);font:500 11px/1.4 system-ui,sans-serif}
       #${ID} .selene-video-inline>span{color:inherit!important;-webkit-text-fill-color:currentColor!important}
       #${ID} .selene-video-inline>button{display:grid;place-items:center;width:24px!important;height:24px!important;flex:0 0 24px;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;color:inherit!important;font-size:16px!important}
       #${ID} .selene-video-inline>button:hover{background:color-mix(in srgb,currentColor 12%,transparent)!important;transform:none}
       #${ID} .selene-video-inline[hidden],#${ID}.mini .selene-video-inline{display:none!important}
-      #${ID}-video{position:fixed;z-index:2147482900;box-sizing:border-box;background:var(--picker-bg,#1b1d27f5);color:var(--picker-text,#f5f4f7);border:1px solid var(--picker-line,#ffffff26);border-radius:14px;overflow:hidden;box-shadow:0 12px 32px #0005;font:12px/1.3 system-ui,sans-serif}
-      #${ID}-video .video-toolbar{box-sizing:border-box;display:flex;align-items:center;gap:3px;height:36px;padding:0 5px 0 11px;cursor:grab;touch-action:none;user-select:none}
-      #${ID}-video .video-toolbar.is-dragging{cursor:grabbing}
-      #${ID}-video .video-toolbar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
-      #${ID}-video .video-toolbar button{appearance:none;display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;min-width:0;min-height:0;padding:0;margin:0;border:0;border-radius:6px;box-shadow:none;background:transparent;color:inherit;cursor:pointer;font:17px/1 system-ui,sans-serif}
-      #${ID}-video .video-toolbar button:not(:disabled):hover{background:var(--picker-control,#fff1)}
-      #${ID}-video .video-toolbar button:disabled{opacity:.34;cursor:default}
-      #${ID}-video .video-toolbar svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+      :is(#${ID}-video,#${ID}-bilibili-search){position:fixed;z-index:2147482900;box-sizing:border-box;background:var(--picker-bg,#1b1d27f5);color:var(--picker-text,#f5f4f7);border:1px solid var(--picker-line,#ffffff26);border-radius:14px;overflow:hidden;box-shadow:0 12px 32px #0005;font:12px/1.3 system-ui,sans-serif}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar{box-sizing:border-box;display:flex;align-items:center;gap:3px;height:36px;padding:0 5px 0 11px;cursor:grab;touch-action:none;user-select:none}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar.is-dragging{cursor:grabbing}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar button{appearance:none;display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;min-width:0;min-height:0;padding:0;margin:0;border:0;border-radius:6px;box-shadow:none;background:transparent;color:inherit;cursor:pointer;font:17px/1 system-ui,sans-serif}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar button:not(:disabled):hover{background:var(--picker-control,#fff1)}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar button:disabled{opacity:.34;cursor:default}
+      :is(#${ID}-video,#${ID}-bilibili-search) .video-toolbar svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+      #${ID}-bilibili-search .video-toolbar{border-bottom:1px solid var(--picker-line);background:var(--picker-control)}
+      #${ID}-bilibili-search .video-toolbar a{padding:5px 7px;border-radius:6px;color:inherit;text-decoration:none;white-space:nowrap}
+      #${ID}-bilibili-search .video-toolbar a:hover{background:var(--picker-control);text-decoration:underline}
+      #${ID}-bilibili-search iframe{display:block;width:100%;border:0;background:white}
       #${ID}-video .video-frame{background:#000}
       #${ID}-video iframe{display:block;width:100%;height:auto;aspect-ratio:16/9;border:0}
       #${ID}-video.is-picture-hidden{opacity:0;clip-path:inset(50%);pointer-events:none}
@@ -1210,75 +1169,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
   }
 
-  function searchBilibili(word,{users=false,order='totalrank',creator=null,back=null}={}){
-    const request=++searchRequest,box=DOC.querySelector(`#${ID} .list`);
-    if(!box)return;
-    const bvid=!users&&!creator?bilibili.inputId(word):'';
-    const site=creator?bilibili.spaceUrl(creator.uid):bilibili.siteSearch(word,users,order);
-    const title=creator?`${creator.title} · 公开投稿`:users?'B 站 UP 主':'B 站视频';
-    let page=0,more=false,busy=false,error='';
-    const saved=bvid?[...(settings.favorites||[]),...(settings.playlists||[]).flatMap(list=>list.songs||[]),...(Array.isArray(settings.bilibiliSearchMetadata)?settings.bilibiliSearchMetadata:[])]
-      .find(song=>bilibili.trackId(song)===bvid):null;
-    let rows=bvid?[bilibili.video(saved,bvid)]:[];
-    resultCoverObserver?.disconnect();
-    results=[];
-    syncLibraryNavigation('');
+  function showBilibiliVideo(bvid){
+    ++searchRequest;
+    const saved=[...(settings.favorites||[]),...(settings.playlists||[]).flatMap(list=>list.songs||[]),
+      ...(Array.isArray(settings.bilibiliSearchMetadata)?settings.bilibiliSearchMetadata:[])]
+      .find(song=>bilibili.trackId(song)===bvid);
+    results=[bilibili.video(saved,bvid)];
+    render(results,'B 站视频','results',false);
     setStatus('');
-    const isActive=()=>!disposed&&request===searchRequest&&box.onclick===handleClick&&!box.hidden;
-    function draw(){
-      const scroll=box.scrollTop;
-      box.hidden=false;
-      const note=busy?(bvid?'正在读取视频资料…':'正在搜索 B 站…'):error?error:!rows.length&&page?'没有搜索结果':'';
-      box.innerHTML=`<header class="bilibili-heading"><b>${esc(title)}</b><div class="bilibili-heading-actions">
-        ${back?'<button type="button" data-bili-back>返回 UP 主</button>':''}
-        ${!users&&!creator&&!bvid&&(!error||rows.length)?`<button type="button" data-bili-sort aria-label="切换视频排序">${order==='pubdate'?'最新发布':'综合排序'}</button>`:''}
-        ${!bvid&&error?`<a href="${esc(site)}" target="_blank" rel="noopener noreferrer">${creator?'去 B 站看投稿 ↗':'去 B 站搜索 ↗'}</a>`:''}</div></header>
-        ${rows.map((row,index)=>`<article class="row bilibili-result" data-bili-index="${index}" data-track-id="${esc(row.id)}">
-          ${row.cover?`<img alt="" src="${esc(row.cover)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<i class="bilibili-result-placeholder" aria-hidden="true">${users?'UP':'▶'}</i>`}
-          <div><b><button type="button" class="bilibili-result-title">${esc(row.title)}</button></b><span>${esc(users?`UID ${row.uid}`:row.title===row.bvid?'点击播放声音':bilibiliVideoInfo(row))}</span></div>
-          ${users?'':`<span class="row-tools">${bilibiliMenuButtons(row,false)}</span>`}</article>`).join('')}
-        ${note||more?`<p class="bilibili-search-note" role="status">${esc(note)}${!busy&&more?`<button type="button" data-bili-more>${error?'重试':'加载更多'}</button>`:''}</p>`:''}`;
-      box.onclick=handleClick;
-      box.scrollTop=scroll;
-    }
-    function handleClick(event){
-      if(event.target.closest('[data-bili-back]')){back();return;}
-      if(event.target.closest('[data-bili-sort]')){searchBilibili(word,{order:order==='pubdate'?'totalrank':'pubdate'});return;}
-      if(event.target.closest('[data-bili-more]')){void load();return;}
-      const index=event.target.closest('[data-bili-index]')?.dataset.biliIndex,row=rows[index];
-      if(!row)return;
-      if(users){searchBilibili(word,{creator:row,back:()=>searchBilibili(word,{users:true})});return;}
-      if(!handleBilibiliMenu(event,row))playListEntry(row);
-    }
-    async function load(){
-      if(busy)return;
-      busy=true;error='';draw();
-      try{
-        if(bvid){
-          const video=await bilibili.view(bvid);
-          if(!isActive())return;
-          if(!video||video.title===bvid)throw Error('B 站暂未返回视频资料');
-          rows=[video];
-        }else{
-          const response=await bilibili.search({word,users:users&&!creator,order,page:page+1,creator});
-          if(!isActive())return;
-          const seen=new Set(rows.map(row=>row.id));
-          for(const row of response.rows){
-            if(seen.has(row.id))continue;
-            seen.add(row.id);rows.push(row);
-          }
-          more=response.more;
-        }
-        page++;
-      }catch(failure){
-        if(!isActive())return;
-        error=bvid?`${failure.message} · 可直接播放`:failure.message;
-      }finally{
-        busy=false;
-        if(isActive())draw();
-      }
-    }
-    void load();
   }
 
   const coverResponses=new Map(),coverRequests=new Map();
@@ -1339,10 +1237,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       resultCoverObserver?.unobserve(img);
     });
   }
-  function bilibiliMenuButtons(song,external=true){
+  function bilibiliMenuButtons(song){
     if(!bilibili.trackId(song))return '';
     return '<button type="button" data-bili-action="watch" title="观看视频"></button>'+
-      (external?'<button type="button" data-bili-action="open" title="在 B 站打开"></button>':'');
+      '<button type="button" data-bili-action="open" title="在 B 站打开"></button>';
   }
   function bilibiliVideoInfo(song){
     return [song.artist,song.duration>0?clock(song.duration):'',song.views!=null?`播放 ${Number(song.views).toLocaleString('zh-CN')}`:'',bilibili.trackId(song)].filter(Boolean).join(' · ')||'旧版 B 站记录';
@@ -1371,10 +1269,13 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     box.hidden=false;
     box.innerHTML=`${heading?`<div class="row${saved?' batch-heading':''}"><b>${esc(heading)}</b>${headingActions}</div>`:''}${rows.map((s,i)=>{
       const video=isVideoEntry(s);
+      const videoResult=video&&kind==='results',title=esc(s.title);
+      const subtitle=video?bilibiliVideoInfo(s):s.artist;
+      const showPlayHint=videoResult&&s.title===bilibili.trackId(s);
       const tools=saved
         ? `${kind==='fav'?`<button data-q="${i}" title="加入播放队列">＋</button>`:''}${kind==='queue'?`<button data-save="${i}" title="加入收藏">☆</button>`:''}<button data-pl="${i}" title="加入歌单">歌单</button>${video?'':`<button data-audio="${i}" title="补充或更换 MP3 音源">音源</button><button data-cache="${i}" title="下载离线缓存">⇩</button>`}<button data-del="${i}" ${kind==='fav'?'data-row-heart':''} title="删除">×</button>`
         : `<button data-f="${i}" title="收藏">☆</button><button data-pl="${i}" title="加入歌单">歌单</button>${video?'':`<button data-audio="${i}" title="补充或更换 MP3 音源">音源</button><button data-cache="${i}" title="下载离线缓存">⇩</button>`}<button data-q="${i}" title="加入播放队列">＋</button>`;
-      return `<article class="row" data-i="${i}" data-track-id="${esc(s.id)}"><img alt="" loading="lazy" decoding="async" ${kind==='results'?'data-result-cover':''} ${s.cover?`src="${esc(s.cover)}"`:''}><div><b>${esc(s.title)}</b><span>${video?esc(bilibiliVideoInfo(s)):esc(s.artist)}${kind==='results'&&GD_SOURCE_LABELS[s.source]?` · ${esc(GD_SOURCE_LABELS[s.source])}`:''}${s.customAudio?' · 手动音源':''}</span></div><span class="row-tools">${tools}${bilibiliMenuButtons(s)}</span></article>`;
+      return `<article class="row" data-i="${i}" data-track-id="${esc(s.id)}"><img alt="" loading="lazy" decoding="async" ${kind==='results'?'data-result-cover':''} ${s.cover?`src="${esc(s.cover)}"`:''}><div><b>${videoResult?`<button type="button" class="bilibili-result-title">${title}</button>`:title}</b><span>${esc(showPlayHint?'点击播放声音':subtitle)}${kind==='results'&&GD_SOURCE_LABELS[s.source]?` · ${esc(GD_SOURCE_LABELS[s.source])}`:''}${s.customAudio?' · 手动音源':''}</span></div><span class="row-tools">${tools}${bilibiliMenuButtons(s)}</span></article>`;
     }).join('')||`<div class="row">${esc(emptyMessage)}</div>`}`;
     box.querySelectorAll('.row[data-i]>img').forEach(img=>{img.onerror=async()=>{
       img.onerror=null;const song=rows[Number(img.parentElement.dataset.i)],source=song.source,id=song.mediaId,failed=img.src;img.removeAttribute('src');
@@ -3330,18 +3231,20 @@ ${latest}
     const mode=form.querySelector('.search-mode'),input=form.querySelector('input');
     mode.onchange=()=>{
       ++searchRequest;
-      form.dataset.searchMode=mode.value;
-      input.placeholder={gd:'歌曲名、歌手',other:'QQ 音乐歌名、歌手',video:'关键词、BV 号或链接',user:'UP 主昵称'}[mode.value];
-      const list=form.parentElement.querySelector('.list');
-      if(list?.querySelector('.bilibili-heading')){list.replaceChildren();list.onclick=null;}
+      input.placeholder={gd:'歌曲名、歌手',other:'QQ 音乐歌名、歌手','bilibili-web':'视频或 UP 主关键词'}[mode.value];
     };
     form.onsubmit=event=>{
       event.preventDefault();
       const word=input.value.trim();
       if(!word)return;
-      if(mode.value==='video'||mode.value==='gd'&&bilibili.inputId(word))searchBilibili(word);
-      else if(mode.value==='user')searchBilibili(word,{users:true});
-      else if(mode.value==='other')void searchOtherMusic(word);
+      if(mode.value==='bilibili-web'){
+        ++searchRequest;
+        bilibili.openSearch(word);
+        return;
+      }
+      if(mode.value==='other'){void searchOtherMusic(word);return;}
+      const bvid=bilibili.inputId(word);
+      if(bvid)showBilibiliVideo(bvid);
       else void search(word);
     };
   }
@@ -3770,7 +3673,7 @@ ${latest}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(!event?.persisted)cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -3837,7 +3740,7 @@ ${latest}
       '--picker-control':read('--smp-control-bg',light?'#00000008':'#ffffff0d'),
       '--picker-cover':['albumglass','orbit'].includes(settings.skin)?read('--album-cover','none'):'none'
     };
-    for(const suffix of ['source-float','skin-float','lyrics-float','video']){
+    for(const suffix of ['source-float','skin-float','lyrics-float','video','bilibili-search']){
       const panel=DOC.getElementById(`${ID}-${suffix}`);if(!panel)continue;
       for(const [name,value] of Object.entries(palette))panel.style.setProperty(name,value);
       panel.dataset.tone=light?'light':'dark';panel.style.colorScheme=light?'light':'dark';
@@ -4102,7 +4005,7 @@ ${latest}
     const player=DOC.getElementById(ID);if(!player)return;
     player.hidden=!visible;player.classList.toggle('hidden',!visible);
     if(visible)player.style.removeProperty('display');
-    else{player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
+    else{bilibili.closeSearch();player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
   }
   function setPublicVisible(value,{persist=true}={}){
     settings.enabled=!!value;
@@ -4218,12 +4121,6 @@ ${latest}
   }
   ROOT.__SELENE_MUSIC_PLAYER__={
     getState:publicState,
-    setBilibiliEndpoint(value){
-      const raw=String(value??'').trim(),url=raw?bilibili.endpointUrl(raw):null;
-      if(raw&&!url)throw Error('B 站查询服务需要 HTTPS 地址');
-      settings.bilibiliSearchEndpoint=url?.href||'';
-      return persistSettings();
-    },
     setVisible:setPublicVisible,
     setCompanionVisible:setPublicCompanionVisible,
     setAutoShow:setPublicAutoShow,

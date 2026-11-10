@@ -52,9 +52,10 @@ function visibilityController(save) {
     style: { setProperty: (name, value, priority) => properties.set(name, { value, priority }), removeProperty: name => properties.delete(name) },
   };
   const settings = { enabled: true };
-  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', `${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
+  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', 'bilibili', `${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
     { getElementById: id => id === 'player' ? player : null }, 'player', settings,
     () => { events.push({ hiddenAtSave: player.hidden }); return save?.(); }, () => events.push('state'), () => ({ visible: !player.hidden }),
+    { closeSearch: () => events.push('closeSearch') },
   );
   return { controller, player, classes, properties, events };
 }
@@ -65,7 +66,7 @@ test('closing hides the DOM before persistence and survives an unsuccessful save
   assert.equal(player.hidden, true);
   assert.equal(classes.has('hidden'), true);
   assert.deepEqual(properties.get('display'), { value: 'none', priority: 'important' });
-  assert.deepEqual(events[0], { hiddenAtSave: true });
+  assert.deepEqual(events, ['closeSearch', { hiddenAtSave: true }, 'state']);
 });
 
 test('reopening clears every hiding state and nonpersistent visibility changes do not write storage', () => {
