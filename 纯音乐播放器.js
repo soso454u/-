@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.69';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.70';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -3477,6 +3477,7 @@ ${latest}
       #${ID} .settings-panel button{border:1px solid var(--smp-control-border)!important;border-radius:11px!important;background:var(--smp-control-bg)!important;padding:7px 12px!important;min-height:32px!important}
       #${ID} .settings-panel [data-x]{border:0!important;border-radius:50%!important;padding:0!important;width:30px!important;min-height:30px!important}
       #${ID} .settings-panel select{display:block;max-width:100%;width:100%;box-sizing:border-box;font:12px/1.5 system-ui!important}#${ID} .settings-panel .custom-scales>b{display:block;margin-bottom:10px}#${ID} .settings-panel .scale-row{grid-template-columns:minmax(0,1fr) 30px 44px 30px;gap:6px;margin:10px 0;font:12px/1.5 system-ui}#${ID} .settings-panel .scale-row button{padding:0!important;min-width:30px!important}#${ID} .settings-panel select,#${ID} .settings-panel input:not([type=checkbox]){border:1px solid var(--smp-control-border)!important;border-radius:10px!important;background:var(--smp-input-bg)!important;color:var(--smp-text)!important;min-height:32px;padding:5px 9px}
+      #${ID} .settings-panel select[name="searchMode"]{-webkit-appearance:none!important;appearance:none!important;background-image:none!important;cursor:pointer}
       #${ID} .settings-panel input[type=checkbox]{appearance:none!important;-webkit-appearance:none!important;position:relative!important;display:inline-block!important;flex:0 0 32px!important;width:32px!important;min-width:32px!important;max-width:32px!important;height:20px!important;min-height:20px!important;margin:0 7px 0 0!important;vertical-align:middle!important;border:0!important;border-radius:999px!important;background:#ffffff24!important;background-image:none!important;box-shadow:none!important;filter:none!important;cursor:pointer!important}
       #${ID} .settings-panel input[type=checkbox]::before{content:''!important;position:absolute!important;top:3px!important;left:3px!important;width:14px!important;height:14px!important;border:0!important;border-radius:50%!important;background:#fff!important;box-shadow:0 1px 3px #0003!important;transform:none!important;transition:left .16s!important}
       #${ID} .settings-panel input[type=checkbox]::after{content:none!important}
