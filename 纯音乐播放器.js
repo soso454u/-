@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.70';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.71';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -179,14 +179,19 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       const match=String(value??'').trim().match(/^[Bb][Vv](1[1-9A-HJ-NP-Za-km-z]{9})$/);
       return match?`BV${match[1]}`:'';
     };
-    function inputId(value){
-      const input=String(value??'').trim();
-      if(id(input))return id(input);
+    function videoLink(input){
       try{
         const url=new URL(input);
-        if(!['https:','http:'].includes(url.protocol)||!['www.bilibili.com','m.bilibili.com','bilibili.com'].includes(url.hostname))return '';
-        return id(url.pathname.match(/^\/video\/([^/]+)\/?$/)?.[1]);
-      }catch{return '';}
+        if(!['https:','http:'].includes(url.protocol)||!['www.bilibili.com','m.bilibili.com','bilibili.com'].includes(url.hostname))return null;
+        const segment=url.pathname.match(/^\/video\/([^/]+)\/?$/)?.[1];
+        const bvid=id(segment);
+        const videoId=bvid||(/^av[1-9]\d*$/.test(segment)?segment:'');
+        return videoId?{url,bvid,videoId}:null;
+      }catch{return null;}
+    }
+    function inputId(value){
+      const input=String(value??'').trim();
+      return id(input)||videoLink(input)?.bvid||'';
     }
     const isEntry=song=>song?.source===source||song?.source===legacySource;
     function trackId(song){
@@ -217,81 +222,150 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         duration,views:rawViews!=null&&String(rawViews).trim()&&Number.isFinite(Number(rawViews))&&Number(rawViews)>=0?Number(rawViews):null,
       };
     }
-    function createFloatingWindow({initialWidth,minWidth=244,maxWidth,frameHeight}){
+    function createFloatingWindow({initialWidth,minWidth=244,maxWidth,frameHeight,minFrameHeight,geometryKey}){
       const margin=10,step=80;
       const visual=ROOT.visualViewport;
-      let panel,position,drag,smaller,larger,preferredWidth=initialWidth;
+      const finePointer=geometryKey?ROOT.matchMedia('(any-pointer: fine)'):null;
+      const sessionBounds={width:initialWidth};
+      const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+      let panel,frame,frameChrome,gesture,smaller,larger;
       function viewport(){
         return {left:visual?.offsetLeft||0,top:visual?.offsetTop||0,width:visual?.width||ROOT.innerWidth,height:visual?.height||ROOT.innerHeight};
+      }
+      function hasCorners(view){return finePointer?.matches&&view.width>=500;}
+      function geometry(view){
+        if(!hasCorners(view))return sessionBounds;
+        const saved=settings[geometryKey];
+        if(saved&&typeof saved==='object'&&!Array.isArray(saved))return saved;
+        return settings[geometryKey]={};
       }
       function limits(view){
         const max=Math.max(1,Math.floor(Math.min(maxWidth(view),view.width-2*margin)));
         return {min:Math.min(minWidth,max),max};
       }
-      function place(left,top,view=viewport()){
-        const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
-        position={
+      function maxFrameHeight(view){return Math.max(0,Math.floor(view.height-2*margin-frameChrome));}
+      function place(left,top,view){
+        const position={
           left:clamp(left,view.left+margin,view.left+view.width-panel.offsetWidth-margin),
           top:clamp(top,view.top+margin,view.top+view.height-panel.offsetHeight-margin),
         };
         panel.style.left=`${position.left}px`;
         panel.style.top=`${position.top}px`;
+        return position;
       }
       function layout(){
         if(!panel)return;
-        const view=viewport(),{min,max}=limits(view),width=Math.max(min,Math.min(max,preferredWidth));
+        const view=viewport(),bounds=geometry(view),{min,max}=limits(view);
+        const width=clamp(Number.isFinite(bounds.width)?bounds.width:initialWidth,min,max);
         panel.style.width=`${width}px`;
-        if(frameHeight)panel.querySelector('iframe').style.height=`${frameHeight(width,view)}px`;
+        if(frame){
+          const maxHeight=maxFrameHeight(view);
+          const height=Number.isFinite(bounds.height)
+            ? clamp(bounds.height,Math.min(minFrameHeight,maxHeight),maxHeight)
+            : frameHeight(width,view);
+          frame.style.height=`${height}px`;
+          panel.classList.toggle('has-resize-corners',hasCorners(view));
+        }
         smaller.disabled=width<=min;
         larger.disabled=width>=max;
         const player=DOC.getElementById(ID)?.getBoundingClientRect();
         const beside=player?.width&&player.left-view.left>=panel.offsetWidth+2*margin;
         const left=beside?player.left-panel.offsetWidth-margin:view.left+view.width-panel.offsetWidth-margin;
         const top=beside?player.top:view.top+margin;
-        place(position?.left??left,position?.top??top,view);
+        const position=place(Number.isFinite(bounds.left)?bounds.left:left,Number.isFinite(bounds.top)?bounds.top:top,view);
+        if(bounds===sessionBounds)Object.assign(bounds,position);
+        return position;
+      }
+      function saveBounds(bounds){
+        if(geometryKey&&bounds===settings[geometryKey])persistSettings();
       }
       function resize(direction){
-        const {min,max}=limits(viewport());
-        preferredWidth=Math.max(min,Math.min(max,panel.offsetWidth+direction*step));
-        layout();
+        const view=viewport(),bounds=geometry(view),{min,max}=limits(view);
+        const rect=panel.getBoundingClientRect();
+        bounds.width=clamp(rect.width+direction*step,min,max);
+        if(Number.isFinite(bounds.height))bounds.height=frame.offsetHeight*bounds.width/rect.width;
+        Object.assign(bounds,{left:rect.left,top:rect.top});
+        Object.assign(bounds,layout());
+        saveBounds(bounds);
       }
-      function bindDrag(header){
-        header.onpointerdown=event=>{
-          if(event.button!==0||!event.isPrimary||event.target.closest('button,a'))return;
-          drag={id:event.pointerId,x:event.clientX-position.left,y:event.clientY-position.top};
-          header.setPointerCapture(event.pointerId);
-          header.classList.add('is-dragging');
+      function bindPointer(handle,canStart,move){
+        handle.onpointerdown=event=>{
+          if(gesture||event.button!==0||!event.isPrimary||!canStart(event))return;
+          gesture={handle,id:event.pointerId,x:event.clientX,y:event.clientY,rect:panel.getBoundingClientRect(),bounds:geometry(viewport()),moved:false};
+          handle.setPointerCapture(event.pointerId);
+          handle.classList.add('is-dragging');
+          panel.classList.add('is-pointer-active');
           event.preventDefault();
         };
-        header.onpointermove=event=>{
-          if(drag?.id===event.pointerId)place(event.clientX-drag.x,event.clientY-drag.y);
+        handle.onpointermove=event=>{
+          if(gesture?.handle!==handle||gesture.id!==event.pointerId)return;
+          const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;
+          if(!dx&&!dy&&!gesture.moved)return;
+          const view=viewport(),bounds=geometry(view);
+          if(bounds!==gesture.bounds)return;
+          move(dx,dy,gesture.rect,view,bounds);
+          gesture.moved=true;
         };
-        header.onpointerup=header.onpointercancel=header.onlostpointercapture=event=>{
-          if(drag?.id!==event.pointerId)return;
-          drag=null;
-          header.classList.remove('is-dragging');
+        handle.onpointerup=handle.onpointercancel=handle.onlostpointercapture=event=>{
+          if(gesture?.handle!==handle||gesture.id!==event.pointerId)return;
+          if(gesture.moved)saveBounds(gesture.bounds);
+          gesture=null;
+          handle.classList.remove('is-dragging');
+          panel.classList.remove('is-pointer-active');
         };
+      }
+      function addResizeCorners(){
+        for(const corner of ['nw','ne','sw','se']){
+          const handle=DOC.createElement('span');
+          handle.className=`video-resize-corner ${corner}`;
+          handle.setAttribute('aria-hidden','true');
+          panel.append(handle);
+          const west=corner.endsWith('w'),north=corner.startsWith('n');
+          bindPointer(handle,event=>event.pointerType==='mouse'&&hasCorners(viewport()),(dx,dy,rect,view,bounds)=>{
+            // Hold the opposite corner still when a moving edge reaches a limit.
+            const {min,max}=limits(view);
+            const availableWidth=west?rect.right-view.left-margin:view.left+view.width-margin-rect.left;
+            const availableHeight=(north?rect.bottom-view.top-margin:view.top+view.height-margin-rect.top)-frameChrome;
+            const maxWidth=Math.max(1,Math.min(max,availableWidth));
+            const maxHeight=Math.max(0,Math.min(maxFrameHeight(view),availableHeight));
+            const width=clamp(rect.width+(west?-dx:dx),Math.min(min,maxWidth),maxWidth);
+            const height=clamp(rect.height-frameChrome+(north?-dy:dy),Math.min(minFrameHeight,maxHeight),maxHeight);
+            Object.assign(bounds,{width,height,left:west?rect.right-width:rect.left,top:north?rect.bottom-height-frameChrome:rect.top});
+            layout();
+          });
+        }
       }
       function mount(element,controls){
         panel=element;
         ({smaller,larger}=controls);
         smaller.onclick=()=>resize(-1);
         larger.onclick=()=>resize(1);
-        bindDrag(panel.querySelector('.video-toolbar'));
+        bindPointer(panel.querySelector('.video-toolbar'),event=>!event.target.closest('button,a'),(dx,dy,rect,view,bounds)=>{
+          Object.assign(bounds,place(rect.left+dx,rect.top+dy,view));
+        });
+        if(geometryKey)addResizeCorners();
         DOC.body.append(panel);
+        if(frameHeight){
+          frame=panel.querySelector('iframe');
+          frameChrome=panel.offsetHeight-frame.offsetHeight;
+        }
         syncFloatingPanelThemes();
         layout();
         ROOT.addEventListener('resize',layout);
+        finePointer?.addEventListener?.('change',layout);
         visual?.addEventListener('resize',layout);
         visual?.addEventListener('scroll',layout);
       }
       function close(){
         if(!panel)return;
         ROOT.removeEventListener('resize',layout);
+        finePointer?.removeEventListener?.('change',layout);
         visual?.removeEventListener('resize',layout);
         visual?.removeEventListener('scroll',layout);
+        if(gesture?.moved)saveBounds(gesture.bounds);
+        gesture=null;
         panel.remove();
-        panel=drag=smaller=larger=null;
+        panel=frame=smaller=larger=null;
       }
       return {mount,layout,close};
     }
@@ -359,7 +433,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       return {open,close,isOpen:()=>!!panel};
     }
     const searchWindow=createFloatingWindow({
-      initialWidth:960,minWidth:264,maxWidth:()=>1280,
+      initialWidth:960,minWidth:264,maxWidth:()=>1280,minFrameHeight:180,geometryKey:'bilibiliSearchWindow',
       frameHeight:(width,view)=>Math.max(0,Math.floor(Math.min(width*(view.width<500?1.5:.76),view.height-58))),
     });
     let searchPanel;
@@ -368,7 +442,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       searchPanel=null;
     }
     function openSearch(keyword){
-      const url=`https://search.bilibili.com/video?keyword=${encodeURIComponent(keyword)}`;
+      const link=videoLink(keyword);
+      const videoId=id(keyword)||link?.videoId;
+      const url=videoId
+        ? `${videoUrl(videoId)}${link?.url.search||''}${link?.url.hash||''}`
+        : `https://search.bilibili.com/video?keyword=${encodeURIComponent(keyword)}`;
       if(!searchPanel){
         searchPanel=DOC.createElement('section');
         searchPanel.id=`${ID}-bilibili-search`;
@@ -380,7 +458,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           <button type="button" data-search-smaller title="缩小窗口" aria-label="缩小窗口">−</button>
           <button type="button" data-search-larger title="放大窗口" aria-label="放大窗口">+</button>
           <button type="button" data-search-close title="关闭搜索" aria-label="关闭搜索">×</button>
-        </header><iframe title="哔哩哔哩官方搜索"></iframe>`;
+        </header><iframe allowfullscreen></iframe>`;
         const closeButton=searchPanel.querySelector('[data-search-close]');
         closeButton.onclick=closeSearch;
         searchPanel.onkeydown=event=>{if(event.key==='Escape')closeSearch();};
@@ -391,7 +469,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         closeButton.focus({preventScroll:true});
       }
       searchPanel.querySelector('a').href=url;
-      searchPanel.querySelector('iframe').src=url;
+      const iframe=searchPanel.querySelector('iframe');
+      iframe.title=videoId?'哔哩哔哩视频详情':'哔哩哔哩官方搜索';
+      iframe.src=url;
     }
     return {isEntry,trackId,inputId,video,videoUrl,createPlayer,openSearch,closeSearch};
   })();
@@ -806,6 +886,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}-bilibili-search .video-toolbar a{padding:5px 7px;border-radius:6px;color:inherit;text-decoration:none;white-space:nowrap}
       #${ID}-bilibili-search .video-toolbar a:hover{background:var(--picker-control);text-decoration:underline}
       #${ID}-bilibili-search iframe{display:block;width:100%;border:0;background:white}
+      :is(#${ID}-video,#${ID}-bilibili-search).is-pointer-active iframe{pointer-events:none}
+      #${ID}-bilibili-search .video-resize-corner{display:none;position:absolute;z-index:1;width:18px;height:18px;touch-action:none;user-select:none}
+      #${ID}-bilibili-search.has-resize-corners .video-resize-corner{display:block}
+      #${ID}-bilibili-search .video-resize-corner.nw{top:0;left:0;cursor:nwse-resize}
+      #${ID}-bilibili-search .video-resize-corner.ne{top:0;right:0;cursor:nesw-resize}
+      #${ID}-bilibili-search .video-resize-corner.sw{bottom:0;left:0;cursor:nesw-resize}
+      #${ID}-bilibili-search .video-resize-corner.se{bottom:0;right:0;cursor:nwse-resize}
+      #${ID}-bilibili-search [data-search-close]{position:relative;z-index:2}
       #${ID}-video .video-frame{background:#000}
       #${ID}-video iframe{display:block;width:100%;height:auto;aspect-ratio:16/9;border:0}
       #${ID}-video.is-picture-hidden{opacity:0;clip-path:inset(50%);pointer-events:none}
