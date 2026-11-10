@@ -28,13 +28,13 @@ test('version, album version and available duration evidence constrain candidate
 });
 
 function searchHarness(responses,settings={}){
-  const calls=[],statuses=[],api=matcher();let played,tryAudio;
+  const calls=[],statuses=[],api=matcher();let played;
   const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','bilibiliTrackId','isBilibiliIdOnly',`
     let searchRequest=0,disposed=false,results=[];const ID='test',current=null,queue=[],save=()=>{};
     ${section('async function search(word','const coverResponses=')}
     return {search,results:()=>results};
-  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},(message,_persistent,action)=>{statuses.push(message);tryAudio=action;},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliTrackId,api.isBilibiliIdOnly);
-  return {...search,calls,statuses,played:()=>played,tryAudio:()=>tryAudio?.()};
+  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},message=>statuses.push(message),()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliTrackId,api.isBilibiliIdOnly);
+  return {...search,calls,statuses,played:()=>played};
 }
 test('search stops at correct Netease result; wrong singer falls through to JOOX',async()=>{
   const first=searchHarness({netease:[{...jay,source:'netease'}],joox:[jay]});
@@ -70,15 +70,13 @@ test('a full BV ID searches Bilibili directly and keeps opaque GD track IDs',asy
   assert.deepEqual(api.results(),tracks);
 });
 
-test('an empty BV search offers an audio lookup without creating a fake song title',async()=>{
+test('an empty BV search reports missing metadata and leaves the result list empty',async()=>{
   const id='BV1NS4t6oEXQ',api=searchHarness({});
   await api.search(`bv${id.slice(2)}`);
   assert.deepEqual(api.calls,['bilibili']);
   assert.deepEqual(api.results(),[]);
-  assert.match(api.statuses.at(-1),/暂未返回曲目信息/);
+  assert.match(api.statuses.at(-1),/暂未返回该 BV 号的曲目信息/);
   assert.equal(api.played(),undefined);
-  await api.tryAudio();
-  assert.deepEqual(api.played(),{id:`bilibili:${id}`,mediaId:id,title:'',artist:'',source:'bilibili',gdSource:'bilibili'});
 });
 
 test('only metadata from the same BV is reused when GD search is empty',async()=>{
