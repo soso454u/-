@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.55';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.56';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -820,11 +820,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function search(word,autoPlayFirst=false,showList=true,heading='',quiet=false,preferredSong=null){
     word=String(word||'').trim();if(!word)return;
-    const request=++searchRequest,strict=autoPlayFirst||!!preferredSong,selected=GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto',sources=selected==='auto'?GD_SOURCES:[selected];
+    const request=++searchRequest,strict=autoPlayFirst||!!preferredSong;
+    const bvId=strict?'':bilibiliTrackId(word);
+    const selected=bvId?'bilibili':GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto';
+    const sources=selected==='auto'?GD_SOURCES:[selected];
     setStatus('正在搜索…');let found=[],lastError;
     for(const source of sources){
       try{
-        const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;
+        const rows=await searchSource(source,bvId||word);if(request!==searchRequest||disposed)return;
         if(strict){found=querySongHits(rows,word,preferredSong);if(found.length)break;}
         else{
           found.push(...rows);
@@ -835,9 +838,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }catch(error){lastError=error;if(error.retryAt)break;}
     }
     if(request!==searchRequest||disposed)return;
+    const tryById=!!bvId&&!found.length&&!lastError?.retryAt;
+    if(tryById){
+      found.push({id:`bilibili:${bvId}`,mediaId:bvId,title:bvId,artist:'',source:'bilibili',gdSource:'bilibili'});
+    }
     results=strict?found:rankSearchResults(found,word);
     const listBox=DOC.querySelector(`#${ID} .list`);
     if(showList)render(results,heading,'results',false);else if(listBox){listBox.hidden=true;listBox.innerHTML='';}
+    if(tryById){setStatus('GD 未返回曲目信息，点击 BV 号可尝试获取音频',true);return;}
     if(results.length){
       setStatus(`${results.length} 个${strict?'匹配':'搜索'}结果`);
       if(autoPlayFirst)await play(results[0]);
@@ -1082,6 +1090,13 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return 500+(version===wantedVersion?100:0)+(sameAlbum?40:0)+(sameDuration?30-gap:0);
   }
   function rankedPlaybackHits(rows,song){return rows.map(item=>({item,score:scorePlaybackHit(item,song)})).filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score);}
+  function bilibiliTrackId(value){
+    const match=String(value||'').match(/^bv([a-z0-9]{10})$/i);
+    return match?`BV${match[1]}`:'';
+  }
+  function isBilibiliIdOnly(song){
+    return song.source==='bilibili'&&song.title===song.mediaId&&!!bilibiliTrackId(song.mediaId);
+  }
   // Share upstream cooldown, gateway recovery and request diagnostics across script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0,gatewayDown:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
@@ -1461,7 +1476,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function resolveGdSourceTracks(s,source,allBitrates=true,{fresh=false,nonce='',bitrate='320',excludeIds=new Set(),isActive=()=>true,transportRetry=null}={}){
     let hit=s.source===source&&s.mediaId&&(s.gdSource===source||source==='bilibili')&&!excludeIds.has(String(s.mediaId))?s:null;
-    if(!hit){
+    if(!hit&&!isBilibiliIdOnly(s)){
       let best=-Infinity;
       for(const name of recordingQueries(s)){
         if(!isActive())return [];
@@ -1753,7 +1768,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           const sources=auto&&s.source==='bilibili'
             ? ['bilibili',...GD_SOURCES.filter(source=>source!=='bilibili')]
             : playbackSourceOrder(selectedSource);
-          if(auto&&settings.lxMusicEnabled&&knownLxSongId(s,'tencent')){
+          if(auto&&isBilibiliIdOnly(s))played=await tryGd(['bilibili']);
+          else if(auto&&settings.lxMusicEnabled&&knownLxSongId(s,'tencent')){
             played=await tryLxQq();
             if(!played&&isActive())played=await tryGd(sources);
           }else if(auto&&settings.lxMusicEnabled){

@@ -188,6 +188,14 @@ test('auto playback tries the selected Bilibili track before searching other sou
   assert.deepEqual(api.fallback, [['bilibili']]);
 });
 
+test('a BV-only entry requests its audio without title searches on other sources', async () => {
+  const mediaId='BV1NS4t6oEXQ';
+  const api = player(() => assert.fail('a BV-only entry cannot look up a title on LX'), true, () => { throw Error('接口未返回播放地址'); });
+  await api.play({ source:'bilibili', mediaId, title:mediaId });
+  assert.deepEqual(api.fallback, [['bilibili']]);
+  assert.match(api.statuses.at(-1), /接口未返回播放地址/);
+});
+
 test('autoplay denial produces a visible retry warning instead of silently stopping', async () => {
   const api = player(() => assert.fail('autoplay denial is not a provider failure'), true, () => assert.fail('no fallback'), () => { throw new DOMException('denied', 'NotAllowedError'); });
   await api.play({ ...track, customAudio: 'https://cdn.test/live.m4a' });

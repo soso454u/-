@@ -5,7 +5,7 @@ import test from 'node:test';
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
 const matching=section('function normalizeSongText','// Share upstream cooldown');
-function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText};`)();}
+function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText,bilibiliTrackId};`)();}
 const jay={title:'七里香',artist:'周杰伦',duration:299,album:'七里香'};
 
 test('explicit singers reject covers and substring identities; known Jay aliases match',()=>{
@@ -28,13 +28,13 @@ test('version, album version and available duration evidence constrain candidate
 });
 
 function searchHarness(responses,settings={}){
-  const calls=[],api=matcher();let played;
-  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText',`
+  const calls=[],statuses=[],api=matcher();let played;
+  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','bilibiliTrackId',`
     let searchRequest=0,disposed=false,results=[];const ID='test';
     ${section('async function search(word','const coverResponses=')}
     return {search,results:()=>results};
-  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},()=>{},()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText);
-  return {...search,calls,played:()=>played};
+  `)(['netease','joox','bilibili'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},message=>statuses.push(message),()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,api.bilibiliTrackId);
+  return {...search,calls,statuses,played:()=>played};
 }
 test('search stops at correct Netease result; wrong singer falls through to JOOX',async()=>{
   const first=searchHarness({netease:[{...jay,source:'netease'}],joox:[jay]});
@@ -61,13 +61,22 @@ test('empty manual results fall back sequentially; structured automatic picks re
   await auto.search('七里香 周杰伦',true,true,'',false,jay);assert.deepEqual(auto.calls,['netease','joox']);assert.equal(auto.played().artist,'周杰伦');
 });
 
-test('manual Bilibili search keeps provider results when GD uses an opaque track ID',async()=>{
+test('a full BV ID searches Bilibili directly and keeps opaque GD track IDs',async()=>{
   const id='BV1NS4t6oEXQ';
   const tracks=[{id:'bilibili:recording:1',mediaId:'recording:1',title:'歌名',artist:'歌手',source:'bilibili'}];
-  const api=searchHarness({bilibili:query=>{assert.equal(query,id);return tracks;}},{searchSource:'bilibili'});
+  const api=searchHarness({bilibili:query=>{assert.equal(query,id);return tracks;}},{searchSource:'netease'});
   await api.search(id);
   assert.deepEqual(api.calls,['bilibili']);
   assert.deepEqual(api.results(),tracks);
+});
+
+test('an empty BV search displays a manual lookup entry with the original ID',async()=>{
+  const id='BV1NS4t6oEXQ',api=searchHarness({});
+  await api.search(`bv${id.slice(2)}`);
+  assert.deepEqual(api.calls,['bilibili']);
+  assert.deepEqual(api.results(),[{id:`bilibili:${id}`,mediaId:id,title:id,artist:'',source:'bilibili',gdSource:'bilibili'}]);
+  assert.match(api.statuses.at(-1),/点击 BV 号/);
+  assert.equal(api.played(),undefined);
 });
 
 test('playback tolerates provider labels and omitted version tags only with recording evidence',()=>{
