@@ -98,10 +98,23 @@ test('fallback starts at the default quality without forced refresh rounds', asy
   assert.equal(options.length,1);assert.equal(options[0].bitrate,'320');assert.equal(options[0].fresh,false);
 });
 
-const importSource = section('function playlistSongsFromRows', 'let activeCompanionWorldText');
+const importSource = section('function playlistMatchesImport', 'let activeCompanionWorldText');
 function importer(settings) {
   const rows = [{ title: '稻香', author: '周杰伦', pic: '', url: 'https://cdn.test/official.mp3?id=1' }];
-  return new Function('settings', 'offlineKey', 'strip', 'PLAYLIST_IMPORT_LIMIT', 'playlistInputUrl', 'resolvePlaylistShareLink', 'playlistLinkInfo', 'METING_COVER_APIS', 'fetch', 'playlistMatchesImport', 'save', 'showPlaylists', 'setStatus', 'toast', `${section('function normalizeSongText','// Share upstream cooldown')};${section('function getResponseUrl','function sourceBitrates')};${importSource};return {importPlaylist,playlistSongsFromRows};`)(settings, offlineKey, strip, 1000, value => new URL(value).href, async url => ({ url }), () => ({ u: new URL('https://music.163.com/playlist?id=123'), source: 'netease', id: '123', rawId: '123', sourceLabel: '网易云' }), ['https://api.test/'], async () => ({ ok: true, json: async () => rows }), () => true, () => {}, () => {}, () => {}, () => {});
+  const build = new Function('settings', 'offlineKey', 'strip', 'resolvePlaylistShareLink', 'fetch', 'save', 'showPlaylists', 'setStatus', 'toast', `
+    const PLAYLIST_IMPORT_LIMIT = 1000;
+    const PLAYLIST_SOURCE_LABELS = { netease: '网易云音乐', tencent: 'QQ 音乐', kugou: '酷狗音乐' };
+    const METING_COVER_APIS = ['https://meting.test/api'];
+    ${section('const LX_SOURCES=', 'const LX_URL_API')}
+    ${section('function normalizeSongText','// Share upstream cooldown')}
+    ${section('function getResponseUrl','function sourceBitrates')}
+    ${section('function playlistInputUrl','function playlistShareSource')}
+    ${section('function qqSongMid','async function searchMetingSource')}
+    ${importSource}
+    return { importPlaylist, playlistSongsFromRows };
+  `);
+  return build(settings, offlineKey, strip, async url => ({ url, title: '' }),
+    async () => ({ ok: true, json: async () => rows }), () => {}, () => {}, () => {}, () => {});
 }
 
 test('platform imports retain playable URLs instead of discarding them', () => {
@@ -112,20 +125,21 @@ test('platform imports retain playable URLs instead of discarding them', () => {
 
 test('QQ import preserves distinct recordings, duration, performer and platform ID', () => {
   const { playlistSongsFromRows } = importer({ playlists: [] });
+  const endpoint = new URL('https://meting.test/api');
   const rows = [
-    { name: '夜曲', singer: [{ name: '翻唱歌手' }], album: { name: '巡演纪念' }, version: 'Live', interval: 228, songmid: '00000000000001' },
-    { title: '夜曲', author: '翻唱歌手', duration: '03:37', url: '//meting.test/api?server=tencent&type=url&id=00000000000002' },
+    { name: '夜曲', singer: [{ name: '翻唱歌手' }], album: { name: '巡演纪念' }, version: 'Live', interval: 228, songmid: '001AT6MC1nTzDO' },
+    { title: '夜曲', author: '翻唱歌手', duration: '03:37', songmid: 123, mid: '456', mediaId: '12345678901234', url: '//meting.test/api?server=tencent&type=url&id=002FsceO4WxKyF' },
   ];
-  const songs = playlistSongsFromRows([...rows, rows[1]], 'tencent');
+  const songs = playlistSongsFromRows([...rows, rows[1]], 'tencent', endpoint);
   assert.deepEqual(songs.map(({ mediaId, title, artist, album, version, duration }) => ({ mediaId, title, artist, album, version, duration })), [
-    { mediaId: '00000000000001', title: '夜曲', artist: '翻唱歌手', album: '巡演纪念', version: 'Live', duration: 228 },
-    { mediaId: '00000000000002', title: '夜曲', artist: '翻唱歌手', album: '', version: '', duration: 217 },
+    { mediaId: '001AT6MC1nTzDO', title: '夜曲', artist: '翻唱歌手', album: '巡演纪念', version: 'Live', duration: 228 },
+    { mediaId: '002FsceO4WxKyF', title: '夜曲', artist: '翻唱歌手', album: '', version: '', duration: 217 },
   ]);
   assert.match(songs[1].audio, /^https:/);
 });
 
 test('platform sync preserves manual audio and existing playlist identity', async () => {
-  const settings = { playlists: [{ id: 'existing', name: '我的音乐', songs: [{ title: '稻香', artist: '周杰伦', customAudio: 'https://cdn.test/manual.mp3' }] }] };
+  const settings = { playlists: [{ id: 'existing', name: '我的音乐', importSource: 'netease', importSourceId: '123', songs: [{ title: '稻香', artist: '周杰伦', customAudio: 'https://cdn.test/manual.mp3' }] }] };
   await importer(settings).importPlaylist('https://music.163.com/playlist?id=123');
   assert.equal(settings.playlists[0].id, 'existing');
   assert.equal(settings.playlists[0].name, '我的音乐');

@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.72';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.73';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1157,9 +1157,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(inQueue)queueIndex=next.index;
     return next.song;
   }
+  const playlistPlaybackOrigins=new WeakMap();
   function playPlaylistAt(songs,index=0){
     if(!songs[index]){setStatus('这个歌单还是空的');return;}
-    queue=songs.map(song=>({...song}));
+    queue=songs.map(song=>{
+      const copy={...song};
+      playlistPlaybackOrigins.set(copy,song);
+      return copy;
+    });
     queueIndex=index;
     count();
     playListEntry(queue[index]);
@@ -1428,7 +1433,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     };
     if(hydrateCovers){if(kind==='results')ROOT.setTimeout(()=>hydrateResultCovers(rows),0);else if(kind==='fav'||kind==='queue')ROOT.setTimeout(()=>hydrateSavedCovers(rows,heading,kind),0);}
   }
-  const strip = s => ({ album:typeof s.album==='object'?s.album?.name||'':s.album||'',version:s.version||'',id:s.id,mediaId:s.mediaId||s.id,title:s.title,artist:s.artist,cover:s.cover,coverId:s.coverId||'',lyricId:s.lyricId||'',gdSource:s.gdSource||'',gdLyricId:s.gdLyricId||'',duration:Number(s.duration)||0,audio:s.audio||'',customAudio:s.customAudio||'',source:s.source||'netease',...(s.bvid?{bvid:s.bvid,uid:s.uid,views:s.views}:{}),...(s.source==='tencent'&&s.lxSearch?{lxSearch:true}:{}) });
+  const strip = s => ({ album:typeof s.album==='object'?s.album?.name||'':s.album||'',version:s.version||'',id:s.id,mediaId:s.mediaId||s.id,title:s.title,artist:s.artist,cover:s.cover,coverId:s.coverId||'',lyricId:s.lyricId||'',gdSource:s.gdSource||'',gdLyricId:s.gdLyricId||'',duration:Number(s.duration)||0,audio:s.audio||'',customAudio:s.customAudio||'',source:s.source||'netease',...(s.bvid?{bvid:s.bvid,uid:s.uid,views:s.views}:{}),...(s.source==='tencent'&&s.lxSearch?{lxSearch:true}:{}),...(s.qqMid?{qqMid:s.qqMid}:{}) });
   function currentIsFavorite(song=current){return !!song&&(settings.favorites||[]).some(item=>item.id===song.id);}
   function updateCurrentFavorite(){const button=DOC.querySelector(`#${ID} .current-favorite`);if(!button)return;const active=currentIsFavorite();button.textContent=active?'♥':'♡';button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',active?'取消收藏当前歌曲':'收藏当前歌曲');button.title=active?'取消收藏当前歌曲':'收藏当前歌曲';button.disabled=!current;}
   function bindCurrentFavorite(el){
@@ -1548,7 +1553,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(/cover|tribute|翻唱|致敬/i.test(artist)&&!artistMatches(artist,wantedArtist))return -Infinity;
     return 500+(version===wantedVersion?100:0)+(sameAlbum?40:0)+(sameDuration?30-gap:0);
   }
-  function rankedPlaybackHits(rows,song){return rows.map(item=>({item,score:scorePlaybackHit(item,song)})).filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score);}
+  function rankedPlaybackHits(rows,song,scoreHit=scorePlaybackHit){return rows.map(item=>({item,score:scoreHit(item,song)})).filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score);}
   // Share upstream cooldown, gateway recovery and request diagnostics across script reloads.
   const gdRate=ROOT.__SELENE_GD_RATE__||(ROOT.__SELENE_GD_RATE__={times:[],until:0,gatewayDown:0});
   const gdResponses=new Map(),gdRequests=new Map(),dataRequestControllers=new Set();let dataCacheGeneration=0;
@@ -2029,16 +2034,25 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     url.searchParams.set('id',`${song.title} ${song.artist||''}`.trim());
     return url;
   }
+  function qqSongMid(...values){
+    return values.find(value=>typeof value==='string'&&LX_SOURCES.tencent.id.test(value))||'';
+  }
+  function metingLinkId(value,base,platform,type){
+    try{
+      const url=new URL(value,base);
+      if(url.origin===base.origin&&url.pathname===base.pathname&&url.searchParams.get('server')===platform&&url.searchParams.get('type')===type)return url.searchParams.get('id')||'';
+    }catch{}
+    return '';
+  }
   function metingPlaybackId(row,search,platform){
-    let url;
-    try{url=new URL(row?.url,search);}catch{return '';}
-    if(url.origin!==search.origin||url.pathname!==search.pathname||url.searchParams.get('server')!==platform||url.searchParams.get('type')!=='url')return '';
-    const id=url.searchParams.get('id')||'';
+    const id=metingLinkId(row?.url,search,platform,'url');
+    if(platform==='tencent')return qqSongMid(row?.songmid,row?.songMid,row?.mid,id,row?.mediaId);
     return LX_SOURCES[platform].id.test(id)?id:'';
   }
-  async function searchMetingSource(platform,word){
+  async function searchMetingSource(platform,word,{bases=METING_METADATA_APIS,limit=20,isActive=()=>true}={}){
     let failure,empty=false;
-    for(const base of METING_METADATA_APIS){
+    for(const base of bases){
+      if(!isActive())return [];
       const search=metingSearchUrl(base,platform,{title:word});
       try{
         const {response,data}=await requestLxJson(search,8000);
@@ -2055,14 +2069,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             album:getSongAlbum(row),version:String(row.version||''),duration:songDuration(row),
             cover:getResponseUrl(row.pic||row.cover),lyricId:mediaId,audio:'',lxSearch:true,
           });
-          if(tracks.size===20)break;
+          if(tracks.size===limit)break;
         }
         if(tracks.size)return [...tracks.values()];
         throw Error('接口未返回有效的歌曲 ID');
       }catch(error){failure=error;}
     }
     if(empty)return [];
-    throw Error(`QQ 音乐搜索暂不可用（${failure?.message||'网络错误'}）`);
+    throw Error(`${GD_SOURCE_LABELS[platform]||platform}音乐搜索暂不可用（${failure?.message||'网络错误'}）`);
   }
   async function coverSearch(url){
     const key=String(url),cached=coverResponses.get(key),generation=dataCacheGeneration;
@@ -2105,11 +2119,14 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     paintTime();
   }
   // Huibq's public LX Music source: https://github.com/Huibq/keep-alive/blob/master/render_api.js
-  const LX_SOURCES={tencent:{code:'tx',id:/^[a-z0-9]{14}$/i},netease:{code:'wy',id:/^\d{1,20}$/},kugou:{code:'kg',id:/^[a-f0-9]{32}$/i}};
+  const LX_SOURCES={tencent:{code:'tx',id:/^(?=[a-z0-9]*[a-z])[a-z0-9]{14}$/i},netease:{code:'wy',id:/^\d{1,20}$/},kugou:{code:'kg',id:/^[a-f0-9]{32}$/i}};
   const LX_URL_API='https://selene-lx-worker.soivt44.workers.dev/api/lx/url';
   const lxSourceLabel=platform=>`LX Music · ${GD_SOURCE_LABELS[platform]}`;
   const playbackLabel=song=>song.offline?'离线缓存':audio.dataset?.seleneLxSource||(song.customAudio?'手动音源':GD_SOURCE_LABELS[song.source]||'自动');
   let lxRetryAt=0;
+  function checkLxCooldown(){
+    if(Date.now()<lxRetryAt)throw Object.assign(Error('LX Music 限流冷却中，请稍后再试'),{retryAt:lxRetryAt});
+  }
   async function requestLxJson(url,timeout=12000){
     const controller=new ROOT.AbortController();
     let timedOut=false;
@@ -2126,42 +2143,57 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }finally{ROOT.clearTimeout(timer);dataRequestControllers.delete(controller);}
   }
   function knownLxSongId(song,platform){
+    if(platform==='tencent'){
+      const verified=qqSongMid(song.qqMid);
+      if(verified||song.source!=='tencent')return verified;
+      const savedIds=METING_METADATA_APIS.map(base=>metingLinkId(song.audio,new URL(base),'tencent','url'));
+      const originalId=String(song.id||'').match(/^tencent:([^:]+)(?::|$)/)?.[1];
+      return qqSongMid(song.songmid,song.songMid,song.mid,...savedIds,song.mediaId,originalId===song.title?'':originalId);
+    }
     const pattern=LX_SOURCES[platform].id;
     const key=`${platform}:${song.mediaId}`;
     return song.source===platform&&pattern.test(song.mediaId)&&(song.gdSource===platform||song.id===key||String(song.id||'').startsWith(`${key}:`))?String(song.mediaId):'';
   }
-  async function findLxSongId(song,platform,isActive=()=>true){
-    const known=knownLxSongId(song,platform);if(known)return known;
+  function scoreQqPlaylistHit(item,song){
+    const artist=getSongArtist(song);
+    if(!artistParts(artist).length||!artistMatches(getSongArtist(item),artist)||lyricVersion(item)!==lyricVersion(song)||
+      normalizeSongText(recordingTitle(item))!==normalizeSongText(recordingTitle(song)))return -Infinity;
+    const version=normalizeSongText(song.version),foundVersion=normalizeSongText(item.version);
+    if(version!==foundVersion&&(version&&!lyricVersion({version:song.version})||foundVersion&&!lyricVersion({version:item.version})))return -Infinity;
+    const coverId=track=>METING_METADATA_APIS.map(base=>metingLinkId(track.cover,new URL(base),'tencent','pic')).find(Boolean);
+    const wantedCover=coverId(song),foundCover=coverId(item);
+    if(wantedCover&&foundCover&&wantedCover!==foundCover)return -Infinity;
+    return scorePlaybackHit(item,song)+(wantedCover&&wantedCover===foundCover?250:0);
+  }
+  async function findLxSongId(song,platform,isActive=()=>true,excludedId=''){
+    const known=knownLxSongId(song,platform);if(known&&known!==excludedId)return known;
     if(!getSongTitle(song))throw Error('LX Music 匹配需要歌曲名');
-    let match;
+    const qqPlaylist=platform==='tencent'&&song.source==='tencent'&&!song.lxSearch;
+    // The public provider preserves QQ's version suffixes when the other provider omits them.
+    const bases=qqPlaylist?METING_COVER_APIS:platform==='tencent'?METING_METADATA_APIS:[SELENE_METING_API];
+    let match,ambiguousScore=-Infinity;
     for(const query of recordingQueries(song)){
       if(!isActive())return '';
-      const search=metingSearchUrl(SELENE_METING_API,platform,{title:query});
-      let result;try{result=await requestLxJson(search,8000);}catch(error){if(match)break;throw error;}
-      const {response,data}=result;
-      const rows=Array.isArray(data)?data:data?.data;
-      if(!response.ok||!Array.isArray(rows)){if(match)break;throw Error('LX Music 歌曲 ID 查询暂不可用');}
-      const candidates=[];
-      for(const row of rows.slice(0,30)){
-        const songId=metingPlaybackId(row,search,platform);
-        if(songId)candidates.push({...row,songId});
+      let rows;try{rows=await searchMetingSource(platform,query,{bases,limit:30,isActive});}catch(error){if(match)break;throw error;}
+      const ranked=rankedPlaybackHits(rows,song,qqPlaylist?scoreQqPlaylistHit:scorePlaybackHit);
+      const [candidate,next]=ranked.filter(hit=>hit.item.mediaId!==excludedId);
+      const excluded=excludedId&&ranked.find(hit=>hit.item.mediaId===excludedId);
+      if(qqPlaylist&&candidate&&(candidate.score===next?.score||excluded&&excluded.score>=candidate.score)){
+        ambiguousScore=Math.max(ambiguousScore,candidate.score);
+        continue;
       }
-      const candidate=rankedPlaybackHits(candidates,song)[0];
       if(candidate&&(!match||candidate.score>match.score))match=candidate;
-      if(match?.score>=1000)break;
+      if(match?.score>=1000&&match.score>ambiguousScore)break;
     }
-    if(!match)throw Error('LX Music 未找到同一录音的可用平台 ID');
-    return match.item.songId;
+    if(!match||match.score<=ambiguousScore)throw Error('LX Music 未找到同一录音的可用平台 ID');
+    return match.item.mediaId;
   }
-  async function playLxSource(song,platform,isActive){
-    const checkCooldown=()=>{if(Date.now()<lxRetryAt)throw Object.assign(Error('LX Music 限流冷却中，请稍后再试'),{retryAt:lxRetryAt});};
+  async function playLxSongId(song,platform,songId,isActive){
     if(!isActive())return null;
-    checkCooldown();
     const source=LX_SOURCES[platform].code,label=lxSourceLabel(platform);
-    const songId=await findLxSongId(song,platform,isActive);if(!isActive())return null;
     for(const quality of ['128k','320k']){
       if(!isActive())return null;
-      checkCooldown();
+      checkLxCooldown();
       const request=new URL(LX_URL_API);
       request.search=new URLSearchParams({source,id:songId,quality});
       const {response,data}=await requestLxJson(request),code=data?.code;
@@ -2186,7 +2218,25 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       audio.dataset.seleneLxSource=label;
       return {offline:false};
     }
-    throw Error('LX Music 没有返回有效期内的播放地址');
+    return false;
+  }
+  async function playLxSource(song,platform,isActive){
+    if(!isActive())return null;
+    checkLxCooldown();
+    const known=knownLxSongId(song,platform);
+    const qqPlaylist=platform==='tencent'&&song.source==='tencent'&&!song.lxSearch;
+    const songId=known||await findLxSongId(song,platform,isActive);
+    const played=await playLxSongId(song,platform,songId,isActive);
+    if(played)return qqPlaylist&&song.qqMid!==songId?{...played,qqMid:songId}:played;
+    if(played===null||!isActive())return null;
+    const unavailable=Error('LX Music 没有返回有效期内的播放地址');
+    if(!known||!qqPlaylist)throw unavailable;
+    let replacement;
+    try{replacement=await findLxSongId(song,platform,isActive,known);}
+    catch(error){throw new AggregateError([unavailable,error],`${unavailable.message}；${error.message}`);}
+    const recovered=await playLxSongId(song,platform,replacement,isActive);
+    if(recovered===false)throw unavailable;
+    return recovered?{...recovered,qqMid:replacement}:null;
   }
   let pendingPlay=null;
   let playbackLimitWarningUntil=0;
@@ -2225,35 +2275,35 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
           catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
         }
         if(!isActive())return;
+        const noteFailure=error=>{
+          if(isNotAllowed(error)||error.name==='AbortError')throw error;
+          const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
+          lastError=lastError?Object.assign(new AggregateError([lastError,error],`${mediaDetail(lastError)}；${mediaDetail(error)}`),{retryAt}):error;
+        };
+        const tryLxQq=async()=>{
+          setStatus(`正在验证 ${lxSourceLabel('tencent')}…`);
+          try{const result=await playLxSource(s,'tencent',isActive);if(result)lxSource='tencent';return result;}
+          catch(error){noteFailure(error);return null;}
+        };
+        const autoLx=selectedSource==='auto'&&settings.lxMusicEnabled;
+        const preferQq=autoLx&&(s.source==='tencent'||knownLxSongId(s,'tencent'));
+        if(!played&&preferQq)played=await tryLxQq();
+        if(!isActive())return;
         const useSavedAudio=s.source==='direct'||selectedSource===s.source||selectedSource==='auto'&&['tencent','netease','kugou'].includes(s.source);
         if(!played&&useSavedAudio&&!failedPlaybackUrls.has(s.audio)&&/^https?:\/\//i.test(String(s?.audio||''))&&s.audio!==s.customAudio){
           setStatus('正在验证已保存音源…');
           try{await playUrl(s.audio,'已保存音源',false,{isActive,expectedDuration:s.source==='direct'?0:songDuration(s)});played={...s,offline:false};}
-          catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;console.warn('[音乐播放器] 已保存音源失效，切换备用源',error);}
+          catch(error){noteFailure(error);console.warn('[音乐播放器] 已保存音源失效，切换备用源',error);}
         }
         if(!isActive())return;
         if(!played&&s.source!=='direct'){
-          const noteFailure=error=>{
-            if(isNotAllowed(error)||error.name==='AbortError')throw error;
-            const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
-            lastError=lastError?Object.assign(new AggregateError([lastError,error],`${mediaDetail(lastError)}；${mediaDetail(error)}`),{retryAt}):error;
-          };
           let gdRetryAt=0;
           const tryGd=async sources=>{
             try{return await gdFallback(s,0,isActive,failedPlaybackUrls,sources,source=>setStatus(`正在验证${GD_SOURCE_LABELS[source]||source}音源…`));}
             catch(error){gdRetryAt=error.retryAt||0;noteFailure(error);return null;}
           };
-          const tryLxQq=async()=>{
-            setStatus(`正在验证 ${lxSourceLabel('tencent')}…`);
-            try{const result=await playLxSource(s,'tencent',isActive);if(result)lxSource='tencent';return result;}
-            catch(error){noteFailure(error);return null;}
-          };
-          const auto=selectedSource==='auto';
           const sources=playbackSourceOrder(selectedSource);
-          if(auto&&settings.lxMusicEnabled&&knownLxSongId(s,'tencent')){
-            played=await tryLxQq();
-            if(!played&&isActive())played=await tryGd(sources);
-          }else if(auto&&settings.lxMusicEnabled){
+          if(autoLx&&!preferQq){
             const [primary,...remaining]=sources;
             played=await tryGd([primary]);
             if(!played&&isActive()&&settings.lxMusicEnabled)played=await tryLxQq();
@@ -2264,7 +2314,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(played){
         if(!isActive())return;
         pendingPlaybackSelection=false;Object.assign(s,played);if(Number.isFinite(audio.duration)&&audio.duration>0)s.duration=audio.duration;
-        if(settings.favorites?.includes(s)||(settings.playlists||[]).some(playlist=>playlist.songs?.includes(s)))save();
+        const savedSong=playlistPlaybackOrigins.get(s)||s;
+        if(settings.favorites?.includes(savedSong)||(settings.playlists||[]).some(playlist=>playlist.songs?.includes(savedSong))){
+          if(played.qqMid)savedSong.qqMid=played.qqMid;
+          if(savedSong===s||played.qqMid)save();
+        }
         show(s);setStatus(played.offline?'正在播放 · 离线缓存':lxSource?`正在播放 · ${lxSourceLabel(lxSource)}`:'正在播放');
         if(s.source==='direct'){const lyrics=DOC.querySelector(`#${ID} .lyrics`);if(lyrics)lyrics.textContent='MP3 直链歌曲';}
         else{applyCurrentCover(s,request);loadLyrics(s,request);}
@@ -2546,15 +2600,17 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const useful=errors.find(error=>!/HTTP 401|HTTP 404|Failed to fetch/i.test(error?.message||''))||errors[0];throw Error(`${sourceLabel}分享短链解析失败：${useful?.name==='AbortError'?'请求超时':useful?.message||'链接已失效'}。已自动尝试短链服务和 SillyTavern 代理。`);
   }
   function playlistMatchesImport(item,source,id){if(!item)return false;if(item.importSource===source&&String(item.importSourceId||'')===String(id))return true;for(const link of[item.importUrl,item.importShareUrl])try{const info=playlistLinkInfo(link||'');if(info.source===source&&String(info.id||'')===String(id))return true;}catch{}return false;}
-  function playlistSongsFromRows(rows,source){
+  function playlistSongsFromRows(rows,source,api){
     const songs=[],known=new Set();
     for(const x of(rows||[]).slice(0,PLAYLIST_IMPORT_LIMIT)){
       if(!x||typeof x!=='object')continue;
       const title=getSongTitle(x),artist=getSongArtist(x),audio=getResponseUrl(x.url);
-      const rawId=source==='tencent'?x.songmid||x.mid||x.mediaId:x.mediaId;
-      let mediaId=String(rawId||'');
-      if(!mediaId)try{const url=new URL(audio);if(!url.searchParams.has('server')||url.searchParams.get('server')===source)mediaId=url.searchParams.get('id')||'';}catch{}
-      if(!mediaId&&x.id!=null)mediaId=String(x.id);
+      let mediaId=source==='tencent'?metingPlaybackId(x,api,source):String(x.mediaId||'');
+      if(source!=='tencent'&&!mediaId)try{const url=new URL(audio);if(!url.searchParams.has('server')||url.searchParams.get('server')===source)mediaId=url.searchParams.get('id')||'';}catch{}
+      if(source==='tencent'&&!mediaId){
+        const songId=[x.songid,x.mediaId,x.id].find(value=>/^\d+$/.test(String(value??'')));
+        if(songId!=null)mediaId=String(songId);
+      }else if(!mediaId&&x.id!=null)mediaId=String(x.id);
       const song={id:`${source}:${mediaId||title}:${artist}`,mediaId,title,artist,album:getSongAlbum(x),version:String(x.version||''),duration:songDuration(x),cover:x.pic||x.cover||'',audio,source};
       const key=mediaId||`${offlineKey(song)}:${lyricVersion(song)}`;
       if(title&&!known.has(key)){songs.push(strip(song));known.add(key);}
@@ -2569,19 +2625,19 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!source||!id)throw Error('仅支持网易云、QQ 音乐或酷狗歌单链接');
       setStatus(`正在识别并导入${sourceLabel}歌单…`);
       const ids=source==='kugou'?[...new Set([rawId,id,`gcid_${id}`].filter(Boolean))]:[id];
-      let rows=null,lastError=null;
+      let rows=null,playlistApi,lastError=null;
       outer:for(const playlistId of ids)for(const base of METING_COVER_APIS)try{
         const api=new URL(base);api.searchParams.set('server',source);api.searchParams.set('type','playlist');api.searchParams.set('id',playlistId);
         const r=await fetch(api);if(!r.ok)throw Error(`接口返回 ${r.status}`);
         const data=await r.json();if(!Array.isArray(data)||!data.length)throw Error('接口没有返回歌曲');
-        rows=data;break outer;
+        rows=data;playlistApi=api;break outer;
       }catch(error){lastError=error;console.warn(`[音乐播放器] 歌单接口失败，尝试备用接口：${base}`,error);}
       if(!rows)throw Error(`歌单读取失败：${lastError?.message||'所有接口均不可用'}${source==='netease'?'；如果这是私人歌单，请先在网易云设为公开':''}`);
       settings.playlists=settings.playlists||[];const matches=settings.playlists.filter(item=>playlistMatchesImport(item,source,id));
       let playlist=matches[0],created=false,duplicates=Math.max(0,matches.length-1);
       if(duplicates)settings.playlists=settings.playlists.filter(item=>item===playlist||!matches.includes(item));
       if(!playlist){const baseName=resolved.title||`${sourceLabel}歌单`,sameName=settings.playlists.some(item=>item.name===baseName),name=sameName?`${baseName} ${id}`:baseName;playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now()};settings.playlists.unshift(playlist);created=true;}
-      const previous=Array.isArray(playlist.songs)?playlist.songs:[],fresh=playlistSongsFromRows(rows,source);
+      const previous=Array.isArray(playlist.songs)?playlist.songs:[],fresh=playlistSongsFromRows(rows,source,playlistApi);
       const nameKey=song=>`${offlineKey(song)}:${lyricVersion(song)}`,trackKey=song=>song.source===source&&song.mediaId&&song.mediaId!==song.id?`id:${song.mediaId}`:nameKey(song);
       const previousKeys=new Set(previous.map(trackKey)),freshKeys=new Set(fresh.map(trackKey)),added=fresh.filter(song=>!previousKeys.has(trackKey(song))).length,removed=previous.filter(song=>!freshKeys.has(trackKey(song))).length;
       const manualSongs=[...new Set([...matches.flatMap(item=>item.songs||[]),...previous])].filter(song=>song.customAudio),manualSources=new Map(manualSongs.map(song=>[trackKey(song),song.customAudio]));

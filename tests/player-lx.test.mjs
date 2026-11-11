@@ -12,7 +12,7 @@ function section(start, end) {
 const meting = 'https://meting.test/api';
 const worker = 'https://selene-lx-worker.soivt44.workers.dev/api/lx/url';
 const track = { title: '测试歌曲', artist: '原唱歌手', source: 'joox', mediaId: 'joox-only', gdLyricId: 'gd-lyrics', duration: 226 };
-const songId = '00000000000001';
+const songId = '002FsceO4WxKyF';
 function workerQuery(url, options) {
   assert.equal(`${url.origin}${url.pathname}`, worker);
   assert.equal(options.method, 'GET');
@@ -22,15 +22,17 @@ function workerQuery(url, options) {
   assert.equal(options.body, undefined);
   return Object.fromEntries(url.searchParams);
 }
-function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
+function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, savedSongs = []) {
   const audio = { dataset: {}, duration: 226, pause() {} };
-  const urls = [], lyrics = [], fallback = [], statuses = [];
-  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', `
-    const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'},METING_METADATA_APIS=[SELENE_METING_API];
+  const urls = [], lyrics = [], fallback = [], statuses = [], saves = [];
+  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', 'savedSongs', 'saves', `
+    const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'},METING_METADATA_APIS=[SELENE_METING_API],METING_COVER_APIS=METING_METADATA_APIS;
     const getResponseUrl=value=>value||'';
     ${section('const defaults =', 'const KEEPALIVE_NAME').replace('DEFAULT_COMPANION_PRESET', "''")}
     const isVideoEntry=()=>false,bilibiliPlayer={close(){}};
-    const settings=enabled===undefined?defaults:{...defaults,lxMusicEnabled:enabled},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
+    const settings={...defaults,lxMusicEnabled:enabled??defaults.lxMusicEnabled,playlists:[{songs:savedSongs}]},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
+    let queue=[],queueIndex=-1;
+    const count=()=>{},playListEntry=play,save=()=>saves.push(structuredClone(savedSongs));
     const setStatus=message=>statuses.push(message),toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
     let playbackRecoveryCount=0,playbackBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
@@ -43,10 +45,11 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}) {
     ${section('function normalizeSongText', '// Share upstream cooldown')}
     ${section('function metingSearchUrl', 'async function coverSearch')}
     ${section('function playbackSourceChoice', 'async function gdCover')}
+    ${section('const playlistPlaybackOrigins=', 'function bindDesktopLyrics')}
     ${section('const LX_SOURCES=', 'function parse(text)')}
-    return {play,playLxSource,searchMetingSource,select:(song,source)=>playbackSources.set(song,source)};
+    return {play,playLxSource,searchMetingSource,playSaved:()=>{playPlaylistAt(savedSongs);return pendingPlay?.promise;},select:(song,source)=>playbackSources.set(song,source)};
   `);
-  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia), urls, lyrics, fallback, statuses };
+  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia, savedSongs, saves), urls, lyrics, fallback, statuses, saves };
 }
 
 test('explicit LX playback resolves a strict QQ match and retains the original GD song identity', async () => {
@@ -62,10 +65,10 @@ test('explicit LX playback resolves a strict QQ match and retains the original G
     assert.equal(url.searchParams.get('id'), `${track.title} ${track.artist}`);
     const match = { title: track.title, author: track.artist, url: `${meting}?server=tencent&type=url&id=${songId}` };
     return Response.json([
-      { ...match, title: `${track.title} (Live)`, url: match.url.replace(songId, '00000000000002') },
-      { ...match, author: '翻唱歌手', url: match.url.replace(songId, '00000000000003') },
-      { ...match, url: match.url.replace('tencent', 'kugou').replace(songId, '00000000000004') },
-      { ...match, duration: 30, url: match.url.replace(songId, '00000000000005') },
+      { ...match, title: `${track.title} (Live)`, url: match.url.replace(songId, '001AT6MC1nTzDO') },
+      { ...match, author: '翻唱歌手', url: match.url.replace(songId, '002rsns11f5THY') },
+      { ...match, url: match.url.replace('tencent', 'kugou').replace(songId, '004CCcys3axgTS') },
+      { ...match, duration: 30, url: match.url.replace(songId, '001YNWTM3LsioN') },
       match,
     ]);
   };
@@ -170,17 +173,80 @@ test('a failed LX lookup leaves the remaining GD sources available unless GD is 
   }
 });
 
-test('previously imported QQ rows try their saved audio and recover by exact QQ ID without searching for a singer', async () => {
-  const audio = 'https://meting.test/api?server=tencent&type=url&id=00000000000001';
-  const song = { source: 'tencent', id: `tencent:${songId}:翻唱歌手`, mediaId: songId, title: '夜曲（现场）', artist: '翻唱歌手', duration: 226, audio };
+test('previously imported QQ rows recover the original MID from saved audio before trying the audio URL', async () => {
+  const audio = `${meting}?server=tencent&type=url&id=${songId}`;
+  const song = { source: 'tencent', id: 'tencent:123:翻唱歌手', mediaId: '123', title: '夜曲（现场）', artist: '翻唱歌手', duration: 226, audio };
   const fetch = async (url, options) => {
     assert.deepEqual(workerQuery(url, options), { source: 'tx', id: songId, quality: '128k' });
     return Response.json({ code: 0, url: 'https://cdn.test/live.m4a' });
   };
   const api = player(fetch, true, () => assert.fail('the exact QQ recording should be attempted before GD'), url => { if (url === audio) throw Error('old link expired'); });
   await api.play({ ...song });
-  assert.deepEqual(api.urls.map(({ url }) => url), [audio, 'https://cdn.test/live.m4a']);
+  assert.deepEqual(api.urls.map(({ url }) => url), ['https://cdn.test/live.m4a']);
   assert.equal(api.urls[0].options.expectedDuration, 226);
+});
+
+test('an unavailable QQ MID is repaired on the saved playlist row only after matching and playing the same recording', async () => {
+  const oldMid = '003OldMID00000';
+  const title = '海市蜃楼', artist = '三叔说', verifiedMid = '0040h3yY3Zk0fM';
+  const metingUrl = (type, id) => `${meting}?server=tencent&type=${type}&id=${id}`;
+  const cover = metingUrl('pic', '004L9Ksu1EjdDr');
+  const saved = { source: 'tencent', id: `tencent:${oldMid}:${artist}`, mediaId: oldMid, title, artist, cover, customAudio: '' };
+  const sameTitleOtherRecording = { ...saved, version: 'Live' };
+  const lookups = [];
+  let searches = 0;
+  const api = player(async (url, options) => {
+    if (url.origin === new URL(meting).origin) {
+      searches++;
+      assert.equal(url.searchParams.get('id'), `${title} ${artist}`);
+      const row = { title, author: artist, pic: cover };
+      return Response.json([
+        { ...row, title: `${title} (DJ德朋版)`, url: metingUrl('url', '002Vk4aA1CW0Mz') },
+        { ...row, version: '混音', url: metingUrl('url', '002xa45j167iPD') },
+        { ...row, title: `${title} (Live)`, url: metingUrl('url', '001cnXR31bKYXs') },
+        { ...row, author: '一颗狼星', url: metingUrl('url', '001pnsCG2W3HB2') },
+        { ...row, pic: metingUrl('pic', '001lgEri3agq00'), url: metingUrl('url', '004GjQy01AqWSU') },
+        { ...row, url: metingUrl('url', verifiedMid) },
+      ]);
+    }
+    const query = workerQuery(url, options);
+    lookups.push([query.id, query.quality]);
+    if (query.id === oldMid) return Response.json({ code: 2, error: 'unavailable' }, { status: 422 });
+    assert.equal(query.id, verifiedMid);
+    return Response.json({ code: 0, url: 'https://cdn.test/verified.m4a' });
+  }, true, () => assert.fail('an exact playable QQ recording needs no GD fallback'), () => {
+    if(lookups.length===3)assert.equal(api.saves.length, 0);
+  }, [saved, sameTitleOtherRecording]);
+
+  await api.playSaved();
+  assert.equal(api.saves[0][0].qqMid, verifiedMid);
+  assert.equal(saved.id, `tencent:${oldMid}:${artist}`);
+  assert.equal(saved.mediaId, oldMid);
+  assert.equal(sameTitleOtherRecording.qqMid, undefined);
+  await api.playSaved();
+  assert.equal(searches, 1);
+  assert.deepEqual(lookups, [[oldMid, '128k'], [oldMid, '320k'], [verifiedMid, '128k'], [verifiedMid, '128k']]);
+});
+
+test('a QQ playlist row without a MID searches first and rejects ambiguous versions', async () => {
+  const saved = { title: '下完这场雨', artist: '后弦', id: 'tencent:下完这场雨:后弦', source: 'tencent', mediaId: '' };
+  const candidates = [
+    { title: saved.title, author: saved.artist, songmid: songId },
+    { title: saved.title, author: saved.artist, mid: '004CCcys3axgTS' },
+  ];
+  for (const ambiguous of [false, true]) {
+    const api = player(async (url, options) => {
+      if (url.origin === new URL(meting).origin) return Response.json(ambiguous ? candidates : candidates.slice(0, 1));
+      assert.equal(ambiguous, false, 'ambiguous results must not be sent to LX');
+      assert.equal(workerQuery(url, options).id, songId);
+      return Response.json({ code: 0, url: 'https://cdn.test/verified.m4a' });
+    }, true, () => { throw Error('备用源不可用'); });
+    const row = { ...saved };
+    await api.play(row);
+    assert.equal(row.qqMid, ambiguous ? undefined : songId);
+    assert.equal(api.urls.length, ambiguous ? 0 : 1);
+    if (ambiguous) assert.match(api.statuses.at(-1), /未找到同一录音.*备用源不可用/);
+  }
 });
 
 test('autoplay denial produces a visible retry warning instead of silently stopping', async () => {
