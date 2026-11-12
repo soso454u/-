@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.82';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.83';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -3888,6 +3888,15 @@ ${latest.slice(-1500)}
       #${ID}.skin-albumglass{--smp-settings-bg:#151820de;--smp-switch:#77a99c}
       #${ID} .settings-panel button,#${ID} .settings-panel label,#${ID} .settings-panel output,#${ID} .settings-panel h3{color:var(--smp-text)!important;-webkit-text-fill-color:currentColor!important}
       #${ID} .settings-panel .set-card small{color:var(--smp-muted)!important;-webkit-text-fill-color:currentColor!important}
+      #${ID} .settings-panel .window-settings-card{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+      #${ID} .window-settings-card h4{margin:0;font:600 14px/1.4 system-ui;color:var(--smp-text)}
+      #${ID} .window-settings-card .window-settings-field{display:grid;gap:6px}
+      #${ID} .window-settings-card .window-settings-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:26px}
+      #${ID} .settings-panel .window-settings-toggle input[type=checkbox]{margin:0!important}
+      #${ID} .window-settings-card .window-settings-note{display:block}
+      #${ID} .window-settings-card .window-settings-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,124px),1fr));gap:8px;padding-top:12px;border-top:1px solid var(--smp-control-border)}
+      #${ID} .window-settings-card .window-settings-actions button{min-width:0}
+      #${ID} .window-settings-card [data-window-mini]{background:color-mix(in srgb,var(--smp-switch) 20%,var(--smp-control-bg))!important}
       #${ID} .settings-panel [data-player-version]{color:var(--smp-muted)!important;border-color:var(--smp-control-border)!important;background:var(--smp-control-bg)!important}
       #${ID} .settings-panel [data-keepalive-card],#${ID} .settings-panel [data-keepalive-card].keepalive-running{background:color-mix(in srgb,var(--smp-text) 3%,transparent)!important;color:var(--smp-text)!important;border-color:var(--smp-control-border)!important;box-shadow:none!important;color-scheme:inherit!important}
       #${ID} .settings-panel [data-keepalive-card] button{color:var(--smp-text)!important;background:var(--smp-control-bg)!important;border-color:var(--smp-control-border)!important}
@@ -4280,7 +4289,45 @@ ${latest.slice(-1500)}
   function applyCustomScales(el=DOC.getElementById(ID)){if(!el)return;for(const key of ['buttonScale','textScale','coverScale','listScale']){const value=Math.max(.6,Math.min(1.6,Number(settings[key])||1));settings[key]=value;el.style.setProperty(`--${key.replace('Scale','-scale').replace(/[A-Z]/g,m=>`-${m.toLowerCase()}`)}`,String(value));}}
   function bindScaleSettings(el){const gear=el.querySelector('.gear'),open=gear.onclick,labels={buttonScale:'按钮大小',textScale:'文字大小',coverScale:'封面大小',listScale:'歌曲列表规格',miniScale:'悬浮窗大小'};gear.onclick=e=>{open?.call(gear,e);const panel=el.querySelector('.settings-panel'),grid=panel?.querySelector('.set-grid');if(!grid)return;let card=grid.querySelector('.custom-scales');if(!card){card=DOC.createElement('div');card.className='set-card custom-scales';card.innerHTML=`<b>独立尺寸调整</b>${Object.entries(labels).map(([key,label])=>`<div class="scale-row" data-scale="${key}"><span>${label}</span><button type="button" data-step="-.1">−</button><output></output><button type="button" data-step=".1">＋</button></div>`).join('')}<button type="button" data-scale-reset>恢复默认</button>`;grid.appendChild(card);card.onclick=event=>{const reset=event.target.closest('[data-scale-reset]'),row=event.target.closest('[data-scale]'),step=Number(event.target.closest('[data-step]')?.dataset.step);if(reset){for(const key of Object.keys(labels))settings[key]=1;}else if(row&&step){const key=row.dataset.scale;settings[key]=Math.round(Math.max(.6,Math.min(1.6,(Number(settings[key])||1)+step))*10)/10;}else return;applyCustomScales(el);update();save();};}const update=()=>card.querySelectorAll('[data-scale]').forEach(row=>{row.querySelector('output').textContent=`${Math.round((Number(settings[row.dataset.scale])||1)*100)}%`;});update();};}
   function bindUiPresetOnly(el){el.classList.remove('ui-size-s','ui-size-m','ui-size-l');el.classList.add(`ui-size-${['s','m','l'].includes(settings.playerSize)?settings.playerSize:'m'}`);}
-  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><small>开启后按松手位置自动吸附：顶部工具栏上沿、聊天输入框上方，或最近的左右屏幕边。单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]');snap.checked=!!settings.miniSnap;snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
+  function bindWindowResetSetting(el){
+    const gear=el.querySelector('.gear'),open=gear.onclick;
+    gear.onclick=e=>{
+      open?.call(gear,e);
+      const grid=el.querySelector('.settings-panel .set-grid');
+      if(!grid||grid.querySelector('.window-settings-card'))return;
+      const card=DOC.createElement('section');
+      card.className='set-card window-settings-card';
+      card.setAttribute('aria-labelledby',`${ID}-window-settings-heading`);
+      card.innerHTML=`
+        <h4 id="${ID}-window-settings-heading">播放器窗口</h4>
+        <label class="window-settings-field">悬浮窗外形
+          <select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select>
+        </label>
+        <div class="window-settings-field">
+          <label class="window-settings-toggle"><span>悬浮窗吸附</span><input type="checkbox" name="miniSnap" aria-describedby="${ID}-window-snap-note"></label>
+          <small class="window-settings-note" id="${ID}-window-snap-note">松手后自动吸附到顶部工具栏上沿、聊天输入框上方或左右屏幕边缘。</small>
+          <small class="window-settings-note">单击播放或暂停，双击展开播放器。</small>
+        </div>
+        <div class="window-settings-actions">
+          <button type="button" data-window-mini>缩成悬浮窗</button>
+          <button type="button" data-window-default>恢复默认尺寸</button>
+        </div>`;
+      grid.appendChild(card);
+      const shape=card.querySelector('[name=miniShape]'),snap=card.querySelector('[name=miniSnap]');
+      shape.value=playerMiniShape();snap.checked=!!settings.miniSnap;
+      snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;save();};
+      shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};
+      card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));
+      card.querySelector('[data-window-default]').onclick=()=>{
+        const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700;
+        const width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect();
+        const left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));
+        for(const [key,value] of Object.entries({left,top,width,height}))el.style.setProperty(key,`${value}px`,'important');
+        el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
+        settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');
+      };
+    };
+  }
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
     const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
