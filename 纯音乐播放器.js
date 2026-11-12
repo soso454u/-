@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.83';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.84';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1112,14 +1112,20 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       @media(prefers-reduced-motion:no-preference){
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=""] .selene-mini-art{transform-origin:center 88%;animation:selene-mini-dance 2.4s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-peek{transform-box:view-box;transform-origin:44% 73%;animation:selene-mini-wave 2.8s ease-in-out infinite paused}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-body{animation:selene-mini-hang-swing 3s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-beat{transform-box:view-box;transform-origin:73% 70%;animation:selene-mini-beat 1.6s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=input] .selene-mini-head{transform-box:view-box;transform-origin:57% 67%;animation:selene-mini-sway 2.8s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-leg{transform-box:fill-box;transform-origin:center top;animation:selene-mini-kick 2.4s ease-in-out infinite alternate paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-leg:nth-child(2){animation-direction:alternate-reverse}
-        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-peek,.selene-mini-beat,.selene-mini-head,.selene-mini-leg){animation-play-state:running}
+        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-peek,.selene-mini-body,.selene-mini-beat,.selene-mini-head,.selene-mini-leg){animation-play-state:running}
       }
       @keyframes selene-mini-dance{0%,100%{transform:rotate(-3deg)}25%{transform:translateY(-2px) rotate(0)}50%{transform:rotate(3deg)}75%{transform:translateY(-2px) rotate(0)}}
       @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(21deg)}26%{transform:rotate(6deg)}}
+      @keyframes selene-mini-hang-swing{
+        0%,50%,100%{transform:translateX(8%) rotate(14deg) scale(.86)}
+        25%{transform:translateX(8%) rotate(4deg) scale(.86)}
+        75%{transform:translateX(8%) rotate(24deg) scale(.86)}
+      }
       @keyframes selene-mini-beat{0%,50%,100%{transform:rotate(9deg)}22%,72%{transform:rotate(-19deg)}}
       @keyframes selene-mini-kick{from{transform:rotate(-13deg)}to{transform:rotate(15deg)}}
       @keyframes selene-mini-sway{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
@@ -4384,7 +4390,10 @@ ${latest.slice(-1500)}
       #${ID}-skin-float [aria-pressed=true] .selene-skin-check{display:block}
     </style>`);
   }
-  function seleneMiniArt(){return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  function seleneMiniArt(){
+    const openPalm=`<path class="selene-mini-palm" fill="#fff0e8" stroke-width=".95" d="M-2.7 3.6C-4.2 2.7-5.6.9-5.7-.5c-.1-1.2 1-1.7 1.9-.6l1 1.2-1.1-3.6c-.4-1.3 1.1-2 1.8-.7l1 2.1-.3-3.2c-.1-1.4 1.6-1.5 1.8-.1l.6 3 .7-2.7c.3-1.3 1.9-1 1.9.3l-.4 2.6 1.4-2c.8-1.1 2.2-.2 1.6 1L4.9.2C5 2.8 3.1 4.6.6 4.7c-1.3.1-2.4-.3-3.3-1.1Z"/>
+      <path fill="none" stroke="#e6afbc" stroke-width=".7" d="M-1.3 1.8q1.1-1 2.6-.5"/>`;
+    return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <g class="selene-mini-body" stroke="#694b78" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
       <g class="selene-mini-hanging" fill="none">
         <path stroke-width="6" d="M24 40C15 34 7 24 7 6"/>
@@ -4428,16 +4437,13 @@ ${latest.slice(-1500)}
       </g>
       <g class="selene-mini-hanging selene-mini-beat">
         <path fill="#ad91de" d="M36 40q5 1 8-4l4 2q-2 7-10 7Z"/>
-        <path fill="#fff0e8" stroke-width="1.05" d="M43.4 36.5c-.5-1.3.1-2.5 1-2.5.5 0 .8.4.9.9l.9-2c.5-1.1 1.7-.7 1.6.3l-.5 1.9c1.9-.2 2.7 1.3 1.4 3-1.3 1.7-4.5 1.5-5.3-1.6Z"/>
+        <g transform="translate(46 35) rotate(18) scale(.94)">${openPalm}</g>
       </g>
-      <g class="selene-mini-hanging" fill="#fff0e8" stroke-width="1.05">
-        <path d="M3.4 4.7C2.7 2.1 4.7.7 7.2.8c2.7.1 4 1.6 3.4 4-.3 1.8-1.5 3.2-3.3 3.2-2 0-3.4-1.5-3.9-3.3Z"/>
-        <path fill="none" stroke="#dbaab8" stroke-width=".8" d="M6 2.8v1.3m2-1.4v1.4"/>
-      </g>
+      <g class="selene-mini-hanging" transform="translate(7 5.7) rotate(-8) scale(.83)">${openPalm}</g>
       <path class="selene-mini-standing selene-mini-upright selene-mini-folded-hands" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
       <g class="selene-mini-peek">
         <path fill="#ad91de" d="M24 41q-6 2-9-3l-4 2q3 8 11 6Z"/>
-        <path fill="#fff0e8" stroke-width="1.05" d="M11 40c-2-.5-3.3-2.5-3.1-4 .1-1.2 1.3-1.5 1.9-.4l.7 1.1-.1-2.1c0-1.1 1.3-1.4 1.6-.3l.5 2c1.1-1 2.4-.6 2.5.9.2 1.9-1.4 3.5-4 2.8Z"/>
+        <g transform="translate(12 37.1) rotate(-24) scale(.93)">${openPalm}</g>
       </g>
     </g>
   </svg>`;}
