@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.76';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.77';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1092,24 +1092,24 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 #${ID} .resize-handle{position:absolute;z-index:20;display:block}#${ID}.pinned .resize-handle{display:none}#${ID} .resize-handle.n,#${ID} .resize-handle.s{left:12px;right:12px;height:9px;cursor:ns-resize}#${ID} .resize-handle.n{top:0}#${ID} .resize-handle.s{bottom:0}#${ID} .resize-handle.e,#${ID} .resize-handle.w{top:12px;bottom:12px;width:9px;cursor:ew-resize}#${ID} .resize-handle.e{right:0}#${ID} .resize-handle.w{left:0}#${ID} .resize-handle.ne,#${ID} .resize-handle.se,#${ID} .resize-handle.sw,#${ID} .resize-handle.nw{width:18px;height:18px}#${ID} .resize-handle.ne{right:0;top:0;cursor:nesw-resize}#${ID} .resize-handle.se{right:0;bottom:0;cursor:nwse-resize}#${ID} .resize-handle.sw{left:0;bottom:0;cursor:nesw-resize}#${ID} .resize-handle.nw{left:0;top:0;cursor:nwse-resize}</style>`);
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-mini-selene-style">
       #${ID} .selene-mini-art{display:none}
+      #${ID}.mini>.mini-cover-shell{touch-action:none!important;-webkit-user-drag:none}
       #${ID}.mini[data-mini-shape=selene]{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
       #${ID}.mini[data-mini-shape=selene]::before,#${ID}.mini[data-mini-shape=selene]::after{display:none!important}
       #${ID}.mini[data-mini-shape=selene] .mini-cover-shell{inset:0!important;width:100%!important;height:100%!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
       #${ID}.mini[data-mini-shape=selene] .mini-cover-shell::before,#${ID}.mini[data-mini-shape=selene] .mini-cover-shell::after{display:none!important}
       #${ID}.mini[data-mini-shape=selene] .selene-mini-art{display:block;width:100%;height:100%;pointer-events:none;filter:drop-shadow(0 1px 1.5px #160d2a75)}
       #${ID}.mini[data-mini-shape=selene][data-mini-edge=left] .selene-mini-art{transform:scaleX(-1)}
+      #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-body{transform-box:view-box;transform-origin:right center;transform:scale(.8)}
       #${ID} .selene-mini-sitting,#${ID}.mini:not([data-mini-dock=edge]) .selene-mini-grip{display:none}
       #${ID}.mini[data-mini-dock=input] .selene-mini-sitting{display:block}
       #${ID}.mini[data-mini-dock=input] .selene-mini-standing{display:none}
       @media(prefers-reduced-motion:no-preference){
-        #${ID}.mini[data-mini-shape=selene] .selene-mini-body{transform-origin:50% 93%;animation:selene-mini-breathe .9s ease-in-out}
-        #${ID}.mini[data-mini-shape=selene] .mini-cover-shell:is(:hover,:focus-visible) .selene-mini-eyes{animation-name:selene-mini-greeting}
-        #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-body{transform-origin:98% 58%}
-        #${ID}.mini[data-mini-shape=selene] .selene-mini-eyes{transform-box:fill-box;transform-origin:center;animation:selene-mini-blink 1.4s ease-in-out}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=""] .selene-mini-art{transform-origin:center 88%;animation:selene-mini-dance 2.4s ease-in-out infinite paused}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-wave{transform-box:fill-box;transform-origin:left bottom;animation:selene-mini-wave 2.8s ease-in-out infinite paused}
+        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-wave){animation-play-state:running}
       }
-      @keyframes selene-mini-breathe{0%,100%{transform:rotate(0)}50%{transform:rotate(1.6deg)}}
-      @keyframes selene-mini-blink{0%,80%,95%,100%{transform:scaleY(1)}87%{transform:scaleY(.1)}}
-      @keyframes selene-mini-greeting{0%,20%,48%,100%{transform:scaleY(1)}34%{transform:scaleY(.1)}}
+      @keyframes selene-mini-dance{0%,100%{transform:rotate(-3deg)}25%{transform:translateY(-2px) rotate(0)}50%{transform:rotate(3deg)}75%{transform:translateY(-2px) rotate(0)}}
+      @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(-25deg)}26%{transform:rotate(-8deg)}}
     </style>`);
     el.dataset.miniShape=playerMiniShape(); el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize&&!settings.miniMode){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
     return el;
@@ -1147,10 +1147,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       miniInputObserver.observe(input);
     }
   }
-  function placeMiniWindow(el,left,top,{snap=false,edge,dock}={}){
+  function placeMiniWindow(el,left,top,{snap=false,edge,dock,dropX}={}){
     const view=miniViewport(),selene=playerMiniShape()==='selene',width=selene?48:52,height=selene?54:52;
     const target=playerMiniDockTarget(),restoringInput=target==='auto'&&dock&&dock!=='edge';
-    const candidates=snap&&(target==='input'||target==='auto'&&dock!=='edge')
+    const edgeDrop=Number.isFinite(dropX)&&Math.min(dropX-view.left,view.left+view.width-dropX)<=24;
+    const candidates=snap&&(target==='input'||target==='auto'&&dock!=='edge'&&!edgeDrop)
       ?miniDockInputs().filter(item=>!restoringInput||item.dock===dock):[];
     let match=null;
     for(const candidate of candidates){
@@ -1173,7 +1174,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(sit){
       x=limit(left,Math.max(xMin,box.left),Math.min(xMax,box.right-width));y=box.top-height+2;
     }else if(snap){
-      if(edge!=='left'&&edge!=='right')edge=left+width/2<view.left+view.width/2?'left':'right';
+      if(edge!=='left'&&edge!=='right')edge=(dropX??left+width/2)<view.left+view.width/2?'left':'right';
       x=edge==='left'?xMin:xMax;
     }
     for(const [key,value] of Object.entries({width,height,'min-width':width,'min-height':height,'max-width':width,'max-height':height,left:x,top:y}))el.style.setProperty(key,`${value}px`,'important');
@@ -1197,7 +1198,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const left=Math.max(leftEdge+6,Math.min(Math.max(leftEdge+6,leftEdge+width-el.offsetWidth-6),Number(settings.mobilePosition.left)||leftEdge+6)),top=Math.max(topEdge+6,Math.min(Math.max(topEdge+6,topEdge+height-el.offsetHeight-6),topEdge+height*(Number(settings.mobilePosition.top)||18)/100));
     el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
   }
-  function updatePlayButton(){const playing=playbackPhase==='playing'&&!audio.paused,loading=playbackWanted&&playbackPhase==='loading',button=DOC.querySelector(`#${ID} [data-c="play"]`);if(button){button.textContent=loading?'…':playing?'❚❚':'▶';button.classList.toggle('is-playing',playing);button.setAttribute('aria-busy',String(loading));button.title=loading?'正在加载，点击取消':playing?'暂停':'播放';}if(playing&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);}
+  function updatePlayButton(){const playing=playbackPhase==='playing'&&!audio.paused,loading=playbackWanted&&playbackPhase==='loading',player=DOC.getElementById(ID),button=player?.querySelector('[data-c="play"]');player?.classList.toggle('selene-mini-playing',playing);if(button){button.textContent=loading?'…':playing?'❚❚':'▶';button.classList.toggle('is-playing',playing);button.setAttribute('aria-busy',String(loading));button.title=loading?'正在加载，点击取消':playing?'暂停':'播放';}if(playing&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);}
   function updateLyricsLock(){
     const lyrics=DOC.getElementById(`${ID}-desktop-lyrics`),quick=DOC.querySelector(`#${ID} .quick-lyrics-lock`);
     lyrics?.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
@@ -3994,9 +3995,10 @@ ${latest.slice(-1500)}
       target.onpointerdown=e=>{if(activePointer!==null||owner&&owner!==target)return;down?.call(target,e);if(e.defaultPrevented){activePointer=e.pointerId;owner=target;el.classList.add('pointer-interacting');}};
       target.onpointermove=e=>{if(activePointer===null||e.pointerId!==activePointer)return;pending=e;if(e.cancelable)e.preventDefault();if(!frame)frame=requestFrame(flush);};
       const finish=(handler,e,flushMove)=>{if(activePointer===null||e?.pointerId!==undefined&&e.pointerId!==activePointer)return;if(frame){cancelFrame(frame);frame=0;}if(flushMove){if(e?.type==='pointerup')pending=e;flush();}else pending=null;activePointer=null;handler?.call(target,e);owner=null;el.classList.remove('pointer-interacting');};
+      const keepLastMove=target.matches?.('.mini-cover-shell')===true;
       target.onpointerup=e=>finish(up,e,true);
-      target.onpointercancel=e=>finish(cancel,e,false);
-      target.onlostpointercapture=e=>finish(lost||cancel,e,false);
+      target.onpointercancel=e=>finish(cancel,e,keepLastMove);
+      target.onlostpointercapture=e=>finish(lost||cancel,e,keepLastMove);
     };
     (targets||el.querySelectorAll('.selene-player-head,.selene-player-head>b,.resize-handle,.mini-cover-shell')).forEach(wrap);
   }
@@ -4326,7 +4328,8 @@ ${latest.slice(-1500)}
       <g fill="#f4a8bb" stroke="none"><ellipse cx="17.3" cy="34.7" rx="2.7" ry="1.35"/><ellipse cx="42" cy="34.1" rx="2.7" ry="1.35"/></g>
       <path fill="none" stroke="#9b5777" stroke-width="1.1" d="M27.7 34.3q1 1.5 2.3 0 1.3 1.5 2.4-.2"/>
       <path class="selene-mini-standing" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
-      <path class="selene-mini-grip" fill="#fff0e8" d="M45 29c2-2 5-2 6 0s-2 5-5 4c-2 0-2-3-1-4Zm1 9c2-2 5-2 5 0s-2 4-4 4c-2 0-3-2-1-4Z"/>
+      <path class="selene-mini-grip" fill="#fff0e8" d="M46 38c2-2 5-2 5 0s-2 4-4 4c-2 0-3-2-1-4Z"/>
+      <path class="selene-mini-grip selene-mini-wave" fill="#fff0e8" d="M45 29c2-2 5-2 6 0s-2 5-5 4c-2 0-2-3-1-4Z"/>
     </g>
   </svg>`;}
   let miniTapTimer=0;
@@ -4366,26 +4369,34 @@ ${latest.slice(-1500)}
     };
     let drag=null;
     cover.onpointerdown=e=>{
-      if(e.pointerType==='mouse'&&e.button!==0)return;
-      const rect=el.getBoundingClientRect();drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height,moved:false,dx:0,dy:0};
+      if(drag||(e.pointerType==='mouse'&&e.button!==0))return;
+      const rect=el.getBoundingClientRect();drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height,moved:false};
       cover.setPointerCapture?.(e.pointerId);e.preventDefault();
     };
-    cover.onpointermove=e=>{
-      if(!drag||e.pointerId!==drag.id)return;
-      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.hypot(dx,dy)<5)return;
+    const updateDrag=e=>{
+      if(!Number.isFinite(e.clientX)||!Number.isFinite(e.clientY))return;
+      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(!drag.moved&&Math.hypot(dx,dy)<(e.pointerType==='touch'?4:3))return;
       if(!drag.moved){ROOT.clearTimeout(miniTapTimer);miniTapTimer=0;drag.moved=true;}
-      const view=miniViewport(),left=Math.max(view.left+6,Math.min(view.left+view.width-drag.width-6,drag.left+dx)),top=Math.max(view.top+6,Math.min(view.top+view.height-drag.height-6,drag.top+dy));
-      drag.dx=left-drag.left;drag.dy=top-drag.top;
-      el.style.setProperty('transform',`translate3d(${drag.dx}px,${drag.dy}px,0)`,'important');
+      const view=miniViewport();
+      drag.dropX=e.clientX;
+      drag.nextLeft=Math.max(view.left,Math.min(view.left+view.width-drag.width,drag.left+dx));
+      drag.nextTop=Math.max(view.top+6,Math.min(view.top+view.height-drag.height-6,drag.top+dy));
+    };
+    cover.onpointermove=e=>{
+      if(!drag||e.pointerId!==drag.id||e.type==='pointerup')return;
+      updateDrag(e);
+      if(drag.moved)el.style.setProperty('transform',`translate3d(${drag.nextLeft-drag.left}px,${drag.nextTop-drag.top}px,0)`,'important');
     };
     const end=(e,cancelled=false)=>{
       if(!drag||drag.id!==e.pointerId)return;
+      // A quick release can arrive before the last pointermove has been painted.
+      if(!cancelled)updateDrag(e);
       const previous=drag;drag=null;
       try{cover.releasePointerCapture?.(previous.id);}catch{}
       el.style.removeProperty('transform');
-      if(cancelled)return;
-      if(!previous.moved){tap();return;}
-      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.left+previous.dx,previous.top+previous.dy,{snap:!!settings.miniSnap});save();
+      if(!previous.moved){if(!cancelled)tap();return;}
+      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.nextLeft,previous.nextTop,{snap:!!settings.miniSnap,dropX:previous.dropX});save();
     };
     cover.onpointerup=e=>end(e);cover.onpointercancel=e=>end(e,true);cover.onlostpointercapture=e=>end(e,true);
   }
