@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.75';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.76';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -137,7 +137,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniDockTarget: 'edge', miniPosition: null, mobileMiniPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniDockTarget: 'auto', miniPosition: null, mobileMiniPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -1132,11 +1132,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function playerMiniPositionKey(){return isMobile()?'mobileMiniPosition':'miniPosition';}
   function miniViewport(){const vv=ROOT.visualViewport;return{left:Number(vv?.offsetLeft)||0,top:Number(vv?.offsetTop)||0,width:Number(vv?.width)||ROOT.innerWidth||390,height:Number(vv?.height)||ROOT.innerHeight||700};}
   let miniInputObserver=null,observedMiniInput=null;
-  function miniDockInput(){
-    for(const input of DOC.querySelectorAll(`#send_textarea,#${ID}-companion:not([hidden]):not(.companion-mini) .companion-form textarea`)){
-      if(input.getClientRects().length)return input;
-    }
-    return null;
+  function playerMiniDockTarget(){return ['edge','input'].includes(settings.miniDockTarget)?settings.miniDockTarget:'auto';}
+  function miniDockInputs(){
+    return [
+      {dock:'chat',input:DOC.getElementById('send_textarea')},
+      {dock:'companion',input:DOC.querySelector(`#${ID}-companion .companion-form textarea`)},
+    ].filter(item=>item.input);
   }
   function watchMiniInput(input=null){
     if(input===observedMiniInput)return;
@@ -1146,12 +1147,26 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       miniInputObserver.observe(input);
     }
   }
-  function placeMiniWindow(el,left,top,{snap=false,edge}={}){
+  function placeMiniWindow(el,left,top,{snap=false,edge,dock}={}){
     const view=miniViewport(),selene=playerMiniShape()==='selene',width=selene?48:52,height=selene?54:52;
-    const input=snap&&settings.miniDockTarget==='input'?miniDockInput():null,box=input?.getBoundingClientRect();
-    // If the composer is hidden or too close to the top, keep the launcher accessible at an edge.
-    const sit=!!box&&box.top-height>=view.top+6&&box.top<=view.top+view.height&&box.right>view.left+width&&box.left<view.left+view.width-width;
-    watchMiniInput(input);
+    const target=playerMiniDockTarget(),restoringInput=target==='auto'&&dock&&dock!=='edge';
+    const candidates=snap&&(target==='input'||target==='auto'&&dock!=='edge')
+      ?miniDockInputs().filter(item=>!restoringInput||item.dock===dock):[];
+    let match=null;
+    for(const candidate of candidates){
+      const {input}=candidate,box=input.getBoundingClientRect();
+      if(!box.width||!box.height||input.checkVisibility?.({visibilityProperty:true})===false||
+        box.top-height<view.top+6||box.top>view.top+view.height||box.right<=view.left+width||box.left>=view.left+view.width-width)continue;
+      if(target==='input'||restoringInput){match={...candidate,box};break;}
+      const center=left+width/2,bottom=top+height;
+      const dx=Math.max(box.left-center,center-box.right,0),dy=Math.max(box.top-bottom,top-box.bottom,0);
+      if(dx>24||dy>48)continue;
+      const distance=Math.hypot(dx,box.top-bottom);
+      if(!match||distance<match.distance)match={...candidate,box,distance};
+    }
+    const box=match?.box,sit=!!box;
+    // Only a docked launcher needs to follow the input as it grows or hides.
+    watchMiniInput(match?.input||(target==='input'||restoringInput?candidates[0]?.input:null));
     const gap=selene&&snap&&!sit?0:6,xMin=view.left+gap,xMax=Math.max(xMin,view.left+view.width-width-gap);
     const limit=(value,min,max)=>Math.max(min,Math.min(Math.max(min,max),value));
     let x=limit(left,xMin,xMax),y=limit(top,view.top+6,view.top+view.height-height-6);
@@ -1165,13 +1180,13 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
     el.dataset.miniEdge=snap&&!sit?edge:'';el.dataset.miniDock=sit?'input':snap?'edge':'';
     // Keep the original drag height so temporary fallback can return to the previous screen position.
-    return{left:Math.round(x),top:Math.round(sit?top:y),...(snap&&!sit?{edge}:{})};
+    return{left:Math.round(x),top:Math.round(sit?top:y),...(snap?(sit?{dock:match.dock}:{dock:'edge',edge}):{})};
   }
   function preserveMiniGeometry(el=DOC.getElementById(ID),fallback){
     if(!el?.classList.contains('mini'))return false;
     if(el.classList.contains('pointer-interacting'))return true;
     const saved=settings[playerMiniPositionKey()],position=saved||fallback||el.getBoundingClientRect();
-    placeMiniWindow(el,position.left,position.top,{snap:!!settings.miniSnap,edge:saved?.edge});return true;
+    placeMiniWindow(el,position.left,position.top,{snap:!!settings.miniSnap,edge:saved?.edge,dock:saved?.dock||(saved?.edge?'edge':undefined)});return true;
   }
   function applyPlayerSize(el=DOC.getElementById(ID)){if(!el||preserveMiniGeometry(el))return;const preferredWidth={s:310,m:365,l:430}[settings.playerSize]||365;if(isMobile()){refreshStableMobileViewport(el);const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth||390,maxWidth=Math.max(0,viewportWidth-28),width=Math.min(preferredWidth,maxWidth);el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('max-width',`${maxWidth}px`,'important');el.style.setProperty('min-width','0','important');return;}el.style.width=`min(${preferredWidth}px,calc(100vw - 24px))`;el.style.maxWidth='calc(100vw - 24px)';}
   function isMobile(){const media=ROOT.matchMedia?.bind(ROOT),width=ROOT.visualViewport?.width||ROOT.innerWidth||0,height=ROOT.visualViewport?.height||ROOT.innerHeight||0,touch=Number(ROOT.navigator?.maxTouchPoints||0)>0,touchTablet=touch&&Math.min(width,height)<=1024&&Math.max(width,height)<=1400;return !!(media?.('(max-width:480px)').matches||media?.('(max-width:1024px) and (hover:none) and (pointer:coarse)').matches||touchTablet);}
@@ -4228,7 +4243,7 @@ ${latest.slice(-1500)}
   function applyCustomScales(el=DOC.getElementById(ID)){if(!el)return;for(const key of ['buttonScale','textScale','coverScale','listScale']){const value=Math.max(.6,Math.min(1.6,Number(settings[key])||1));settings[key]=value;el.style.setProperty(`--${key.replace('Scale','-scale').replace(/[A-Z]/g,m=>`-${m.toLowerCase()}`)}`,String(value));}}
   function bindScaleSettings(el){const gear=el.querySelector('.gear'),open=gear.onclick,labels={buttonScale:'按钮大小',textScale:'文字大小',coverScale:'封面大小',listScale:'歌曲列表规格'};gear.onclick=e=>{open?.call(gear,e);const panel=el.querySelector('.settings-panel'),grid=panel?.querySelector('.set-grid');if(!grid)return;let card=grid.querySelector('.custom-scales');if(!card){card=DOC.createElement('div');card.className='set-card custom-scales';card.innerHTML=`<b>独立尺寸调整</b>${Object.entries(labels).map(([key,label])=>`<div class="scale-row" data-scale="${key}"><span>${label}</span><button type="button" data-step="-.1">−</button><output></output><button type="button" data-step=".1">＋</button></div>`).join('')}<button type="button" data-scale-reset>恢复默认</button>`;grid.appendChild(card);card.onclick=event=>{const reset=event.target.closest('[data-scale-reset]'),row=event.target.closest('[data-scale]'),step=Number(event.target.closest('[data-step]')?.dataset.step);if(reset){for(const key of Object.keys(labels))settings[key]=1;}else if(row&&step){const key=row.dataset.scale;settings[key]=Math.round(Math.max(.6,Math.min(1.6,(Number(settings[key])||1)+step))*10)/10;}else return;applyCustomScales(el);update();save();};}const update=()=>card.querySelectorAll('[data-scale]').forEach(row=>{row.querySelector('output').textContent=`${Math.round((Number(settings[row.dataset.scale])||1)*100)}%`;});update();};}
   function bindUiPresetOnly(el){el.classList.remove('ui-size-s','ui-size-m','ui-size-l');el.classList.add(`ui-size-${['s','m','l'].includes(settings.playerSize)?settings.playerSize:'m'}`);}
-  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><label data-mini-dock-option>吸附位置<select name="miniDockTarget"><option value="edge">屏幕左右边缘</option><option value="input">聊天输入框上方</option></select></label><small>拖动调整位置，单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]'),dock=card.querySelector('[name=miniDockTarget]');snap.checked=!!settings.miniSnap;dock.disabled=!snap.checked;dock.value=settings.miniDockTarget==='input'?'input':'edge';snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;dock.disabled=!snap.checked;save();};dock.onchange=event=>{event.stopPropagation();settings.miniDockTarget=dock.value;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
+  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><label data-mini-dock-option>吸附位置<select name="miniDockTarget"><option value="auto">自动识别</option><option value="edge">屏幕左右边缘</option><option value="input">聊天输入框上方</option></select></label><small>自动识别：拖到聊天输入框附近松手会吸到输入框上方，其他位置吸到最近的屏幕边。单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]'),dock=card.querySelector('[name=miniDockTarget]');snap.checked=!!settings.miniSnap;dock.disabled=!snap.checked;dock.value=playerMiniDockTarget();snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;dock.disabled=!snap.checked;save();};dock.onchange=event=>{event.stopPropagation();settings.miniDockTarget=dock.value;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
     const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
