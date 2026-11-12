@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.74';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.75';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1096,7 +1096,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID}.mini[data-mini-shape=selene]::before,#${ID}.mini[data-mini-shape=selene]::after{display:none!important}
       #${ID}.mini[data-mini-shape=selene] .mini-cover-shell{inset:0!important;width:100%!important;height:100%!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
       #${ID}.mini[data-mini-shape=selene] .mini-cover-shell::before,#${ID}.mini[data-mini-shape=selene] .mini-cover-shell::after{display:none!important}
-      #${ID}.mini[data-mini-shape=selene] .selene-mini-art{display:block;width:100%;height:100%;pointer-events:none;filter:drop-shadow(0 2px 3px #160d2a7d)}
+      #${ID}.mini[data-mini-shape=selene] .selene-mini-art{display:block;width:100%;height:100%;pointer-events:none;filter:drop-shadow(0 1px 1.5px #160d2a75)}
       #${ID}.mini[data-mini-shape=selene][data-mini-edge=left] .selene-mini-art{transform:scaleX(-1)}
       #${ID} .selene-mini-sitting,#${ID}.mini:not([data-mini-dock=edge]) .selene-mini-grip{display:none}
       #${ID}.mini[data-mini-dock=input] .selene-mini-sitting{display:block}
@@ -1147,7 +1147,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
   }
   function placeMiniWindow(el,left,top,{snap=false,edge}={}){
-    const view=miniViewport(),selene=playerMiniShape()==='selene',width=selene?74:52,height=selene?82:52;
+    const view=miniViewport(),selene=playerMiniShape()==='selene',width=selene?48:52,height=selene?54:52;
     const input=snap&&settings.miniDockTarget==='input'?miniDockInput():null,box=input?.getBoundingClientRect();
     // If the composer is hidden or too close to the top, keep the launcher accessible at an edge.
     const sit=!!box&&box.top-height>=view.top+6&&box.top<=view.top+view.height&&box.right>view.left+width&&box.left<view.left+view.width-width;
@@ -4228,7 +4228,7 @@ ${latest.slice(-1500)}
   function applyCustomScales(el=DOC.getElementById(ID)){if(!el)return;for(const key of ['buttonScale','textScale','coverScale','listScale']){const value=Math.max(.6,Math.min(1.6,Number(settings[key])||1));settings[key]=value;el.style.setProperty(`--${key.replace('Scale','-scale').replace(/[A-Z]/g,m=>`-${m.toLowerCase()}`)}`,String(value));}}
   function bindScaleSettings(el){const gear=el.querySelector('.gear'),open=gear.onclick,labels={buttonScale:'按钮大小',textScale:'文字大小',coverScale:'封面大小',listScale:'歌曲列表规格'};gear.onclick=e=>{open?.call(gear,e);const panel=el.querySelector('.settings-panel'),grid=panel?.querySelector('.set-grid');if(!grid)return;let card=grid.querySelector('.custom-scales');if(!card){card=DOC.createElement('div');card.className='set-card custom-scales';card.innerHTML=`<b>独立尺寸调整</b>${Object.entries(labels).map(([key,label])=>`<div class="scale-row" data-scale="${key}"><span>${label}</span><button type="button" data-step="-.1">−</button><output></output><button type="button" data-step=".1">＋</button></div>`).join('')}<button type="button" data-scale-reset>恢复默认</button>`;grid.appendChild(card);card.onclick=event=>{const reset=event.target.closest('[data-scale-reset]'),row=event.target.closest('[data-scale]'),step=Number(event.target.closest('[data-step]')?.dataset.step);if(reset){for(const key of Object.keys(labels))settings[key]=1;}else if(row&&step){const key=row.dataset.scale;settings[key]=Math.round(Math.max(.6,Math.min(1.6,(Number(settings[key])||1)+step))*10)/10;}else return;applyCustomScales(el);update();save();};}const update=()=>card.querySelectorAll('[data-scale]').forEach(row=>{row.querySelector('output').textContent=`${Math.round((Number(settings[row.dataset.scale])||1)*100)}%`;});update();};}
   function bindUiPresetOnly(el){el.classList.remove('ui-size-s','ui-size-m','ui-size-l');el.classList.add(`ui-size-${['s','m','l'].includes(settings.playerSize)?settings.playerSize:'m'}`);}
-  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene · 月亮女神</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><label data-mini-dock-option>吸附位置<select name="miniDockTarget"><option value="edge">屏幕左右边缘</option><option value="input">聊天输入框上方</option></select></label><small>拖动调整位置，单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]'),dock=card.querySelector('[name=miniDockTarget]');snap.checked=!!settings.miniSnap;dock.disabled=!snap.checked;dock.value=settings.miniDockTarget==='input'?'input':'edge';snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;dock.disabled=!snap.checked;save();};dock.onchange=event=>{event.stopPropagation();settings.miniDockTarget=dock.value;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
+  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><label data-mini-dock-option>吸附位置<select name="miniDockTarget"><option value="edge">屏幕左右边缘</option><option value="input">聊天输入框上方</option></select></label><small>拖动调整位置，单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]'),dock=card.querySelector('[name=miniDockTarget]');snap.checked=!!settings.miniSnap;dock.disabled=!snap.checked;dock.value=settings.miniDockTarget==='input'?'input':'edge';snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;dock.disabled=!snap.checked;save();};dock.onchange=event=>{event.stopPropagation();settings.miniDockTarget=dock.value;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
     const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
@@ -4285,28 +4285,33 @@ ${latest.slice(-1500)}
       #${ID}-skin-float [aria-pressed=true] .selene-skin-check{display:block}
     </style>`);
   }
-  function seleneMiniArt(){return `<svg class="selene-mini-art" viewBox="0 0 74 82" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-    <g class="selene-mini-body" stroke="#48315c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path fill="#d6c6f3" d="M54 8C43 3 29 7 23 15c-8 11-6 24-14 34-5 7-2 16 5 18-1-5 4-7 8-7-1 7 3 12 9 14l27-8c-3-9-1-20 6-28 6-10 1-25-10-30Z"/>
-      <path fill="#9a7cc5" d="M21 48c5 4 13 5 19 3l19-11c-6 13-4 19-1 26l-27 8c-5-3-7-7-6-12l-9 3c1-5 6-9 5-17Z" stroke="none"/>
-      <path class="selene-mini-standing" fill="#f9d2ce" d="M43 68c1 5 1 11 6 11 4 0 4-4 3-7m5-8c2 3 3 10 7 9 4-1 3-6 0-10"/>
-      <path class="selene-mini-standing" fill="#675191" d="M49 46c6-2 13 3 15 8l2 11c-4 0-5 5-10 5l-5 2-12-2c4-7 2-13 10-24Z"/>
-      <path class="selene-mini-standing" fill="#f4ddff" d="M47 52c4 6 8 9 17 9l2 4c-6 3-13 3-20 1l-5-3 1-5 5-6Z"/>
-      <g class="selene-mini-sitting">
-        <path fill="#675191" d="M48 47c9-2 16 6 15 13-2 7-6 10-13 12l-14-1c-2-7 5-19 12-24Z"/>
-        <path fill="#f4ddff" d="M39 61c5 4 14 7 22 3-1 6-7 9-13 9l-13-2 4-10Z"/>
-        <path fill="#f9d2ce" d="M54 68c5-2 10-1 9 3l-5 7c-2 3-6 1-5-2l2-3-8 1m16-3c4-2 7 0 6 3l-3 5c-2 3-6 1-4-2l1-2"/>
+  function seleneMiniArt(){return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <g class="selene-mini-body" stroke="#694b78" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path fill="#dbc6fa" d="M31 3C17 2 8 11 8 24c0 10-1 15-5 19 3 4 8 3 12 1 3 5 9 6 14 2l13-2c4-2 7-7 7-13C53 17 45 4 31 3Z"/>
+      <path fill="#bfa1e6" stroke="none" d="M10 32c5 5 14 8 23 7 7-1 12-4 15-9-1 10-5 15-15 16l-4-1c-5 4-11 4-14-2-4 3-9 3-11 0 3-2 5-6 6-11Z"/>
+      <g class="selene-mini-standing">
+        <path fill="#ffe4dd" d="M24 49v4c0 3 5 3 5 0v-4m6 0 1 4c0 3 5 2 5-1l-1-4"/>
+        <path fill="#ad91de" d="M25 38c-2 4-5 7-5 10 3 4 17 5 23 0-2-3-5-5-6-10Z"/>
+        <path fill="none" stroke="#f7e8ff" d="M22 47c5 2 13 3 19 0"/>
       </g>
-      <path fill="#ffd7cf" d="M26 27c3-9 14-15 24-13 12 3 18 12 17 21-1 12-9 20-19 21-11 1-23-5-25-15-1-5 0-10 3-14Z"/>
-      <path fill="#e9dafa" d="M22 35C19 21 29 8 42 7c12-2 24 5 27 16 1 4 0 10-2 13-2-8-7-14-13-16-5 8-11 12-18 13 2-2 4-5 4-8-5 7-11 12-17 13l-1-3Z"/>
-      <path fill="none" stroke="#fff5ff" stroke-width="1.4" d="M25 28c2-10 8-15 16-17m4 15c3-2 5-5 6-8"/>
-      <path fill="#ffdf91" d="M40 6c-6 1-9 7-6 12 3 5 10 5 14 1-8 2-12-7-8-13Z"/>
-      <g class="selene-mini-eyes"><path fill="#503466" d="M34 40c0-3 2-5 4-5s3 2 3 5-1 4-3 4-4-1-4-4Zm17-2c0-3 2-5 4-5s3 2 3 5-1 5-3 5-4-2-4-5Z" stroke="none"/>
-      <path stroke="#fff7ff" stroke-width="1.9" d="M37 38h.2m17-2h.2"/></g>
-      <path stroke="#e88da6" stroke-width="2.1" d="M29 45l3-1m26 0 3-1"/>
-      <path fill="none" stroke="#a65e7b" d="M43 46q3 3 6-1"/>
-      <path class="selene-mini-grip" fill="#ffd7cf" d="M60 42c3-2 7 1 9 1 2-2 5-1 4 2-2 4-8 5-12 3-2-1-3-4-1-6Zm3 12c3-1 5 1 7 0 3-2 5 0 3 3-2 4-7 5-10 3-2-1-2-4 0-6Z"/>
-      <path fill="#ffe59f" stroke="#a88655" stroke-width="1" d="m13 13 2 4 4 2-4 2-2 4-2-4-4-2 4-2Zm1 38 1 2 3 1-3 1-1 3-1-3-3-1 3-1Z"/>
+      <g class="selene-mini-sitting">
+        <path fill="#ad91de" d="M25 37c-4 4-8 12-6 17 4 3 16 3 21-2 1-5-2-10-4-15Z"/>
+        <path fill="#ffe4dd" d="M35 50c2-2 7-2 8 0 1 2-2 5-5 6h-7c-2 0-2-3 0-4Zm9 1c2-1 5 0 5 2 0 2-4 4-7 3 1-1 2-3 2-5Z"/>
+      </g>
+      <path fill="#fff0e8" d="M13 22c2-7 9-12 17-12 11 0 18 7 17 17-1 8-7 14-17 14-10 1-18-4-18-13 0-2 0-4 1-6Z"/>
+      <path fill="#eadcff" d="M10 26c-2-9 2-17 10-21 10-5 25-1 29 9 2 4 2 8 0 12-3-6-7-10-13-12-1 4-5 8-10 9 1-2 2-4 2-6-4 5-10 8-18 9Z"/>
+      <path fill="none" stroke="#fff4ff" stroke-width="1.6" d="M13 20c1-4 4-8 8-10m20-1 3 2"/>
+      <path fill="#ffe9a3" stroke-width="1.05" d="M25 6c-4 0-7 3-7 6s3 6 6 6c2 0 4-1 5-2-6 0-8-5-4-10Z"/>
+      <path fill="#ffd9ee" stroke-width=".8" d="M45 9c1-3 2-3 3 0 3 1 3 2 0 3-1 3-2 3-3 0-3-1-3-2 0-3Z"/>
+      <g class="selene-mini-eyes" stroke="none">
+        <ellipse cx="22.5" cy="29.4" rx="3.5" ry="4.6" fill="#59406f"/><ellipse cx="37" cy="28.8" rx="3.5" ry="4.6" fill="#59406f"/>
+        <path fill="#a87dc7" d="M20 31a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Zm14.5-.6a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Z"/>
+        <circle cx="21.7" cy="28" r="1.15" fill="#fff"/><circle cx="36.2" cy="27.4" r="1.15" fill="#fff"/>
+      </g>
+      <g fill="#f4a8bb" stroke="none"><ellipse cx="17.3" cy="34.7" rx="2.7" ry="1.35"/><ellipse cx="42" cy="34.1" rx="2.7" ry="1.35"/></g>
+      <path fill="none" stroke="#9b5777" stroke-width="1.1" d="M27.7 34.3q1 1.5 2.3 0 1.3 1.5 2.4-.2"/>
+      <path class="selene-mini-standing" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
+      <path class="selene-mini-grip" fill="#fff0e8" d="M45 29c2-2 5-2 6 0s-2 5-5 4c-2 0-2-3-1-4Zm1 9c2-2 5-2 5 0s-2 4-4 4c-2 0-3-2-1-4Z"/>
     </g>
   </svg>`;}
   let miniTapTimer=0;
