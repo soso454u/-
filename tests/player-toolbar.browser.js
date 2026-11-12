@@ -42,6 +42,7 @@ async function runSeleneToolbarRegression() {
   const pointer = (target, type, x = 0, y = 0) => target.dispatchEvent(new PointerEvent(type, { pointerId: 19, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true }));
   pointer(title, 'pointerdown'); pointer(title, 'pointerup');
   assert(player.classList.contains('mini') && getComputedStyle(head).display === 'none', 'title tap enters mini mode and hides the toolbar');
+  const rememberedMini = player.getBoundingClientRect();
   const cover = player.querySelector('.mini-cover-shell');
   cover.setPointerCapture = () => {};
   for (let i=0;i<2;i++) { pointer(cover, 'pointerdown'); pointer(cover, 'pointerup'); }
@@ -64,6 +65,12 @@ async function runSeleneToolbarRegression() {
   head.querySelector('.selene-player-close').click();
   assert(!window.__SELENE_MUSIC_PLAYER__.getState().visible, 'close control hides the player');
   window.__SELENE_MUSIC_PLAYER__.setVisible(true, { persist: false });
+  title.setPointerCapture = cover.setPointerCapture = () => {};
+  pointer(title, 'pointerdown'); pointer(title, 'pointerup');
+  const restoredMini = player.getBoundingClientRect();
+  assert(player.classList.contains('mini') && Math.abs(restoredMini.left-rememberedMini.left)<1 && Math.abs(restoredMini.top-rememberedMini.top)<1, 'title returns to the remembered mini position after closing and reopening the player');
+  for (let i=0;i<2;i++) { pointer(cover, 'pointerdown'); pointer(cover, 'pointerup'); }
+  delete title.setPointerCapture; delete cover.setPointerCapture;
   theme.remove();
   return { passed: checks.length, viewport: `${innerWidth}x${innerHeight}` };
 }

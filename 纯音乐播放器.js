@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.77';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.78';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -137,7 +137,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniDockTarget: 'auto', miniPosition: null, mobileMiniPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniDockTarget: 'auto', miniPosition: null, mobileMiniPosition: null, miniReturnPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -1179,15 +1179,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
     for(const [key,value] of Object.entries({width,height,'min-width':width,'min-height':height,'max-width':width,'max-height':height,left:x,top:y}))el.style.setProperty(key,`${value}px`,'important');
     el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
-    el.dataset.miniEdge=snap&&!sit?edge:'';el.dataset.miniDock=sit?'input':snap?'edge':'';
+    el.dataset.miniEdge=snap&&!sit?edge:'';el.dataset.miniDock=sit?'input':snap?'edge':'';el.dataset.miniAnchor=match?.dock||'';
     // Keep the original drag height so temporary fallback can return to the previous screen position.
     return{left:Math.round(x),top:Math.round(sit?top:y),...(snap?(sit?{dock:match.dock}:{dock:'edge',edge}):{})};
   }
-  function preserveMiniGeometry(el=DOC.getElementById(ID),fallback){
+  function restoreMiniGeometry(el,position){
+    const {left,top,edge,dock}=position;
+    return placeMiniWindow(el,left,top,{snap:!!settings.miniSnap,edge,dock:dock||(edge?'edge':undefined)});
+  }
+  function preserveMiniGeometry(el=DOC.getElementById(ID)){
     if(!el?.classList.contains('mini'))return false;
-    if(el.classList.contains('pointer-interacting'))return true;
-    const saved=settings[playerMiniPositionKey()],position=saved||fallback||el.getBoundingClientRect();
-    placeMiniWindow(el,position.left,position.top,{snap:!!settings.miniSnap,edge:saved?.edge,dock:saved?.dock||(saved?.edge?'edge':undefined)});return true;
+    if(el.hidden||el.classList.contains('pointer-interacting'))return true;
+    restoreMiniGeometry(el,settings[playerMiniPositionKey()]||el.getBoundingClientRect());return true;
   }
   function applyPlayerSize(el=DOC.getElementById(ID)){if(!el||preserveMiniGeometry(el))return;const preferredWidth={s:310,m:365,l:430}[settings.playerSize]||365;if(isMobile()){refreshStableMobileViewport(el);const viewportWidth=ROOT.visualViewport?.width||ROOT.innerWidth||DOC.documentElement.clientWidth||390,maxWidth=Math.max(0,viewportWidth-28),width=Math.min(preferredWidth,maxWidth);el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('max-width',`${maxWidth}px`,'important');el.style.setProperty('min-width','0','important');return;}el.style.width=`min(${preferredWidth}px,calc(100vw - 24px))`;el.style.maxWidth='calc(100vw - 24px)';}
   function isMobile(){const media=ROOT.matchMedia?.bind(ROOT),width=ROOT.visualViewport?.width||ROOT.innerWidth||0,height=ROOT.visualViewport?.height||ROOT.innerHeight||0,touch=Number(ROOT.navigator?.maxTouchPoints||0)>0,touchTablet=touch&&Math.min(width,height)<=1024&&Math.max(width,height)<=1400;return !!(media?.('(max-width:480px)').matches||media?.('(max-width:1024px) and (hover:none) and (pointer:coarse)').matches||touchTablet);}
@@ -4341,18 +4344,23 @@ ${latest.slice(-1500)}
       settings.miniRestore={width:Math.round(rect.width),height:Math.round(rect.height),left:Math.round(rect.left),top:Math.round(rect.top)};
       settings.miniMode=true;settings.immersive=false;el.classList.remove('immersive');el.classList.add('mini');
       el.querySelector('.settings-panel [data-x]')?.click();
-      const key=playerMiniPositionKey();
-      if(!settings[key])settings[key]=placeMiniWindow(el,rect.left,rect.top,{snap:!!settings.miniSnap});
-      else preserveMiniGeometry(el,rect);
-      save();
+      const key=playerMiniPositionKey(),remembered=settings.miniReturnPosition||settings[key];
+      // Title taps switch modes before the pointer wrapper clears pointer-interacting.
+      // Restore directly here; only passive resize/focus handlers should skip a drag.
+      const placed=restoreMiniGeometry(el,remembered||rect);
+      settings[key]=remembered||placed;settings.miniReturnPosition=null;save();
     };
     const exit=()=>{
       ROOT.clearTimeout(miniTapTimer);miniTapTimer=0;
       if(!el.classList.contains('mini'))return;
       const rect=el.getBoundingClientRect(),view=miniViewport(),restore=settings.miniRestore||settings.windowSize||{width:365,height:600};
+      const {miniEdge,miniAnchor}=el.dataset;
+      settings.miniReturnPosition=settings[playerMiniPositionKey()]||{
+        left:Math.round(rect.left),top:Math.round(rect.top),...(miniAnchor?{dock:miniAnchor}:miniEdge?{dock:'edge',edge:miniEdge}:{}),
+      };
       const width=Math.min(restore.width,view.width-12),height=Math.min(restore.height,view.height-12);
       const left=Math.max(view.left+6,Math.min(view.left+view.width-width-6,restore.left??rect.left)),top=Math.max(view.top+6,Math.min(view.top+view.height-height-6,restore.top??rect.top));
-      settings.miniMode=false;el.classList.remove('mini');delete el.dataset.miniEdge;delete el.dataset.miniDock;watchMiniInput();
+      settings.miniMode=false;el.classList.remove('mini');delete el.dataset.miniEdge;delete el.dataset.miniDock;delete el.dataset.miniAnchor;watchMiniInput();
       for(const key of ['min-width','min-height','max-width','max-height'])el.style.removeProperty(key);
       for(const [key,value] of Object.entries({left,top,width,height}))el.style.setProperty(key,`${value}px`,'important');
       settings.windowSize={width,height};save();
@@ -4456,7 +4464,7 @@ ${latest.slice(-1500)}
   function applyPlayerVisibility(visible){
     const player=DOC.getElementById(ID);if(!player)return;
     player.hidden=!visible;player.classList.toggle('hidden',!visible);
-    if(visible)player.style.removeProperty('display');
+    if(visible){player.style.removeProperty('display');if(settings.miniMode)preserveMiniGeometry(player);}
     else{bilibili.closeSearch();player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
   }
   function setPublicVisible(value,{persist=true}={}){
@@ -4509,7 +4517,7 @@ ${latest.slice(-1500)}
   function resetPublicPosition(){
     settings.position={...defaults.position};
     settings.mobilePosition={...defaults.mobilePosition};
-    settings.miniPosition=settings.mobileMiniPosition=null;
+    settings.miniPosition=settings.mobileMiniPosition=settings.miniReturnPosition=null;
     settings.windowPinned=false;
     const player=DOC.getElementById(ID);
     if(player){
@@ -4527,7 +4535,7 @@ ${latest.slice(-1500)}
   }
   function resetPublicWindow(){
     settings.windowSize=null;
-    settings.miniRestore=null;
+    settings.miniRestore=settings.miniReturnPosition=null;
     settings.miniMode=false;watchMiniInput();
     settings.immersive=false;
     settings.windowPinned=false;
