@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.78';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.79';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1106,10 +1106,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       @media(prefers-reduced-motion:no-preference){
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=""] .selene-mini-art{transform-origin:center 88%;animation:selene-mini-dance 2.4s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-wave{transform-box:fill-box;transform-origin:left bottom;animation:selene-mini-wave 2.8s ease-in-out infinite paused}
-        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-wave){animation-play-state:running}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=input] .selene-mini-head{transform-box:view-box;transform-origin:57% 67%;animation:selene-mini-sway 2.8s ease-in-out infinite paused}
+        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-wave,.selene-mini-head){animation-play-state:running}
       }
       @keyframes selene-mini-dance{0%,100%{transform:rotate(-3deg)}25%{transform:translateY(-2px) rotate(0)}50%{transform:rotate(3deg)}75%{transform:translateY(-2px) rotate(0)}}
       @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(-25deg)}26%{transform:rotate(-8deg)}}
+      @keyframes selene-mini-sway{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
     </style>`);
     el.dataset.miniShape=playerMiniShape(); el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize&&!settings.miniMode){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
     return el;
@@ -4307,8 +4309,10 @@ ${latest.slice(-1500)}
   }
   function seleneMiniArt(){return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <g class="selene-mini-body" stroke="#694b78" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
-      <path fill="#dbc6fa" d="M31 3C17 2 8 11 8 24c0 10-1 15-5 19 3 4 8 3 12 1 3 5 9 6 14 2l13-2c4-2 7-7 7-13C53 17 45 4 31 3Z"/>
-      <path fill="#bfa1e6" stroke="none" d="M10 32c5 5 14 8 23 7 7-1 12-4 15-9-1 10-5 15-15 16l-4-1c-5 4-11 4-14-2-4 3-9 3-11 0 3-2 5-6 6-11Z"/>
+      <g class="selene-mini-head">
+        <path fill="#dbc6fa" d="M31 3C17 2 8 11 8 24c0 10-1 15-5 19 3 4 8 3 12 1 3 5 9 6 14 2l13-2c4-2 7-7 7-13C53 17 45 4 31 3Z"/>
+        <path fill="#bfa1e6" stroke="none" d="M10 32c5 5 14 8 23 7 7-1 12-4 15-9-1 10-5 15-15 16l-4-1c-5 4-11 4-14-2-4 3-9 3-11 0 3-2 5-6 6-11Z"/>
+      </g>
       <g class="selene-mini-standing">
         <path fill="#ffe4dd" d="M24 49v4c0 3 5 3 5 0v-4m6 0 1 4c0 3 5 2 5-1l-1-4"/>
         <path fill="#ad91de" d="M25 38c-2 4-5 7-5 10 3 4 17 5 23 0-2-3-5-5-6-10Z"/>
@@ -4318,18 +4322,25 @@ ${latest.slice(-1500)}
         <path fill="#ad91de" d="M25 37c-4 4-8 12-6 17 4 3 16 3 21-2 1-5-2-10-4-15Z"/>
         <path fill="#ffe4dd" d="M35 50c2-2 7-2 8 0 1 2-2 5-5 6h-7c-2 0-2-3 0-4Zm9 1c2-1 5 0 5 2 0 2-4 4-7 3 1-1 2-3 2-5Z"/>
       </g>
-      <path fill="#fff0e8" d="M13 22c2-7 9-12 17-12 11 0 18 7 17 17-1 8-7 14-17 14-10 1-18-4-18-13 0-2 0-4 1-6Z"/>
-      <path fill="#eadcff" d="M10 26c-2-9 2-17 10-21 10-5 25-1 29 9 2 4 2 8 0 12-3-6-7-10-13-12-1 4-5 8-10 9 1-2 2-4 2-6-4 5-10 8-18 9Z"/>
-      <path fill="none" stroke="#fff4ff" stroke-width="1.6" d="M13 20c1-4 4-8 8-10m20-1 3 2"/>
-      <path fill="#ffe9a3" stroke-width="1.05" d="M25 6c-4 0-7 3-7 6s3 6 6 6c2 0 4-1 5-2-6 0-8-5-4-10Z"/>
-      <path fill="#ffd9ee" stroke-width=".8" d="M45 9c1-3 2-3 3 0 3 1 3 2 0 3-1 3-2 3-3 0-3-1-3-2 0-3Z"/>
-      <g class="selene-mini-eyes" stroke="none">
-        <ellipse cx="22.5" cy="29.4" rx="3.5" ry="4.6" fill="#59406f"/><ellipse cx="37" cy="28.8" rx="3.5" ry="4.6" fill="#59406f"/>
-        <path fill="#a87dc7" d="M20 31a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Zm14.5-.6a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Z"/>
-        <circle cx="21.7" cy="28" r="1.15" fill="#fff"/><circle cx="36.2" cy="27.4" r="1.15" fill="#fff"/>
+      <g class="selene-mini-head">
+        <path fill="#fff0e8" d="M13 22c2-7 9-12 17-12 11 0 18 7 17 17-1 8-7 14-17 14-10 1-18-4-18-13 0-2 0-4 1-6Z"/>
+        <path fill="#eadcff" d="M10 26c-2-9 2-17 10-21 10-5 25-1 29 9 2 4 2 8 0 12-3-6-7-10-13-12-1 4-5 8-10 9 1-2 2-4 2-6-4 5-10 8-18 9Z"/>
+        <path fill="none" stroke="#fff4ff" stroke-width="1.6" d="M13 20c1-4 4-8 8-10m20-1 3 2"/>
+        <path fill="#ffe9a3" stroke-width="1.05" d="M25 6c-4 0-7 3-7 6s3 6 6 6c2 0 4-1 5-2-6 0-8-5-4-10Z"/>
+        <path fill="#ffd9ee" stroke-width=".8" d="M45 9c1-3 2-3 3 0 3 1 3 2 0 3-1 3-2 3-3 0-3-1-3-2 0-3Z"/>
+        <g class="selene-mini-eyes" stroke="none">
+          <ellipse cx="22.5" cy="29.4" rx="3.5" ry="4.6" fill="#59406f"/><ellipse cx="37" cy="28.8" rx="3.5" ry="4.6" fill="#59406f"/>
+          <path fill="#a87dc7" d="M20 31a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Zm14.5-.6a2.7 2.7 0 0 0 5 0 5 5 0 0 1-5 0Z"/>
+          <circle cx="21.7" cy="28" r="1.15" fill="#fff"/><circle cx="36.2" cy="27.4" r="1.15" fill="#fff"/>
+        </g>
+        <g fill="#f4a8bb" stroke="none"><ellipse cx="17.3" cy="34.7" rx="2.7" ry="1.35"/><ellipse cx="42" cy="34.1" rx="2.7" ry="1.35"/></g>
+        <path fill="none" stroke="#9b5777" stroke-width="1.1" d="M27.7 34.3q1 1.5 2.3 0 1.3 1.5 2.4-.2"/>
       </g>
-      <g fill="#f4a8bb" stroke="none"><ellipse cx="17.3" cy="34.7" rx="2.7" ry="1.35"/><ellipse cx="42" cy="34.1" rx="2.7" ry="1.35"/></g>
-      <path fill="none" stroke="#9b5777" stroke-width="1.1" d="M27.7 34.3q1 1.5 2.3 0 1.3 1.5 2.4-.2"/>
+      <g class="selene-mini-sitting selene-mini-hands">
+        <path fill="none" stroke="#876aa7" stroke-width="1.1" d="M24 42q-.4 3 2.3 4m12-4q.4 3-2.2 4"/>
+        <path fill="#fff0e8" stroke-width="1.05" d="M24.5 45.3q1.1-1.3 3.8-.8c2 .4 2.2 2.1 1.1 3.1q-1.3 1.2-3.8.6c-1.6-.4-2.2-1.6-1.1-2.9Z"/>
+        <path fill="#fff0e8" stroke-width="1.05" d="M38.2 45.3q-1.1-1.3-3.8-.8c-2 .4-2.2 2.1-1.1 3.1q1.3 1.2 3.8.6c1.6-.4 2.2-1.6 1.1-2.9Z"/>
+      </g>
       <path class="selene-mini-standing" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
       <path class="selene-mini-grip" fill="#fff0e8" d="M46 38c2-2 5-2 5 0s-2 4-4 4c-2 0-3-2-1-4Z"/>
       <path class="selene-mini-grip selene-mini-wave" fill="#fff0e8" d="M45 29c2-2 5-2 6 0s-2 5-5 4c-2 0-2-3-1-4Z"/>
