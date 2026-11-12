@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.81';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.82';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1160,17 +1160,19 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       miniDockObserver.observe(anchor);
     }
   }
-  function placeMiniWindow(el,left,top,{snap=false,edge,dock,dropX,dropY}={}){
+  function placeMiniWindow(el,left,top,{snap=false,edge,dock,dropX,dropY,dragWidth,dragHeight}={}){
     const view=miniViewport(),selene=playerMiniShape()==='selene',scale=Math.max(.6,Math.min(1.6,Number(settings.miniScale)||1));
-    const width=Math.round((selene?48:52)*scale),height=Math.round((selene?54:52)*scale);
+    const baseWidth=selene?48:52,baseHeight=selene?54:52;
+    const normalWidth=Math.round(baseWidth*scale),normalHeight=Math.round(baseHeight*scale);
     const limit=(value,min,max)=>Math.max(min,Math.min(Math.max(min,max),value));
     const toolbar=snap&&(dock==='top'||Number.isFinite(dropY))?miniToolbar():null;
     const toolbarRect=toolbar?.getBoundingClientRect();
     const bar=toolbarRect?.width&&toolbarRect.height&&toolbarRect.top<=view.top+48&&toolbarRect.bottom>view.top&&
       toolbarRect.right>view.left&&toolbarRect.left<view.left+view.width&&toolbar.checkVisibility?.({visibilityProperty:true})!==false?toolbarRect:null;
-    const topDrop=Number.isFinite(dropY)&&dropY<=Math.max((bar?.top??view.top)+height/2+10,(bar?.bottom??view.top)+16)&&
+    const topDrop=Number.isFinite(dropY)&&dropY<=Math.max((bar?.top??view.top)+normalHeight/2+10,(bar?.bottom??view.top)+16)&&
       (!bar||dropX>=bar.left-16&&dropX<=bar.right+16);
     const hang=snap&&(dock==='top'||topDrop);
+    const restingHeight=Math.round(baseHeight*scale*(selene ? .78 : 1));
     const restoringInput=dock==='chat'||dock==='companion';
     const edgeDrop=Number.isFinite(dropX)&&Math.min(dropX-view.left,view.left+view.width-dropX)<=24;
     const candidates=snap&&!hang&&dock!=='edge'&&!edgeDrop
@@ -1179,15 +1181,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     for(const candidate of candidates){
       const {input}=candidate,box=input.getBoundingClientRect();
       if(!box.width||!box.height||input.checkVisibility?.({visibilityProperty:true})===false||
-        box.top-height<view.top+6||box.top>view.top+view.height||box.right<=view.left+width||box.left>=view.left+view.width-width)continue;
+        box.top-restingHeight<view.top+6||box.top>view.top+view.height||box.right<=view.left||box.left>=view.left+view.width)continue;
       if(restoringInput){match={...candidate,box};break;}
-      const center=left+width/2,bottom=top+height;
+      const center=left+(dragWidth??normalWidth)/2,bottom=top+(dragHeight??normalHeight);
       const dx=Math.max(box.left-center,center-box.right,0),dy=Math.max(box.top-bottom,top-box.bottom,0);
       if(dx>24||dy>48)continue;
       const distance=Math.hypot(dx,box.top-bottom);
       if(!match||distance<match.distance)match={...candidate,box,distance};
     }
-    const box=match?.box,sit=!!box;
+    const box=match?.box,sit=!!box,compact=selene&&(hang||sit);
+    const width=compact?Math.round(baseWidth*scale*.78):normalWidth,height=compact?restingHeight:normalHeight;
+    // Keep the drag centered when the launcher changes size on docking or leaving a dock.
+    left+=((dragWidth??width)-width)/2;top+=((dragHeight??height)-height)/2;
     // Only follow the active toolbar or input; free and side positions need no observer.
     watchMiniDock(hang?toolbar:match?.input||(restoringInput?candidates[0]?.input:null));
     const gap=selene&&snap&&!sit?0:6,xMin=view.left+gap,xMax=Math.max(xMin,view.left+view.width-width-gap);
@@ -4458,7 +4463,7 @@ ${latest.slice(-1500)}
       try{cover.releasePointerCapture?.(previous.id);}catch{}
       el.style.removeProperty('transform');
       if(!previous.moved){if(!cancelled)tap();return;}
-      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.nextLeft,previous.nextTop,{snap:!!settings.miniSnap,dropX:previous.dropX,dropY:previous.dropY});save();
+      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.nextLeft,previous.nextTop,{snap:!!settings.miniSnap,dropX:previous.dropX,dropY:previous.dropY,dragWidth:previous.width,dragHeight:previous.height});save();
     };
     cover.onpointerup=e=>end(e);cover.onpointercancel=e=>end(e,true);cover.onlostpointercapture=e=>end(e,true);
   }
