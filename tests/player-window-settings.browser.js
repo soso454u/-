@@ -34,7 +34,8 @@ async function runSeleneWindowSettingsRegression(){
   const tap=player.getBoundingClientRect();pointer(title,'pointerdown',tap.left+20,tap.top+20);pointer(title,'pointerup',tap.left+20,tap.top+20);
   assert(player.classList.contains('mini')&&player.offsetWidth===52,'title tap still opens the 52px mini player');
   const cover=player.querySelector('.mini-cover-shell');cover.setPointerCapture=()=>{};
-  pointer(cover,'pointerdown',30,30);pointer(cover,'pointerup',30,30);assert(!player.classList.contains('mini'),'mini cover tap restores the window');
+  for(let i=0;i<2;i++){pointer(cover,'pointerdown',30,30);pointer(cover,'pointerup',30,30);}
+  assert(!player.classList.contains('mini'),'mini cover double tap restores the window');
   delete title.setPointerCapture;delete title.releasePointerCapture;delete cover.setPointerCapture;
   player.querySelector('.gear').click();const settings=player.querySelector('.settings-panel');
   assert(!settings.querySelector('[name=floatingLyrics],[name=lyricColor]'),'lyrics controls have moved out of general settings');

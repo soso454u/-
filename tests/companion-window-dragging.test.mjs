@@ -12,7 +12,7 @@ assert.notEqual(end, -1, 'companion dragging helper boundary should exist');
 function createHarness(companionMini = false) {
   const settings = { companionMini };
   const moves = [];
-  const persisted = [];
+  const persisted = [], edges=[];
   const timers = [];
   const frames = new Map();
   const transforms = [];
@@ -43,7 +43,7 @@ function createHarness(companionMini = false) {
   )(
     settings,
     (_dialog, left, top) => moves.push({ left, top }),
-    (_dialog, mini) => persisted.push(mini),
+    (_dialog, mini, edge) => {persisted.push(mini);edges.push(edge);},
     () => {},
     () => ({ left: 0, top: 0, width: 1200, height: 900 }),
     {
@@ -54,7 +54,7 @@ function createHarness(companionMini = false) {
   );
   api.bindCompanionDragging(dialog);
   const flushFrames = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); };
-  return { api, avatar, dialog, head, moves, persisted, settings, timers, frames, transforms, flushFrames };
+  return { api, avatar, dialog, head, moves, persisted, edges, settings, timers, frames, transforms, flushFrames };
 }
 
 const pointerEvent = ({ id = 7, x = 0, y = 0, target = 'plain' } = {}) => ({
@@ -67,7 +67,7 @@ const pointerEvent = ({ id = 7, x = 0, y = 0, target = 'plain' } = {}) => ({
   stopPropagation() {},
   target: {
     closest(selector) {
-      if (target === 'avatar' && selector === 'button:not(.companion-avatar-button)') return null;
+      if (target === 'avatar' && selector === '.companion-avatar-button') return {};
       if (target === 'control' && selector === 'button:not(.companion-avatar-button)') return {};
       return null;
     },
@@ -112,14 +112,20 @@ test('header controls do not accidentally start dragging the companion window', 
   assert.equal(harness.persisted.length, 0);
 });
 
-test('the mini companion avatar remains independently draggable', () => {
+test('the mini companion avatar snaps to the nearest edge and retains the dragged height', () => {
   const harness = createHarness(true);
-  harness.avatar.onpointerdown(pointerEvent({ x: 8, y: 9, target: 'avatar' }));
-  harness.avatar.onpointermove(pointerEvent({ x: 28, y: 39, target: 'avatar' }));
-  harness.avatar.onpointerup(pointerEvent({ x: 28, y: 39, target: 'avatar' }));
+  harness.head.onpointerdown(pointerEvent({ x: 8, y: 9, target: 'avatar' }));
+  harness.head.onpointermove(pointerEvent({ x: 28, y: 39, target: 'avatar' }));
+  harness.head.onpointerup(pointerEvent({ x: 28, y: 39, target: 'avatar' }));
 
-  assert.deepEqual(harness.moves.at(-1), { left: 120, top: 230 });
+  assert.deepEqual(harness.moves.at(-1), { left: 4, top: 230 });
   assert.deepEqual(harness.persisted, [true]);
+  assert.deepEqual(harness.edges, ['left']);
+  harness.head.onpointerdown(pointerEvent({ x: 8, y: 9, target: 'avatar' }));
+  harness.head.onpointermove(pointerEvent({ x: 868, y: 29, target: 'avatar' }));
+  harness.head.onpointerup(pointerEvent({ x: 868, y: 29, target: 'avatar' }));
+  assert.deepEqual(harness.moves.at(-1), { left: 896, top: 220 });
+  assert.deepEqual(harness.edges, ['left','right']);
 });
 
 test('a burst of pointer moves paints once per frame and release commits the latest position', () => {

@@ -126,3 +126,19 @@ test('empty output distinguishes reasoning budget exhaustion, filtering and tool
   assert.match(api.companionEmptyReplyError({choices:[{finish_reason:'content_filter'}]}).message,/过滤/);
   assert.match(api.companionEmptyReplyError({choices:[{finish_reason:'tool_calls'}]}).message,/工具调用/);
 });
+
+test('Ollama DeepSeek V4.1 song picks ask for a final answer in the same completion',async()=>{
+  const api=fixture({transport:async()=>Response.json({choices:[{finish_reason:'length',message:{thinking:'hidden',content:''}}]})});
+  api.settings.companionApiUrl='http://localhost:11434/v1';
+  const model='deepseek-v4.1-flash:cloud';
+  assert.equal(api.companionCompletionPayload(model,[]).reasoning_effort,undefined);
+  const payload=api.companionCompletionPayload(model,[],true);
+  assert.equal(payload.reasoning_effort,'none');
+  const data=await api.requestCompanionApi('completion',payload);
+  assert.equal(api.calls.length,1);
+  assert.deepEqual(JSON.parse(JSON.parse(api.calls[0][1].body).custom_include_body),{reasoning_effort:'none'});
+  assert.equal(api.companionResponseText(data),'');
+  assert.match(api.companionEmptyReplyError(data).message,/思考阶段.*上限/);
+  api.settings.companionApiUrl='https://unrelated-provider.test/v1';
+  assert.equal(api.companionCompletionPayload(model,[],true).reasoning_effort,undefined);
+});

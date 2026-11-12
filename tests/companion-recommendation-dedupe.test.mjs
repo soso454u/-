@@ -8,7 +8,7 @@ const helperEnd = player.indexOf('function companionTicketList', helperStart);
 const markStart = player.indexOf('function markCompanionPicked');
 const markEnd = player.indexOf('function addCurrentToOurSongs', markStart);
 const uniqueStart = player.indexOf('async function uniqueCompanionRecommendation');
-const uniqueEnd = player.indexOf('async function fulfillCompanionSongRequest', uniqueStart);
+const uniqueEnd = player.indexOf('function fulfillCompanionSongRequest', uniqueStart);
 
 assert.notEqual(helperStart, -1, 'recommendation history helpers should exist');
 assert.notEqual(helperEnd, -1, 'recommendation history helper boundary should exist');
@@ -77,89 +77,92 @@ test('marking a character pick refreshes song data and its last-picked timestamp
   assert.equal(saves, 1);
 });
 
-function makeUniqueRecommendation(overrides = {}) {
-  return new Function(
-    'companionCharacter',
-    'runCompanionTask',
-    'companionRecommendationTask',
-    'resolveCompanionSongChoice',
-    'companionExplicitlyRequestedChoice',
-    'companionWasPicked',
-    'searchCompanionChoice',
-    'play',
-    'markCompanionPicked',
-    'toast',
-    `${player.slice(uniqueStart, uniqueEnd)};return uniqueCompanionRecommendation;`,
-  )(
-    overrides.companionCharacter || (() => ({ name: 'Selene' })),
-    overrides.runCompanionTask,
-    overrides.companionRecommendationTask || (value => value),
-    overrides.resolveCompanionSongChoice,
-    companionExplicitlyRequestedChoice,
-    overrides.companionWasPicked,
-    overrides.searchCompanionChoice,
-    overrides.play,
-    overrides.markCompanionPicked,
-    overrides.toast || (() => {}),
-  );
+function fixture({ reply = '听这首吧\nSELENE_SONG: 新歌 | 周杰伦', picked = () => false, lookup, start = true } = {}) {
+  const generated=[],played=[],marked=[],messages=[],reports=[],notices=[];
+  const info={name:'Selene'};
+  const section=(start,end)=>player.slice(player.indexOf(start),player.indexOf(end));
+  const make=new Function('deps',`
+    const {generateCompanionReply,companionCharacter,companionWasPicked,companionExplicitlyRequestedChoice,
+      searchCompanionChoice,play,markCompanionPicked,companionMessages,console,offlineKey}=deps;
+    let companionRequest=0,companionBusy=false;
+    const disposed=false,current=null,companionMessageQueue=[],settings={companionApiKey:'test-key'};
+    const renderCompanionDialog=()=>{},companionConversationKey=()=> 'contact',companionRecommendationTask=options=>options;
+    const normalizeCompanionReply=text=>text,save=()=>{},setCompanionMessages=()=>{},speakCompanionReply=async()=>{};
+    const DOC={querySelector:()=>null},ID='player';
+    const showCompanionPickToast=text=>deps.notices.push(text),dismissCompanionPickToast=()=>{};
+    ${section('function companionApiError','function companionRequestContext')}
+    ${section('async function runCompanionTask','async function createCompanionTicket')}
+    ${section('function companionSongField','function companionLatestRoundText')}
+    ${section('function reportCompanionPick','function fulfillCompanionSongRequest')}
+    return uniqueCompanionRecommendation;
+  `);
+  return {generated,played,marked,messages,reports,notices,request:make({
+    generateCompanionReply:async (prompt, mode)=>{
+      generated.push({prompt,mode});
+      if(reply instanceof Error)throw reply;
+      return typeof reply==='function'?reply():reply;
+    },
+    companionCharacter:()=>info,companionWasPicked:picked,companionExplicitlyRequestedChoice,offlineKey,
+    searchCompanionChoice:lookup|| (async choice=>choice),
+    play:async(song,recovering,options)=>{played.push({song,options});return start;},
+    markCompanionPicked:song=>marked.push(song),
+    companionMessages:()=>messages,notices,console:{warn:(_label,report)=>reports.push(report)},
+  })};
 }
 
-test('a repeated recommendation is rejected and automatically reselected before playback', async () => {
-  const replies = ['old reply', 'new reply'];
-  const played = [];
-  const marked = [];
-  const uniqueRecommendation = makeUniqueRecommendation({
-    runCompanionTask: async () => replies.shift(),
-    resolveCompanionSongChoice: async reply => reply.startsWith('old')
-      ? { title: 'Old Song', artist: 'Artist' }
-      : { title: 'New Song', artist: 'Artist' },
-    companionWasPicked: choice => choice.title === 'Old Song',
-    searchCompanionChoice: async choice => choice,
-    play: async song => played.push(song.title),
-    markCompanionPicked: song => marked.push(song.title),
-  });
-
-  const result = await uniqueRecommendation({ maxAttempts: 3 });
-  assert.equal(result.song.title, 'New Song');
-  assert.deepEqual(played, ['New Song']);
-  assert.deepEqual(marked, ['New Song']);
+test('role and mood picks each make one request and suppress the extra playback reaction', async () => {
+  for(const mood of ['', '雨天']){
+    const api=fixture({reply:'听这首吧\n**SELENE_SONG:** 《新歌》｜周杰伦'});
+    await api.request({mood});
+    assert.equal(api.generated.length,1);
+    assert.equal(api.generated[0].prompt.mood,mood);
+    assert.equal(api.generated[0].mode,true);
+    assert.deepEqual(api.played,[{song:{title:'新歌',artist:'周杰伦'},options:{companionPick:true}}]);
+    assert.equal(api.marked.length,1);
+    assert.equal(api.messages[0].content,'听这首吧');
+    assert.deepEqual(api.reports,[]);
+  }
 });
 
-test('the resolved search result is checked again before playback', async () => {
-  const replies = ['alias reply', 'fresh reply'];
-  const played = [];
-  const uniqueRecommendation = makeUniqueRecommendation({
-    runCompanionTask: async () => replies.shift(),
-    resolveCompanionSongChoice: async reply => reply.startsWith('alias')
-      ? { title: 'Alias', artist: 'Someone' }
-      : { title: 'Fresh Song', artist: 'Artist' },
-    companionWasPicked: choice => choice.title === 'Canonical Old Song',
-    searchCompanionChoice: async choice => choice.title === 'Alias'
-      ? { title: 'Canonical Old Song', artist: 'Artist' }
-      : choice,
-    play: async song => played.push(song.title),
-    markCompanionPicked: () => {},
-  });
+test('each failure reports its stage without another model call', async () => {
+  const cases=[
+    [{reply:'好呀，没有选歌'}, /识别歌曲/],
+    [{reply:Object.assign(Error('denied test-key at https://example.invalid/?token=private'),{status:401})}, /模型请求 · HTTP 401.*已隐藏/],
+    [{picked:()=>true}, /重复检查/],
+    [{lookup:async()=>({title:'旧歌',artist:'周杰伦'}),picked:song=>song.title==='旧歌'}, /重复检查/],
+    [{lookup:async()=>null}, /搜索歌曲.*没有找到/],
+    [{lookup:async()=>{throw Error('搜索服务暂不可用');}}, /搜索歌曲.*服务暂不可用/],
+    [{start:false}, /播放音源/],
+  ];
+  for(const [options,expected] of cases){
+    const api=fixture(options);
+    await api.request({mood:'雨天'});
+    assert.equal(api.generated.length,1);
+    assert.match(api.notices[0],expected);
+    assert.deepEqual(api.notices,api.reports);
+    assert.doesNotMatch(api.reports[0],/test-key|token=private/);
+    assert.equal(api.marked.length,0);
+    assert.equal(api.messages.length,0);
+  }
+});
 
-  const result = await uniqueRecommendation({ maxAttempts: 3 });
-  assert.equal(result.song.title, 'Fresh Song');
-  assert.deepEqual(played, ['Fresh Song']);
+test('pending music lookup blocks additional picks until the first request finishes',async()=>{
+  let resolveSearch;
+  const api=fixture({lookup:()=>new Promise(resolve=>{resolveSearch=resolve;})});
+  const first=api.request({});
+  await Promise.resolve();
+  await api.request({mood:'开心'});
+  assert.equal(api.generated.length,1);
+  resolveSearch({title:'新歌',artist:'周杰伦'});
+  await first;
+  assert.equal(api.messages.length,1);
 });
 
 test('a song explicitly named by the user may be replayed', async () => {
-  const played = [];
-  const uniqueRecommendation = makeUniqueRecommendation({
-    runCompanionTask: async () => 'named reply',
-    resolveCompanionSongChoice: async () => ({ title: '稻香', artist: '周杰伦' }),
-    companionWasPicked: () => true,
-    searchCompanionChoice: async choice => choice,
-    play: async song => played.push(song.title),
-    markCompanionPicked: () => {},
-  });
-
-  const result = await uniqueRecommendation({ userText: '播放稻香', maxAttempts: 3 });
-  assert.equal(result.song.title, '稻香');
-  assert.deepEqual(played, ['稻香']);
+  const api=fixture({reply:'SELENE_SONG: 稻香 | 周杰伦',picked:()=>true});
+  await api.request({userText:'播放稻香'});
+  assert.equal(api.generated.length,1);
+  assert.equal(api.played[0].song.title,'稻香');
 });
 
 test('recommendations use the current contact card and the actual group participants',()=>{

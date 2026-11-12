@@ -44,9 +44,9 @@ async function runSeleneToolbarRegression() {
   assert(player.classList.contains('mini') && getComputedStyle(head).display === 'none', 'title tap enters mini mode and hides the toolbar');
   const cover = player.querySelector('.mini-cover-shell');
   cover.setPointerCapture = () => {};
-  pointer(cover, 'pointerdown'); pointer(cover, 'pointerup');
+  for (let i=0;i<2;i++) { pointer(cover, 'pointerdown'); pointer(cover, 'pointerup'); }
   await frame();
-  assert(!player.classList.contains('mini'), 'mini cover tap restores the player');
+  assert(!player.classList.contains('mini'), 'mini cover double tap restores the player');
   checkLayout();
   let transformWrites = 0;
   const originalWrite = player.style.setProperty.bind(player.style);
