@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.79';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.80';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -137,7 +137,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniDockTarget: 'auto', miniPosition: null, mobileMiniPosition: null, miniReturnPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniPosition: null, mobileMiniPosition: null, miniReturnPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, miniScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -149,7 +149,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
   }
   try {
-    const {desktopLyrics,mobileLyrics,...saved}=JSON.parse(ROOT.localStorage.getItem(KEY)||'{}');
+    const {desktopLyrics,mobileLyrics,miniDockTarget:legacyMiniDockTarget,...saved}=JSON.parse(ROOT.localStorage.getItem(KEY)||'{}');
     settings={
       ...defaults,...saved,
       // Preserve visibility if lyrics were enabled on either device before the switches merged.
@@ -1103,14 +1103,20 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       #${ID} .selene-mini-sitting,#${ID}.mini:not([data-mini-dock=edge]) .selene-mini-grip{display:none}
       #${ID}.mini[data-mini-dock=input] .selene-mini-sitting{display:block}
       #${ID}.mini[data-mini-dock=input] .selene-mini-standing{display:none}
+      #${ID} .selene-mini-hanging{display:none}
+      #${ID}.mini[data-mini-dock=top] .selene-mini-hanging{display:block}
+      #${ID}.mini[data-mini-dock=top] .selene-mini-upright{display:none}
       @media(prefers-reduced-motion:no-preference){
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=""] .selene-mini-art{transform-origin:center 88%;animation:selene-mini-dance 2.4s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=edge] .selene-mini-wave{transform-box:fill-box;transform-origin:left bottom;animation:selene-mini-wave 2.8s ease-in-out infinite paused}
         #${ID}.mini[data-mini-shape=selene][data-mini-dock=input] .selene-mini-head{transform-box:view-box;transform-origin:57% 67%;animation:selene-mini-sway 2.8s ease-in-out infinite paused}
-        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-wave,.selene-mini-head){animation-play-state:running}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-leg{transform-box:fill-box;transform-origin:center top;animation:selene-mini-kick 2.4s ease-in-out infinite alternate paused}
+        #${ID}.mini[data-mini-shape=selene][data-mini-dock=top] .selene-mini-leg:nth-child(2){animation-direction:alternate-reverse}
+        #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-wave,.selene-mini-head,.selene-mini-leg){animation-play-state:running}
       }
       @keyframes selene-mini-dance{0%,100%{transform:rotate(-3deg)}25%{transform:translateY(-2px) rotate(0)}50%{transform:rotate(3deg)}75%{transform:translateY(-2px) rotate(0)}}
       @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(-25deg)}26%{transform:rotate(-8deg)}}
+      @keyframes selene-mini-kick{from{transform:rotate(-13deg)}to{transform:rotate(15deg)}}
       @keyframes selene-mini-sway{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
     </style>`);
     el.dataset.miniShape=playerMiniShape(); el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize&&!settings.miniMode){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
@@ -1133,34 +1139,43 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function playerMiniShape(){return ['round','square','selene'].includes(settings.miniShape)?settings.miniShape:'round';}
   function playerMiniPositionKey(){return isMobile()?'mobileMiniPosition':'miniPosition';}
   function miniViewport(){const vv=ROOT.visualViewport;return{left:Number(vv?.offsetLeft)||0,top:Number(vv?.offsetTop)||0,width:Number(vv?.width)||ROOT.innerWidth||390,height:Number(vv?.height)||ROOT.innerHeight||700};}
-  let miniInputObserver=null,observedMiniInput=null;
-  function playerMiniDockTarget(){return ['edge','input'].includes(settings.miniDockTarget)?settings.miniDockTarget:'auto';}
+  let miniDockObserver=null,observedMiniDock=null;
+  function miniToolbar(){return DOC.getElementById('top-settings-holder')||DOC.getElementById('top-bar');}
   function miniDockInputs(){
     return [
       {dock:'chat',input:DOC.getElementById('send_textarea')},
       {dock:'companion',input:DOC.querySelector(`#${ID}-companion .companion-form textarea`)},
     ].filter(item=>item.input);
   }
-  function watchMiniInput(input=null){
-    if(input===observedMiniInput)return;
-    miniInputObserver?.disconnect();observedMiniInput=input;
-    if(input&&ROOT.ResizeObserver){
-      miniInputObserver??=new ROOT.ResizeObserver(()=>preserveMiniGeometry());
-      miniInputObserver.observe(input);
+  function watchMiniDock(anchor=null){
+    if(anchor===observedMiniDock)return;
+    miniDockObserver?.disconnect();observedMiniDock=anchor;
+    if(anchor&&ROOT.ResizeObserver){
+      miniDockObserver??=new ROOT.ResizeObserver(()=>preserveMiniGeometry());
+      miniDockObserver.observe(anchor);
     }
   }
-  function placeMiniWindow(el,left,top,{snap=false,edge,dock,dropX}={}){
-    const view=miniViewport(),selene=playerMiniShape()==='selene',width=selene?48:52,height=selene?54:52;
-    const target=playerMiniDockTarget(),restoringInput=target==='auto'&&dock&&dock!=='edge';
+  function placeMiniWindow(el,left,top,{snap=false,edge,dock,dropX,dropY}={}){
+    const view=miniViewport(),selene=playerMiniShape()==='selene',scale=Math.max(.6,Math.min(1.6,Number(settings.miniScale)||1));
+    const width=Math.round((selene?48:52)*scale),height=Math.round((selene?54:52)*scale);
+    const limit=(value,min,max)=>Math.max(min,Math.min(Math.max(min,max),value));
+    const toolbar=snap&&(dock==='top'||Number.isFinite(dropY))?miniToolbar():null;
+    const toolbarRect=toolbar?.getBoundingClientRect();
+    const bar=toolbarRect?.width&&toolbarRect.height&&toolbarRect.top<=view.top+48&&toolbarRect.bottom>view.top&&
+      toolbarRect.right>view.left&&toolbarRect.left<view.left+view.width&&toolbar.checkVisibility?.({visibilityProperty:true})!==false?toolbarRect:null;
+    const topDrop=Number.isFinite(dropY)&&dropY<=Math.max((bar?.top??view.top)+height/2+10,(bar?.bottom??view.top)+16)&&
+      (!bar||dropX>=bar.left-16&&dropX<=bar.right+16);
+    const hang=snap&&(dock==='top'||topDrop);
+    const restoringInput=dock==='chat'||dock==='companion';
     const edgeDrop=Number.isFinite(dropX)&&Math.min(dropX-view.left,view.left+view.width-dropX)<=24;
-    const candidates=snap&&(target==='input'||target==='auto'&&dock!=='edge'&&!edgeDrop)
+    const candidates=snap&&!hang&&dock!=='edge'&&!edgeDrop
       ?miniDockInputs().filter(item=>!restoringInput||item.dock===dock):[];
     let match=null;
     for(const candidate of candidates){
       const {input}=candidate,box=input.getBoundingClientRect();
       if(!box.width||!box.height||input.checkVisibility?.({visibilityProperty:true})===false||
         box.top-height<view.top+6||box.top>view.top+view.height||box.right<=view.left+width||box.left>=view.left+view.width-width)continue;
-      if(target==='input'||restoringInput){match={...candidate,box};break;}
+      if(restoringInput){match={...candidate,box};break;}
       const center=left+width/2,bottom=top+height;
       const dx=Math.max(box.left-center,center-box.right,0),dy=Math.max(box.top-bottom,top-box.bottom,0);
       if(dx>24||dy>48)continue;
@@ -1168,12 +1183,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!match||distance<match.distance)match={...candidate,box,distance};
     }
     const box=match?.box,sit=!!box;
-    // Only a docked launcher needs to follow the input as it grows or hides.
-    watchMiniInput(match?.input||(target==='input'||restoringInput?candidates[0]?.input:null));
+    // Only follow the active toolbar or input; free and side positions need no observer.
+    watchMiniDock(hang?toolbar:match?.input||(restoringInput?candidates[0]?.input:null));
     const gap=selene&&snap&&!sit?0:6,xMin=view.left+gap,xMax=Math.max(xMin,view.left+view.width-width-gap);
-    const limit=(value,min,max)=>Math.max(min,Math.min(Math.max(min,max),value));
     let x=limit(left,xMin,xMax),y=limit(top,view.top+6,view.top+view.height-height-6);
-    if(sit){
+    if(hang){
+      if(bar&&Math.min(bar.right,view.left+view.width)-Math.max(bar.left,view.left)>=width){
+        x=limit(left,limit(bar.left,xMin,xMax),limit(bar.right-width,xMin,xMax));
+      }
+      y=limit(bar?.top??view.top,view.top,view.top+view.height-height);
+    }else if(sit){
       x=limit(left,Math.max(xMin,box.left),Math.min(xMax,box.right-width));y=box.top-height+2;
     }else if(snap){
       if(edge!=='left'&&edge!=='right')edge=(dropX??left+width/2)<view.left+view.width/2?'left':'right';
@@ -1181,9 +1200,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }
     for(const [key,value] of Object.entries({width,height,'min-width':width,'min-height':height,'max-width':width,'max-height':height,left:x,top:y}))el.style.setProperty(key,`${value}px`,'important');
     el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
-    el.dataset.miniEdge=snap&&!sit?edge:'';el.dataset.miniDock=sit?'input':snap?'edge':'';el.dataset.miniAnchor=match?.dock||'';
-    // Keep the original drag height so temporary fallback can return to the previous screen position.
-    return{left:Math.round(x),top:Math.round(sit?top:y),...(snap?(sit?{dock:match.dock}:{dock:'edge',edge}):{})};
+    const anchor=hang?'top':match?.dock;
+    el.dataset.miniEdge=snap&&!anchor?edge:'';el.dataset.miniDock=hang?'top':sit?'input':snap?'edge':'';el.dataset.miniAnchor=anchor||'';
+    // Keep the original drag height for an input that may temporarily hide.
+    return{left:Math.round(x),top:Math.round(sit?top:y),...(snap?(anchor?{dock:anchor}:{dock:'edge',edge}):{})};
   }
   function restoreMiniGeometry(el,position){
     const {left,top,edge,dock}=position;
@@ -4041,7 +4061,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;watchMiniInput();ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;watchMiniDock();ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(!event?.persisted)cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -4248,9 +4268,9 @@ ${latest.slice(-1500)}
     </style>`);updateQuickLyricsButton(el);
   }
   function applyCustomScales(el=DOC.getElementById(ID)){if(!el)return;for(const key of ['buttonScale','textScale','coverScale','listScale']){const value=Math.max(.6,Math.min(1.6,Number(settings[key])||1));settings[key]=value;el.style.setProperty(`--${key.replace('Scale','-scale').replace(/[A-Z]/g,m=>`-${m.toLowerCase()}`)}`,String(value));}}
-  function bindScaleSettings(el){const gear=el.querySelector('.gear'),open=gear.onclick,labels={buttonScale:'按钮大小',textScale:'文字大小',coverScale:'封面大小',listScale:'歌曲列表规格'};gear.onclick=e=>{open?.call(gear,e);const panel=el.querySelector('.settings-panel'),grid=panel?.querySelector('.set-grid');if(!grid)return;let card=grid.querySelector('.custom-scales');if(!card){card=DOC.createElement('div');card.className='set-card custom-scales';card.innerHTML=`<b>独立尺寸调整</b>${Object.entries(labels).map(([key,label])=>`<div class="scale-row" data-scale="${key}"><span>${label}</span><button type="button" data-step="-.1">−</button><output></output><button type="button" data-step=".1">＋</button></div>`).join('')}<button type="button" data-scale-reset>恢复默认</button>`;grid.appendChild(card);card.onclick=event=>{const reset=event.target.closest('[data-scale-reset]'),row=event.target.closest('[data-scale]'),step=Number(event.target.closest('[data-step]')?.dataset.step);if(reset){for(const key of Object.keys(labels))settings[key]=1;}else if(row&&step){const key=row.dataset.scale;settings[key]=Math.round(Math.max(.6,Math.min(1.6,(Number(settings[key])||1)+step))*10)/10;}else return;applyCustomScales(el);update();save();};}const update=()=>card.querySelectorAll('[data-scale]').forEach(row=>{row.querySelector('output').textContent=`${Math.round((Number(settings[row.dataset.scale])||1)*100)}%`;});update();};}
+  function bindScaleSettings(el){const gear=el.querySelector('.gear'),open=gear.onclick,labels={buttonScale:'按钮大小',textScale:'文字大小',coverScale:'封面大小',listScale:'歌曲列表规格',miniScale:'悬浮窗大小'};gear.onclick=e=>{open?.call(gear,e);const panel=el.querySelector('.settings-panel'),grid=panel?.querySelector('.set-grid');if(!grid)return;let card=grid.querySelector('.custom-scales');if(!card){card=DOC.createElement('div');card.className='set-card custom-scales';card.innerHTML=`<b>独立尺寸调整</b>${Object.entries(labels).map(([key,label])=>`<div class="scale-row" data-scale="${key}"><span>${label}</span><button type="button" data-step="-.1">−</button><output></output><button type="button" data-step=".1">＋</button></div>`).join('')}<button type="button" data-scale-reset>恢复默认</button>`;grid.appendChild(card);card.onclick=event=>{const reset=event.target.closest('[data-scale-reset]'),row=event.target.closest('[data-scale]'),step=Number(event.target.closest('[data-step]')?.dataset.step);if(reset){for(const key of Object.keys(labels))settings[key]=1;}else if(row&&step){const key=row.dataset.scale;settings[key]=Math.round(Math.max(.6,Math.min(1.6,(Number(settings[key])||1)+step))*10)/10;}else return;applyCustomScales(el);update();save();};}const update=()=>card.querySelectorAll('[data-scale]').forEach(row=>{row.querySelector('output').textContent=`${Math.round((Number(settings[row.dataset.scale])||1)*100)}%`;});update();};}
   function bindUiPresetOnly(el){el.classList.remove('ui-size-s','ui-size-m','ui-size-l');el.classList.add(`ui-size-${['s','m','l'].includes(settings.playerSize)?settings.playerSize:'m'}`);}
-  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><label data-mini-dock-option>吸附位置<select name="miniDockTarget"><option value="auto">自动识别</option><option value="edge">屏幕左右边缘</option><option value="input">聊天输入框上方</option></select></label><small>自动识别：拖到聊天输入框附近松手会吸到输入框上方，其他位置吸到最近的屏幕边。单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]'),dock=card.querySelector('[name=miniDockTarget]');snap.checked=!!settings.miniSnap;dock.disabled=!snap.checked;dock.value=playerMiniDockTarget();snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;dock.disabled=!snap.checked;save();};dock.onchange=event=>{event.stopPropagation();settings.miniDockTarget=dock.value;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
+  function bindWindowResetSetting(el){const gear=el.querySelector('.gear'),open=gear.onclick;gear.onclick=e=>{open?.call(gear,e);const grid=el.querySelector('.settings-panel .set-grid');if(!grid||grid.querySelector('[data-window-default]'))return;const card=DOC.createElement('div');card.className='set-card';card.innerHTML='<b>播放器窗口</b><label>迷你悬浮窗外形<select name="miniShape"><option value="round">圆形</option><option value="square">方形</option><option value="selene">Selene</option></select></label><label><input type="checkbox" name="miniSnap"> 悬浮窗吸附</label><small>开启后按松手位置自动吸附：顶部工具栏上沿、聊天输入框上方，或最近的左右屏幕边。单击播放或暂停，双击展开。</small><button type="button" data-window-mini>缩成悬浮窗</button> <button type="button" data-window-default>恢复播放器默认尺寸</button>';grid.appendChild(card);const shape=card.querySelector('[name=miniShape]');shape.value=playerMiniShape();const snap=card.querySelector('[name=miniSnap]');snap.checked=!!settings.miniSnap;snap.onchange=event=>{event.stopPropagation();settings.miniSnap=snap.checked;save();};card.querySelector('[data-window-mini]').onclick=()=>el.dispatchEvent(new ROOT.Event('selene:mini'));shape.onchange=event=>{event.stopPropagation();settings.miniShape=shape.value;el.dataset.miniShape=shape.value;save();};card.querySelector('[data-window-default]').onclick=()=>{const vw=ROOT.visualViewport?.width||ROOT.innerWidth||390,vh=ROOT.visualViewport?.height||ROOT.innerHeight||700,width=Math.min(365,vw-12),height=Math.min(600,vh-12),rect=el.getBoundingClientRect(),left=Math.max(6,Math.min(vw-width-6,rect.left)),top=Math.max(6,Math.min(vh-height-6,rect.top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');settings.windowSize={width,height};save();toast('success','已恢复播放器默认尺寸');};};}
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
     const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
@@ -4309,12 +4329,20 @@ ${latest.slice(-1500)}
   }
   function seleneMiniArt(){return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <g class="selene-mini-body" stroke="#694b78" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <g class="selene-mini-hanging" fill="none">
+        <path stroke-width="6" d="M24 40C15 34 7 24 7 6m31 34C47 33 49 22 47 6"/>
+        <path stroke="#ad91de" stroke-width="3.8" d="M24 40C15 34 7 24 7 6m31 34C47 33 49 22 47 6"/>
+      </g>
       <g class="selene-mini-head">
         <path fill="#dbc6fa" d="M31 3C17 2 8 11 8 24c0 10-1 15-5 19 3 4 8 3 12 1 3 5 9 6 14 2l13-2c4-2 7-7 7-13C53 17 45 4 31 3Z"/>
         <path fill="#bfa1e6" stroke="none" d="M10 32c5 5 14 8 23 7 7-1 12-4 15-9-1 10-5 15-15 16l-4-1c-5 4-11 4-14-2-4 3-9 3-11 0 3-2 5-6 6-11Z"/>
       </g>
+      <g class="selene-mini-hanging" fill="#ffe4dd">
+        <path class="selene-mini-leg" d="M24 47h5l-1 6c0 3-6 3-6 0Z"/>
+        <path class="selene-mini-leg" d="M34 47h5l2 6c1 3-5 4-6 1Z"/>
+      </g>
       <g class="selene-mini-standing">
-        <path fill="#ffe4dd" d="M24 49v4c0 3 5 3 5 0v-4m6 0 1 4c0 3 5 2 5-1l-1-4"/>
+        <path class="selene-mini-upright" fill="#ffe4dd" d="M24 49v4c0 3 5 3 5 0v-4m6 0 1 4c0 3 5 2 5-1l-1-4"/>
         <path fill="#ad91de" d="M25 38c-2 4-5 7-5 10 3 4 17 5 23 0-2-3-5-5-6-10Z"/>
         <path fill="none" stroke="#f7e8ff" d="M22 47c5 2 13 3 19 0"/>
       </g>
@@ -4341,7 +4369,12 @@ ${latest.slice(-1500)}
         <path fill="#fff0e8" stroke-width="1.05" d="M24.5 45.3q1.1-1.3 3.8-.8c2 .4 2.2 2.1 1.1 3.1q-1.3 1.2-3.8.6c-1.6-.4-2.2-1.6-1.1-2.9Z"/>
         <path fill="#fff0e8" stroke-width="1.05" d="M38.2 45.3q-1.1-1.3-3.8-.8c-2 .4-2.2 2.1-1.1 3.1q1.3 1.2 3.8.6c1.6-.4 2.2-1.6 1.1-2.9Z"/>
       </g>
-      <path class="selene-mini-standing" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
+      <g class="selene-mini-hanging" fill="#fff0e8" stroke-width="1.05">
+        <path d="M3.4 4.7C2.7 2.1 4.7.7 7.2.8c2.7.1 4 1.6 3.4 4-.3 1.8-1.5 3.2-3.3 3.2-2 0-3.4-1.5-3.9-3.3Z"/>
+        <path d="M43.5 4.7C43 2.2 44.6.8 47.1.8c2.7 0 4 1.8 3.4 4.1-.5 1.8-1.5 3.1-3.3 3.1-2.1 0-3.4-1.5-3.7-3.3Z"/>
+        <path fill="none" stroke="#dbaab8" stroke-width=".8" d="M6 2.8v1.3m2-1.4v1.4m38-1.3v1.3m2-1.4v1.4"/>
+      </g>
+      <path class="selene-mini-standing selene-mini-upright" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
       <path class="selene-mini-grip" fill="#fff0e8" d="M46 38c2-2 5-2 5 0s-2 4-4 4c-2 0-3-2-1-4Z"/>
       <path class="selene-mini-grip selene-mini-wave" fill="#fff0e8" d="M45 29c2-2 5-2 6 0s-2 5-5 4c-2 0-2-3-1-4Z"/>
     </g>
@@ -4371,7 +4404,7 @@ ${latest.slice(-1500)}
       };
       const width=Math.min(restore.width,view.width-12),height=Math.min(restore.height,view.height-12);
       const left=Math.max(view.left+6,Math.min(view.left+view.width-width-6,restore.left??rect.left)),top=Math.max(view.top+6,Math.min(view.top+view.height-height-6,restore.top??rect.top));
-      settings.miniMode=false;el.classList.remove('mini');delete el.dataset.miniEdge;delete el.dataset.miniDock;delete el.dataset.miniAnchor;watchMiniInput();
+      settings.miniMode=false;el.classList.remove('mini');delete el.dataset.miniEdge;delete el.dataset.miniDock;delete el.dataset.miniAnchor;watchMiniDock();
       for(const key of ['min-width','min-height','max-width','max-height'])el.style.removeProperty(key);
       for(const [key,value] of Object.entries({left,top,width,height}))el.style.setProperty(key,`${value}px`,'important');
       settings.windowSize={width,height};save();
@@ -4398,7 +4431,7 @@ ${latest.slice(-1500)}
       if(!drag.moved&&Math.hypot(dx,dy)<(e.pointerType==='touch'?4:3))return;
       if(!drag.moved){ROOT.clearTimeout(miniTapTimer);miniTapTimer=0;drag.moved=true;}
       const view=miniViewport();
-      drag.dropX=e.clientX;
+      drag.dropX=e.clientX;drag.dropY=e.clientY;
       drag.nextLeft=Math.max(view.left,Math.min(view.left+view.width-drag.width,drag.left+dx));
       drag.nextTop=Math.max(view.top+6,Math.min(view.top+view.height-drag.height-6,drag.top+dy));
     };
@@ -4415,7 +4448,7 @@ ${latest.slice(-1500)}
       try{cover.releasePointerCapture?.(previous.id);}catch{}
       el.style.removeProperty('transform');
       if(!previous.moved){if(!cancelled)tap();return;}
-      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.nextLeft,previous.nextTop,{snap:!!settings.miniSnap,dropX:previous.dropX});save();
+      settings[playerMiniPositionKey()]=placeMiniWindow(el,previous.nextLeft,previous.nextTop,{snap:!!settings.miniSnap,dropX:previous.dropX,dropY:previous.dropY});save();
     };
     cover.onpointerup=e=>end(e);cover.onpointercancel=e=>end(e,true);cover.onlostpointercapture=e=>end(e,true);
   }
@@ -4547,7 +4580,7 @@ ${latest.slice(-1500)}
   function resetPublicWindow(){
     settings.windowSize=null;
     settings.miniRestore=settings.miniReturnPosition=null;
-    settings.miniMode=false;watchMiniInput();
+    settings.miniMode=false;watchMiniDock();
     settings.immersive=false;
     settings.windowPinned=false;
     settings.playerSize='m';
