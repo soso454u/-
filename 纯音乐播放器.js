@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.84';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.85';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1120,7 +1120,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         #${ID}.mini.selene-mini-playing:not(.pointer-interacting) :is(.selene-mini-art,.selene-mini-peek,.selene-mini-body,.selene-mini-beat,.selene-mini-head,.selene-mini-leg){animation-play-state:running}
       }
       @keyframes selene-mini-dance{0%,100%{transform:rotate(-3deg)}25%{transform:translateY(-2px) rotate(0)}50%{transform:rotate(3deg)}75%{transform:translateY(-2px) rotate(0)}}
-      @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(21deg)}26%{transform:rotate(6deg)}}
+      @keyframes selene-mini-wave{0%,55%,100%{transform:rotate(0)}13%,39%{transform:rotate(16deg)}26%{transform:rotate(5deg)}}
       @keyframes selene-mini-hang-swing{
         0%,50%,100%{transform:translateX(8%) rotate(14deg) scale(.86)}
         25%{transform:translateX(8%) rotate(4deg) scale(.86)}
@@ -4391,8 +4391,8 @@ ${latest.slice(-1500)}
     </style>`);
   }
   function seleneMiniArt(){
-    const openPalm=`<path class="selene-mini-palm" fill="#fff0e8" stroke-width=".95" d="M-2.7 3.6C-4.2 2.7-5.6.9-5.7-.5c-.1-1.2 1-1.7 1.9-.6l1 1.2-1.1-3.6c-.4-1.3 1.1-2 1.8-.7l1 2.1-.3-3.2c-.1-1.4 1.6-1.5 1.8-.1l.6 3 .7-2.7c.3-1.3 1.9-1 1.9.3l-.4 2.6 1.4-2c.8-1.1 2.2-.2 1.6 1L4.9.2C5 2.8 3.1 4.6.6 4.7c-1.3.1-2.4-.3-3.3-1.1Z"/>
-      <path fill="none" stroke="#e6afbc" stroke-width=".7" d="M-1.3 1.8q1.1-1 2.6-.5"/>`;
+    const openPalm=`<path class="selene-mini-palm" fill="#fff0e8" stroke-width=".9" d="M-2.7 3.6C-4.1 2.8-5.3 1-5.4-.1c-.1-1.1 1-1.5 1.8-.7l1 .9-1-2.8c-.4-1.2 1-1.8 1.6-.7l1 1.8-.3-2.7c-.2-1.3 1.5-1.4 1.7-.1l.5 2.5.7-2.3c.3-1.1 1.8-.8 1.7.4l-.4 2.2 1.3-1.6c.8-.9 2.1-.1 1.5 1l-.9 2.5C4.8 2.7 3 4.5.6 4.6c-1.3.1-2.4-.3-3.3-1Z"/>
+      <path fill="none" stroke="#e6afbc" stroke-width=".65" d="M-1 1.9q.8-.7 2-.4"/>`;
     return `<svg class="selene-mini-art" viewBox="0 0 52 58" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <g class="selene-mini-body" stroke="#694b78" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
       <g class="selene-mini-hanging" fill="none">
@@ -4436,14 +4436,17 @@ ${latest.slice(-1500)}
         <path fill="#fff0e8" stroke-width="1.05" d="M38.2 45.3q-1.1-1.3-3.8-.8c-2 .4-2.2 2.1-1.1 3.1q1.3 1.2 3.8.6c1.6-.4 2.2-1.6 1.1-2.9Z"/>
       </g>
       <g class="selene-mini-hanging selene-mini-beat">
-        <path fill="#ad91de" d="M36 40q5 1 8-4l4 2q-2 7-10 7Z"/>
-        <g transform="translate(46 35) rotate(18) scale(.94)">${openPalm}</g>
+        <path fill="#ad91de" d="M36 40q4.8 1.8 7.7-1.9l3.8 2.9q-3.5 5.4-9.5 4.2Z"/>
+        <g transform="translate(45.8 38.2) rotate(21) scale(.78)">${openPalm}</g>
       </g>
-      <g class="selene-mini-hanging" transform="translate(7 5.7) rotate(-8) scale(.83)">${openPalm}</g>
+      <g class="selene-mini-hanging" stroke-width="1.05">
+        <path fill="#fff0e8" d="M3.5 5.4C2.6 3.3 3.6 1.2 5.4 1.2q.9-.6 1.8 0c2.1-.3 3.6.9 3.5 2.9-.1 2.1-1.3 3.6-3.5 3.8-1.5.1-3-.8-3.7-2.5Z"/>
+        <path fill="none" stroke="#dbaab8" stroke-width=".75" d="M5.8 5c.4-1 1.6-1.2 2.3-.7M5.3 2.3l.2.6m2-1 .2.7"/>
+      </g>
       <path class="selene-mini-standing selene-mini-upright selene-mini-folded-hands" fill="#fff0e8" d="M26 43q4-2 5 1 2-3 5-1 2 3-2 4h-5q-4 0-3-4Z"/>
       <g class="selene-mini-peek">
-        <path fill="#ad91de" d="M24 41q-6 2-9-3l-4 2q3 8 11 6Z"/>
-        <g transform="translate(12 37.1) rotate(-24) scale(.93)">${openPalm}</g>
+        <path fill="#ad91de" d="M24 41q-5 1-10-1l-4 4q5 6 13 2Z"/>
+        <g transform="translate(10.2 40.6) rotate(-24) scale(.78)">${openPalm}</g>
       </g>
     </g>
   </svg>`;}
