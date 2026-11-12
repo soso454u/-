@@ -92,3 +92,60 @@ async function runSeleneOrbitPlaybackRegression() {
   player.querySelector('[data-c=play]').click();
   return { passed: 9 };
 }
+
+// Run in a narrow, isolated host page with the player visible.
+async function runSeleneSkinMenuRegression() {
+  const player = document.getElementById('safe-music-player');
+  const button = player.querySelector('.skin');
+  const menu = document.getElementById(button.getAttribute('aria-controls'));
+  const checks = [];
+  const assert = (ok, message) => { if (!ok) throw Error(message); checks.push(message); };
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const hit = element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+  };
+  const checkBounds = () => {
+    const box = menu.getBoundingClientRect();
+    const playerBox = player.getBoundingClientRect();
+    const toolbar = button.parentElement.getBoundingClientRect();
+    assert(box.left >= playerBox.left && box.right <= playerBox.right, 'skin menu fits the player width');
+    assert(box.top >= toolbar.bottom && box.bottom <= playerBox.bottom, 'skin menu fits below the toolbar within the player');
+    assert(hit(button), 'skin menu leaves the toolbar button reachable');
+  };
+  const host = document.createElement('style');
+  host.textContent = 'button { width: 360px !important; min-width: 360px !important; height: 140px !important; margin: 12px !important; }';
+  document.head.append(host);
+  try {
+    button.click();
+    await frame();
+    assert(menu?.parentElement === player, 'skin menu moves and resizes with the player');
+    checkBounds();
+    const heading = menu.querySelector('.selene-skin-heading');
+    const options = menu.querySelector('.selene-skin-options');
+    const first = options.querySelector('button');
+    const last = options.querySelector('button:last-child');
+    assert(options.scrollWidth <= options.clientWidth + 1, 'host button sizes cannot cause horizontal overflow');
+    assert(hit(heading) && hit(first), 'heading and first skin are visible on open');
+    options.scrollTop = options.scrollHeight;
+    await frame();
+    assert(options.scrollTop > 0 && hit(last), 'the last skin is reachable by scrolling the cards');
+    assert(hit(heading), 'the heading stays visible while scrolling');
+    last.click();
+    assert(player.classList.contains('skin-green') && menu.classList.contains('hidden'), 'selecting the last skin applies it and closes the menu');
+    button.click();
+    await frame();
+    assert(options.scrollTop === 0 && hit(first), 'the menu starts at the first skin on reopen');
+    player.querySelector('.gear').click();
+    assert(menu.classList.contains('hidden') && button.getAttribute('aria-expanded') === 'false', 'opening settings closes the skin menu');
+    button.click();
+    checkBounds();
+    assert(player.querySelector('.settings-panel').style.display === 'none', 'opening the skin menu closes settings');
+    window.__SELENE_MUSIC_PLAYER__.setVisible(false, { persist: false });
+    assert(menu.classList.contains('hidden') && button.getAttribute('aria-expanded') === 'false', 'hiding the player clears the menu state');
+    window.__SELENE_MUSIC_PLAYER__.setVisible(true, { persist: false });
+    return { passed: checks.length, viewport: `${innerWidth}x${innerHeight}` };
+  } finally {
+    host.remove();
+  }
+}

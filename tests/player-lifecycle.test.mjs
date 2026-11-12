@@ -46,25 +46,31 @@ test('failed preset migration writes cannot discard existing songs and playlists
 
 function visibilityController(save) {
   const classes = new Set(), properties = new Map(), events = [];
+  const menuClasses = new Set(), skinAttributes = new Map([['aria-expanded', 'true']]);
+  const menu = { classList: { add: name => menuClasses.add(name) } };
+  const button = { setAttribute: (name, value) => skinAttributes.set(name, value) };
   const player = {
+    querySelector: selector => ({ '#player-skin-float': menu, '.skin': button })[selector],
     hidden: false,
     classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) },
     style: { setProperty: (name, value, priority) => properties.set(name, { value, priority }), removeProperty: name => properties.delete(name) },
   };
   const settings = { enabled: true };
-  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', 'bilibili', `${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
+  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', 'bilibili', `${section('function closeSkinMenu', 'function bindFloatingSkinMenu')}${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
     { getElementById: id => id === 'player' ? player : null }, 'player', settings,
     () => { events.push({ hiddenAtSave: player.hidden }); return save?.(); }, () => events.push('state'), () => ({ visible: !player.hidden }),
     { closeSearch: () => events.push('closeSearch') },
   );
-  return { controller, player, classes, properties, events };
+  return { controller, player, classes, properties, events, menuClasses, skinAttributes };
 }
 
 test('closing hides the DOM before persistence and survives an unsuccessful save', () => {
-  const { controller, player, classes, properties, events } = visibilityController(() => false);
+  const { controller, player, classes, properties, events, menuClasses, skinAttributes } = visibilityController(() => false);
   assert.equal(controller(false).visible, false);
   assert.equal(player.hidden, true);
   assert.equal(classes.has('hidden'), true);
+  assert.equal(menuClasses.has('hidden'), true);
+  assert.equal(skinAttributes.get('aria-expanded'), 'false');
   assert.deepEqual(properties.get('display'), { value: 'none', priority: 'important' });
   assert.deepEqual(events, ['closeSearch', { hiddenAtSave: true }, 'state']);
 });

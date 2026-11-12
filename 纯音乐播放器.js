@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.85';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.86';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -973,7 +973,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     el.querySelector('.skin-picker').insertAdjacentHTML('beforeend','<button data-skin="orbit">流光唱片</button>');
     el.querySelector('.gear').insertAdjacentHTML('beforebegin','<span class="lyrics-tools" role="group" aria-label="歌词控制"><button type="button" class="desktop-lyric-toggle" title="歌词设置">词</button><button type="button" class="quick-lyrics-lock" title="锁定歌词位置" aria-label="锁定歌词位置"></button></span>');
     el.insertAdjacentHTML('beforeend',`<button type="button" class="mini-cover-shell" title="单击播放或暂停，双击展开" aria-label="播放器悬浮窗：单击播放或暂停，双击展开；键盘 Enter 展开">${seleneMiniArt()}</button>`);
-    DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-mini-style">#${ID} .selene-player-head b{cursor:pointer;user-select:none}#${ID} .mini-cover-shell{display:none!important}#${ID}.mini{width:96px!important;height:96px!important;min-width:72px!important;min-height:72px!important;max-width:140px!important;max-height:140px!important;border-radius:24px!important;overflow:visible!important;background:#181b24cc!important;contain:none!important;padding:7px!important;box-shadow:0 16px 36px #0009,inset 0 1px #ffffff50}#${ID}.mini:after,#${ID}.mini:before,#${ID}.mini>.selene-player-head,#${ID}.mini>.body,#${ID}.mini>.skin-picker,#${ID}.mini>.resize-handle{display:none!important}#${ID}.mini .mini-cover-shell{display:block!important;position:absolute!important;z-index:50!important;inset:7px!important;width:calc(100% - 14px)!important;height:calc(100% - 14px)!important;padding:0!important;border:1px solid #ffffff55!important;border-radius:18px!important;background-image:var(--album-cover)!important;background-size:cover!important;background-position:center!important;box-shadow:0 8px 22px #0009,inset 0 0 0 4px #ffffff12!important;cursor:grab!important;touch-action:none!important}#${ID}.mini .mini-cover-shell:active{cursor:grabbing!important}#${ID}-skin-float{position:fixed;z-index:2147483647;width:210px;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:10px;border:1px solid #ffffff50;border-radius:14px;background:#171923f5;color:#fff;box-shadow:0 20px 48px #000c;backdrop-filter:blur(22px) saturate(1.3);font:14px system-ui}#${ID}-skin-float.hidden{display:none}#${ID}-skin-float button{padding:8px 5px;border:1px solid #ffffff30;border-radius:8px;background:#ffffff12;color:#fff;cursor:pointer}#${ID}-skin-float button:hover{background:#ffffff25}#${ID}.mini[data-mini-shape=round]{border-radius:50%!important}#${ID}.mini[data-mini-shape=round] .mini-cover-shell{border-radius:50%!important;clip-path:circle(50%)}#${ID}.mini[data-mini-shape=round] .mini-cover-shell{background-image:none!important;overflow:hidden!important}#${ID}.mini[data-mini-shape=round] .mini-cover-shell:before{content:'';position:absolute;inset:0;border-radius:50%;background-image:var(--album-cover);background-position:center;background-size:cover;pointer-events:none;animation:selene-mini-turn 28s linear infinite;animation-play-state:paused}#${ID}.mini.orbit-playing[data-mini-shape=round] .mini-cover-shell:before{animation-play-state:running}@keyframes selene-mini-turn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){#${ID}.mini[data-mini-shape=round] .mini-cover-shell:before{animation:none!important}}</style>`);
+    DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-mini-style">#${ID} .selene-player-head b{cursor:pointer;user-select:none}#${ID} .mini-cover-shell{display:none!important}#${ID}.mini{width:96px!important;height:96px!important;min-width:72px!important;min-height:72px!important;max-width:140px!important;max-height:140px!important;border-radius:24px!important;overflow:visible!important;background:#181b24cc!important;contain:none!important;padding:7px!important;box-shadow:0 16px 36px #0009,inset 0 1px #ffffff50}#${ID}.mini:after,#${ID}.mini:before,#${ID}.mini>.selene-player-head,#${ID}.mini>.body,#${ID}.mini>.skin-picker,#${ID}.mini>.resize-handle{display:none!important}#${ID}.mini .mini-cover-shell{display:block!important;position:absolute!important;z-index:50!important;inset:7px!important;width:calc(100% - 14px)!important;height:calc(100% - 14px)!important;padding:0!important;border:1px solid #ffffff55!important;border-radius:18px!important;background-image:var(--album-cover)!important;background-size:cover!important;background-position:center!important;box-shadow:0 8px 22px #0009,inset 0 0 0 4px #ffffff12!important;cursor:grab!important;touch-action:none!important}#${ID}.mini .mini-cover-shell:active{cursor:grabbing!important}#${ID}.mini[data-mini-shape=round]{border-radius:50%!important}#${ID}.mini[data-mini-shape=round] .mini-cover-shell{border-radius:50%!important;clip-path:circle(50%)}#${ID}.mini[data-mini-shape=round] .mini-cover-shell{background-image:none!important;overflow:hidden!important}#${ID}.mini[data-mini-shape=round] .mini-cover-shell:before{content:'';position:absolute;inset:0;border-radius:50%;background-image:var(--album-cover);background-position:center;background-size:cover;pointer-events:none;animation:selene-mini-turn 28s linear infinite;animation-play-state:paused}#${ID}.mini.orbit-playing[data-mini-shape=round] .mini-cover-shell:before{animation-play-state:running}@keyframes selene-mini-turn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){#${ID}.mini[data-mini-shape=round] .mini-cover-shell:before{animation:none!important}}</style>`);
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-mini-close-safety">#${ID}.mini .selene-player-close,#${ID}.mini>.selene-player-head .selene-player-close{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important}#${ID}.mini .mini-cover-shell{z-index:2147483646!important}</style>`);
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-gesture-batch-style">#${ID}.mini{width:52px!important;height:52px!important;min-width:48px!important;min-height:48px!important;max-width:60px!important;max-height:60px!important;padding:4px!important;border-radius:15px!important}#${ID}.mini .mini-cover-shell{inset:4px!important;width:calc(100% - 8px)!important;height:calc(100% - 8px)!important;border-radius:11px!important}#${ID}.skin-film,#${ID}.skin-film .body,#${ID}.skin-film .title,#${ID}.skin-film .artist,#${ID}.skin-film .reason,#${ID}.skin-film .status,#${ID}.skin-film .lyrics,#${ID}.skin-film .time,#${ID}.skin-film .volume,#${ID}.skin-film .row,#${ID}.skin-film .row span{color:#fff!important}#${ID}.skin-film .artist,#${ID}.skin-film .row span{color:#ffffffbd!important}#${ID} [data-a="fav-queue"]{display:none!important}#${ID} .batch-bar{display:flex;align-items:center;gap:6px;padding:7px 2px;position:sticky;top:0;z-index:3;background:#171a24e8;backdrop-filter:blur(12px)}#${ID} .batch-bar b{margin-right:auto;color:inherit}#${ID} .batch-bar button{white-space:nowrap}</style>`);
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-heading-actions-style">#${ID} .batch-heading{display:flex!important;align-items:center!important;gap:7px!important;position:static!important;padding:8px 2px!important;background:transparent!important;backdrop-filter:none!important}#${ID} .batch-heading>b{margin-right:auto!important}#${ID} .batch-heading button{flex:0 0 auto;white-space:nowrap}</style>`);
@@ -3581,7 +3581,7 @@ ${latest.slice(-1500)}
     host.dataset.miniShape=settings.miniShape;const shape=host.querySelector('[name=miniShape]');if(shape)shape.value=settings.miniShape;
     const panel=host.querySelector('.settings-panel');if(panel)panel.style.display='none';
     const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;
-    host.querySelector('.desktop-lyric-toggle')?.setAttribute('aria-expanded','false');DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');
+    host.querySelector('.desktop-lyric-toggle')?.setAttribute('aria-expanded','false');closeSkinMenu(host);
     updatePlayMode();updateLyricsLock();updateQuickLyricsButton(host);applyPlayerVisibility(true);paintTime();save();
     toast('success','已恢复播放器默认设置，收藏、歌单、离线歌曲与陪听设置已保留');
   }
@@ -3589,6 +3589,7 @@ ${latest.slice(-1500)}
     const host=DOC.getElementById(ID);if(!host)return;
     let f=host.querySelector('.settings-panel');
     if(f&&f.style.display!=='none'){f.style.display='none';return;}
+    closeSkinMenu(host);
     if(!f){
       host.insertAdjacentHTML('beforeend',`<form class="settings-panel" style="position:absolute;inset:45px 0 0;overflow:auto">
         <div class="settings-heading"><h3>播放器设置 <small data-player-version>v${VERSION}</small></h3><button type="button" data-x aria-label="关闭设置">×</button></div>
@@ -4142,7 +4143,7 @@ ${latest.slice(-1500)}
   }
   function syncFloatingPanelThemes(){
     const player=DOC.getElementById(ID);if(!player)return;
-    // These panels mount in the parent body, so explicitly share the player's palette.
+    // Keep the popover palette in sync with the current player skin.
     const style=ROOT.getComputedStyle(player),read=(name,fallback)=>style.getPropertyValue(name).trim()||fallback;
     const text=read('--smp-text','#f5f4f7'),light=(colorLuminance(text)??1)<.45;
     const palette={
@@ -4254,7 +4255,7 @@ ${latest.slice(-1500)}
     button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
     bindReliableTap(button,()=>{
       if(!menu.hidden){close();return;}
-      DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');el.querySelector('.skin')?.setAttribute('aria-expanded','false');
+      closeSkinMenu(el);
       refresh();menu.classList.remove('hidden');menu.hidden=false;button.setAttribute('aria-expanded','true');place();
     });
     const outside=event=>{if(!menu.hidden&&!menu.contains(event.target)&&!button.contains(event.target))close();};
@@ -4334,45 +4335,53 @@ ${latest.slice(-1500)}
       };
     };
   }
+  function closeSkinMenu(el){
+    el.querySelector(`#${ID}-skin-float`)?.classList.add('hidden');
+    el.querySelector('.skin')?.setAttribute('aria-expanded','false');
+  }
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
     const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
     DOC.getElementById(`${ID}-skin-float`)?.remove();
     const menu=DOC.createElement('div');menu.id=`${ID}-skin-float`;menu.className='hidden';menu.setAttribute('role','dialog');menu.setAttribute('aria-label','选择播放器外观');
-    menu.innerHTML='<div class="selene-skin-heading"><span>选择外观</span><small>随心换一种心情</small></div><div class="selene-skin-options">'+skins.map(([key,label,note])=>`<button type="button" data-skin="${key}" aria-pressed="false"><i class="selene-skin-swatch" aria-hidden="true"></i><span>${label}</span><small>${note}</small><i class="selene-skin-check" aria-hidden="true">✓</i></button>`).join('')+'</div>';
-    DOC.body.appendChild(menu);
-    const close=()=>{menu.classList.add('hidden');button.setAttribute('aria-expanded','false');};
+    menu.innerHTML='<div class="selene-skin-heading">选择外观</div><div class="selene-skin-options">'+skins.map(([key,label,note])=>`<button type="button" data-skin="${key}" aria-pressed="false"><i class="selene-skin-swatch" aria-hidden="true"></i><span>${label}</span><small>${note}</small><i class="selene-skin-check" aria-hidden="true">✓</i></button>`).join('')+'</div>';
+    el.appendChild(menu);
+    const options=menu.querySelector('.selene-skin-options');
+    const close=()=>closeSkinMenu(el);
     const refresh=()=>{
       syncFloatingPanelThemes();
       menu.style.setProperty('--skin-preview-cover',el.style.getPropertyValue('--album-cover')||'none');
       menu.querySelectorAll('[data-skin]').forEach(option=>option.setAttribute('aria-pressed',String(option.dataset.skin===(settings.skin||'albumglass'))));
     };
     menu.onclick=event=>{const choice=event.target.closest('[data-skin]');if(!choice)return;settings.skin=choice.dataset.skin;applySkin(el);refresh();close();button.focus({preventScroll:true});save();};
-    const place=()=>placeFloatingPanel(menu,button,288);
-    button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-expanded','false');
-    bindReliableTap(button,()=>{const opening=menu.classList.contains('hidden');if(opening){const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;el.querySelector('.desktop-lyric-toggle')?.setAttribute('aria-expanded','false');refresh();menu.classList.remove('hidden');button.setAttribute('aria-expanded','true');place();}else close();});
-    // The menu is outside the player; containment on the body keeps it reachable on touch screens.
+    button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',menu.id);
+    bindReliableTap(button,()=>{
+      if(!menu.classList.contains('hidden')){close();return;}
+      const lyrics=DOC.getElementById(`${ID}-lyrics-float`);
+      if(lyrics)lyrics.hidden=true;
+      el.querySelector('.desktop-lyric-toggle')?.setAttribute('aria-expanded','false');
+      const settingsPanel=el.querySelector('.settings-panel');
+      if(settingsPanel)settingsPanel.style.display='none';
+      refresh();menu.classList.remove('hidden');options.scrollTop=0;button.setAttribute('aria-expanded','true');
+    });
     const outside=event=>{if(!menu.classList.contains('hidden')&&!menu.contains(event.target)&&!button.contains(event.target))close();};
     const escape=event=>{if(event.key==='Escape'&&!menu.classList.contains('hidden')){close();button.focus({preventScroll:true});}};
-    const reposition=()=>{if(!menu.classList.contains('hidden'))place();};
     DOC.addEventListener('pointerdown',outside,true);DOC.addEventListener('keydown',escape);
-    ROOT.addEventListener('resize',reposition);ROOT.visualViewport?.addEventListener('resize',reposition);
-    skinMenuCleanup=()=>{DOC.removeEventListener('pointerdown',outside,true);DOC.removeEventListener('keydown',escape);ROOT.removeEventListener('resize',reposition);ROOT.visualViewport?.removeEventListener('resize',reposition);};
+    skinMenuCleanup=()=>{DOC.removeEventListener('pointerdown',outside,true);DOC.removeEventListener('keydown',escape);};
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-skin-cards-style">
-      #${ID}-skin-float{box-sizing:border-box!important;--picker-bg:#1b1d27f5;--picker-text:#f5f4f7;--picker-muted:#a8abbc;--picker-line:#ffffff19;--picker-accent:#a8d9ce;display:block!important;padding:14px!important;border:1px solid var(--picker-line)!important;border-radius:22px!important;background:var(--picker-bg)!important;color:var(--picker-text)!important;box-shadow:0 20px 60px #0006!important;backdrop-filter:blur(28px) saturate(1.2);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
-      #${ID}-skin-float[data-tone=light]{color-scheme:light}
+      #${ID}-skin-float{position:absolute!important;z-index:25!important;inset:49px 6px 6px auto!important;width:min(288px,calc(100% - 12px))!important;box-sizing:border-box!important;display:flex!important;flex-direction:column;overflow:hidden!important;margin:0!important;padding:0!important;border:1px solid var(--picker-line)!important;border-radius:14px!important;background:var(--picker-bg)!important;color:var(--picker-text)!important;box-shadow:0 12px 32px #0005!important;--picker-bg:#1b1d27f5;--picker-text:#f5f4f7;--picker-muted:#a8abbc;--picker-line:#ffffff19;--picker-accent:#a8d9ce}
+      #${ID}.touch-layout>#${ID}-skin-float{width:calc(100% - 12px)!important}
       :is(#${ID}-skin-float,#${ID}-lyrics-float,#${ID}-source-float){isolation:isolate}
       :is(#${ID}-skin-float,#${ID}-lyrics-float,#${ID}-source-float)::before{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background-image:var(--picker-cover,none);background-size:cover;background-position:center;filter:blur(24px) saturate(.8);opacity:.22;pointer-events:none}
       :is(#${ID}-skin-float,#${ID}-lyrics-float,#${ID}-source-float) button:focus-visible{outline:2px solid var(--picker-accent);outline-offset:2px}
       #${ID}-skin-float.hidden{display:none!important}
-      #${ID}-skin-float .selene-skin-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 1px 12px;font:600 13px/1.5 system-ui;color:var(--picker-text)}
-      #${ID}-skin-float .selene-skin-heading small{font:10px/1.5 system-ui;color:var(--picker-muted)}
-      #${ID}-skin-float .selene-skin-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-      #${ID}-skin-float .selene-skin-options>button{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0;min-height:99px!important;padding:8px!important;border:1px solid var(--picker-line)!important;border-radius:14px!important;background:transparent!important;color:var(--picker-text)!important;text-align:left!important;box-shadow:none!important;transform:none!important}
+      #${ID}-skin-float .selene-skin-heading{flex:none;padding:10px 12px 6px;font:600 13px/1.5 system-ui!important;color:var(--picker-text)!important}
+      #${ID}-skin-float .selene-skin-options{display:grid;flex:1 1 0;min-height:0;align-content:start;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 10px 10px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;touch-action:pan-y}
+      #${ID}-skin-float .selene-skin-options>button{position:relative;display:flex!important;flex-direction:column;align-items:stretch;gap:4px;width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:90px!important;max-height:none!important;margin:0!important;padding:8px!important;border:1px solid var(--picker-line)!important;border-radius:12px!important;background:transparent!important;color:var(--picker-text)!important;text-align:left!important;box-shadow:none!important;transform:none!important;cursor:pointer}
       #${ID}-skin-float .selene-skin-options>button:hover{background:color-mix(in srgb,var(--picker-text) 5%,transparent)!important;border-color:var(--picker-accent)!important}
       #${ID}-skin-float .selene-skin-options>[aria-pressed=true]{border-color:var(--picker-accent)!important;background:color-mix(in srgb,var(--picker-accent) 12%,transparent)!important}
       #${ID}-skin-float .selene-skin-options>button>span{font:600 11px/1.4 system-ui!important;color:var(--picker-text)!important}
-      #${ID}-skin-float .selene-skin-options>button>small{font:9px/1.4 system-ui!important;color:var(--picker-muted)!important;white-space:nowrap}
+      #${ID}-skin-float .selene-skin-options>button>small{font:9px/1.4 system-ui!important;color:var(--picker-muted)!important;white-space:normal}
       #${ID}-skin-float .selene-skin-swatch{display:block;position:relative;overflow:hidden;height:36px;flex:0 0 36px;width:100%;border-radius:8px;background:linear-gradient(120deg,#363846,#171b23)}
       #${ID}-skin-float .selene-skin-swatch:after{content:'';position:absolute;inset:8px 36% 8px 8px;border-radius:4px;border-top:3px solid #ffffff82;border-bottom:2px solid #ffffff33}
       #${ID}-skin-float [data-skin=albumglass] .selene-skin-swatch{background-image:linear-gradient(120deg,#527a8d66,#172133aa),var(--skin-preview-cover);background-position:center;background-size:cover;background-color:#4d6972}
@@ -4457,6 +4466,7 @@ ${latest.slice(-1500)}
       if(el.classList.contains('mini'))return;
       const rect=el.getBoundingClientRect();
       settings.miniRestore={width:Math.round(rect.width),height:Math.round(rect.height),left:Math.round(rect.left),top:Math.round(rect.top)};
+      closeSkinMenu(el);
       settings.miniMode=true;settings.immersive=false;el.classList.remove('immersive');el.classList.add('mini');
       el.querySelector('.settings-panel [data-x]')?.click();
       const key=playerMiniPositionKey(),remembered=settings.miniReturnPosition||settings[key];
@@ -4580,7 +4590,7 @@ ${latest.slice(-1500)}
     const player=DOC.getElementById(ID);if(!player)return;
     player.hidden=!visible;player.classList.toggle('hidden',!visible);
     if(visible){player.style.removeProperty('display');if(settings.miniMode)preserveMiniGeometry(player);}
-    else{bilibili.closeSearch();player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');DOC.getElementById(`${ID}-skin-float`)?.classList.add('hidden');const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
+    else{bilibili.closeSearch();player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');closeSkinMenu(player);const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
   }
   function setPublicVisible(value,{persist=true}={}){
     settings.enabled=!!value;
