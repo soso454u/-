@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.90';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.91';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -2514,7 +2514,19 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function parse(text){const b=String(text||'').match(/<music_recommend>([\s\S]*?)<\/music_recommend>/i);if(!b)return null;const tag=n=>b[1].match(new RegExp(`<${n}>\\s*([\\s\\S]*?)\\s*<\\/${n}>`,'i'))?.[1]?.trim()||'';const x={title:tag('title'),artist:tag('artist'),reason:tag('reason')};return x.title?x:null;}
   function recentFloorRecommendationKeys(chat,beforeIndex,limit=30){const keys=new Set();let count=0;for(let index=Math.min(Number(beforeIndex)||0,(chat?.length||0))-1;index>=0&&count<Math.max(0,Number(limit)||0);index--){const message=chat[index];if(!message||message.is_user)continue;const song=parse(message.mes);if(!song)continue;keys.add(offlineKey(song));count++;}return keys;}
   function floorRecommendationWasUsed(song,chat,beforeIndex,limit=30){const key=offlineKey(song);return!!key&&recentFloorRecommendationKeys(chat,beforeIndex,limit).has(key);}
-  async function recommendation(force=false){const chat=context()?.chat||[];if(chat!==lastRecommendationChat){lastRecommendationChat=chat;lastRecommendation='';}let m;for(let i=chat.length-1;i>=0;i--)if(!chat[i]?.is_user){m={i,text:chat[i].mes};break;}const r=m&&parse(m.text);if(!r){if(force)toast('warning','本层没有 music_recommend 标签');return;}const key=`${m.i}:${offlineKey(r)}`;if(key===lastRecommendation)return;lastRecommendation=key;if(floorRecommendationWasUsed(r,chat,m.i,30)){const message=`已跳过重复推荐：《${r.title}》 · ${r.artist}`;setStatus(message);DOC.querySelector(`#${ID} .reason`).textContent=message;if(force)toast('info','这首在最近 30 个楼层推荐过，已跳过');return;}DOC.querySelector(`#${ID} .reason`).textContent=r.reason?`推荐：${r.reason}`:'';if(settings.autoLoad||force)await search(`${r.title} ${r.artist}`,true,true,'本层推荐候选',false,r);}
+  let lastTauriRecommendationChatKey;
+  async function recommendation(force=false){
+    const ctx=context(),chat=ctx?.chat||[];
+    // TauriTavern replaces messages in place when switching chats.
+    const tauriChatKey=ROOT.__TAURITAVERN__?.api&&ctx?.chatId!=null
+      ?JSON.stringify([ctx.groupId!=null?'group':'character',ctx.groupId??ctx.characterId,ctx.chatId])
+      :undefined;
+    if(chat!==lastRecommendationChat||tauriChatKey!==lastTauriRecommendationChatKey){
+      lastRecommendationChat=chat;
+      lastTauriRecommendationChatKey=tauriChatKey;
+      lastRecommendation='';
+    }
+    let m;for(let i=chat.length-1;i>=0;i--)if(!chat[i]?.is_user){m={i,text:chat[i].mes};break;}const r=m&&parse(m.text);if(!r){if(force)toast('warning','本层没有 music_recommend 标签');return;}const key=`${m.i}:${offlineKey(r)}`;if(key===lastRecommendation)return;lastRecommendation=key;if(floorRecommendationWasUsed(r,chat,m.i,30)){const message=`已跳过重复推荐：《${r.title}》 · ${r.artist}`;setStatus(message);DOC.querySelector(`#${ID} .reason`).textContent=message;if(force)toast('info','这首在最近 30 个楼层推荐过，已跳过');return;}DOC.querySelector(`#${ID} .reason`).textContent=r.reason?`推荐：${r.reason}`:'';if(settings.autoLoad||force)await search(`${r.title} ${r.artist}`,true,true,'本层推荐候选',false,r);}
   function parseWorldPlaylist(content,bookName=''){
     const songs=[];
     for(const section of String(content||'').matchAll(/<selene_playlist(?:\s[^>]*)?>([\s\S]*?)<\/selene_playlist>/gi)){
