@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.88';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.89';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -731,7 +731,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     audio.currentTime=Number.isFinite(duration)&&duration>0?Math.max(0,Math.min(duration,target)):Math.max(0,target);
     updateMediaPosition(true);
   }
-  function switchMediaTrack(step){const song=nextSong(step);if(song)play(song);}
+  function switchMediaTrack(step){
+    const song=nextSong(step);
+    if(!song)return false;
+    void play(song,false,{retryOnFailure:step>0});
+    return true;
+  }
   async function resumeMainAudioFromMediaSession(){
     bilibiliPlayer.close();
     if(!current){syncKeepAliveWithPlayback();return;}
@@ -2401,7 +2406,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const message='浏览器阻止播放，请再次点击播放按钮';
     setStatus(message,true);toast('warning',message);
   }
-  function play(s,recovering=false,{companionPick=false}={}){
+  function play(s,recovering=false,{companionPick=false,retryOnFailure=false}={}){
     if(isVideoEntry(s))return;
     if(s.source==='tencent'&&s.lxSearch&&!settings.lxMusicEnabled&&!playbackSources.has(s)){
       setStatus('播放 QQ 搜索结果需要在设置中启用 LX Music',true);
@@ -2411,16 +2416,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const key=JSON.stringify([s.source,s.mediaId||s.id,s.title,s.artist,s.version,s.customAudio,playbackSourceChoice(s)]);
     if(!recovering&&pendingPlay?.key===key&&pendingPlay.request===playRequest&&playbackWanted)return pendingPlay.promise;
     const pending={key,request:playRequest+1,promise:null};pendingPlay=pending;
-    pending.promise=performPlay(s,recovering,companionPick).finally(()=>{if(pendingPlay===pending)pendingPlay=null;});return pending.promise;
+    pending.promise=performPlay(s,recovering,companionPick,retryOnFailure).finally(()=>{if(pendingPlay===pending)pendingPlay=null;});return pending.promise;
   }
-  async function performPlay(s,recovering=false,companionPick=false){
+  async function performPlay(s,recovering,companionPick,retryOnFailure,request=++playRequest){
     const selectedSource=playbackSourceChoice(s);
     const requestedLx=selectedSource.startsWith('lx-')?selectedSource.slice(3):'';
     const fallbackSource=requestedLx?'auto':selectedSource;
-    let lxSource='',lxRetryAt=0;
+    let lxSource='',lxRetryAt=0,lxRateLimited=false;
     if(audio.dataset)delete audio.dataset.seleneLxSource;
     cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;playbackBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
-    const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
+    const isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
     const noteFailure=error=>{
       if(isNotAllowed(error)||error.name==='AbortError')throw error;
       const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
@@ -2429,7 +2434,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const tryLx=async platform=>{
       setStatus(`正在验证 ${lxSourceLabel(platform)}…`);
       try{const result=await playLxSource(s,platform,isActive);if(result)lxSource=platform;return result;}
-      catch(error){if(error.kind==='lx-blocked'||error.kind==='lx-rate-limit')lxRetryAt=error.retryAt;noteFailure(error);return null;}
+      catch(error){
+        if(error.kind==='lx-blocked'||error.kind==='lx-rate-limit')lxRetryAt=error.retryAt;
+        lxRateLimited=error.kind==='lx-rate-limit'||error.status===429;
+        noteFailure(error);return null;
+      }
     };
     try{
       if(requestedLx)played=await tryLx(requestedLx);
@@ -2485,6 +2494,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       lastError=lastError||Error('没有找到可播放音源');
     }catch(error){if(!isActive())return;if(isNotAllowed(error)){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();lyricState='请再次点击播放';updatePlayButton();paintTime();show(s);notifyPlaybackBlocked();return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
     if(!isActive())return;
+    if(retryOnFailure&&!lxRateLimited&&!(lastError?.retryAt>Date.now())&&lastError?.name!=='AbortError'){
+      setStatus('暂未开始播放，正在重试当前歌曲…');
+      await new Promise(resolve=>ROOT.setTimeout(resolve,800));
+      if(isActive())return performPlay(s,false,companionPick,false,request);
+      return;
+    }
     console.warn('[音乐播放器] 本轮播放失败',{request,song:{title:s.title,artist:s.artist,source:s.source,mediaId:s.mediaId},error:lastError});
     clearFailedPlayback();
     const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;
@@ -3686,7 +3701,7 @@ ${latest.slice(-1500)}
       else void search(word);
     };
   }
-  function bind(el){bindReliableTap(el.querySelector('.selene-player-close'),()=>{setPublicVisible(false);menu();});el.querySelector('.gear').onclick=settingsDialog;syncSearchPlaceholder(el);bindSearchForm(el.querySelector('.selene-search-form'));el.querySelector('[data-video-stop]').onclick=bilibiliPlayer.close;el.querySelector('.actions').onclick=e=>{const a=e.target.dataset.a;if(a==='rec')recommendation(true);if(a==='fav-queue'){const favorites=settings.favorites||[],known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(a==='playlist'){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}if(a==='offline')showOfflineSongs();};el.querySelector('.controls').onclick=e=>{const c=e.target.dataset.c;if(c==='play'&&current){if(!playbackWanted||audio.paused&&playbackPhase!=='loading'){void resumeMainAudioFromMediaSession();}else{playbackWanted=false;++playRequest;cancelPlaybackProbe?.();playbackPhase='idle';audio.pause();updatePlayButton();}}if(c==='mode'){settings.playMode={loop:'one',one:'shuffle',shuffle:'loop'}[settings.playMode]||'loop';updatePlayMode(true);save();}if(c==='prev'||c==='next'){const song=nextSong(c==='next'?1:-1);if(song)play(song);}};const progress=el.querySelector('.progress'),beginProgress=()=>{progress.classList.add('is-seeking');progressSeeking=true;pendingProgressValue=Number(progress.value)||0;},previewProgress=e=>{progressSeeking=true;pendingProgressValue=Math.max(0,Math.min(1000,Number(e.target.value)||0));e.target.style.setProperty('--range-fill',`${pendingProgressValue/10}%`);const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)el.querySelector('.time').textContent=`${clock(duration*pendingProgressValue/1000)} / ${clock(duration)}`;},commitProgress=()=>{progress.classList.remove('is-seeking');const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)audio.currentTime=duration*pendingProgressValue/1000;progressSeeking=false;updateMediaPosition(true);paintTime();},cancelProgress=()=>{progress.classList.remove('is-seeking');progressSeeking=false;paintTime();};progress.onpointerdown=beginProgress;progress.ontouchstart=beginProgress;progress.oninput=previewProgress;progress.onchange=commitProgress;progress.onpointerup=commitProgress;progress.ontouchend=commitProgress;progress.onpointercancel=cancelProgress;progress.ontouchcancel=cancelProgress;el.querySelector('.volume input').style.setProperty('--range-fill',`${settings.volume*100}%`);el.querySelector('.volume input').oninput=e=>{e.target.style.setProperty('--range-fill',`${e.target.value}%`);audio.volume=e.target.value/100;settings.volume=audio.volume;save();};let p;const head=el.querySelector('.selene-player-head');head.style.touchAction='none';head.onpointerdown=e=>{if(e.target.closest('button,.lyrics-tools')||(e.pointerType==='mouse'&&(e.button!==0||!e.isPrimary)))return;const rect=el.getBoundingClientRect();p={id:e.pointerId,x:e.clientX,y:e.clientY,l:rect.left,t:rect.top,mobile:isMobile()};head.setPointerCapture?.(e.pointerId);e.preventDefault();};head.onpointermove=e=>{if(!p||e.pointerId!==p.id||(e.pointerType==='mouse'&&(e.buttons&1)!==1))return;if(p.mobile){const width=ROOT.visualViewport?.width||ROOT.innerWidth,height=ROOT.visualViewport?.height||ROOT.innerHeight,left=Math.max(6,Math.min(width-el.offsetWidth-6,p.l+e.clientX-p.x)),top=Math.max(6,Math.min(height-el.offsetHeight-6,p.t+e.clientY-p.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}else{el.style.right=`${Math.max(0,parseFloat(el.style.right)-e.clientX+p.x)}px`;el.style.bottom=`${Math.max(0,parseFloat(el.style.bottom)-e.clientY+p.y)}px`;p.x=e.clientX;p.y=e.clientY;}};const finish=()=>{if(!p)return;if(p.mobile){const rect=el.getBoundingClientRect();settings.mobilePosition={left:Math.round(rect.left),top:Math.round(rect.top/(ROOT.visualViewport?.height||ROOT.innerHeight)*100)};}else settings.position={right:parseFloat(el.style.right),bottom:parseFloat(el.style.bottom)};save();p=null;};head.onpointerup=finish;head.onpointercancel=finish;head.onlostpointercapture=finish;}
+  function bind(el){bindReliableTap(el.querySelector('.selene-player-close'),()=>{setPublicVisible(false);menu();});el.querySelector('.gear').onclick=settingsDialog;syncSearchPlaceholder(el);bindSearchForm(el.querySelector('.selene-search-form'));el.querySelector('[data-video-stop]').onclick=bilibiliPlayer.close;el.querySelector('.actions').onclick=e=>{const a=e.target.dataset.a;if(a==='rec')recommendation(true);if(a==='fav-queue'){const favorites=settings.favorites||[],known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(a==='playlist'){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}if(a==='offline')showOfflineSongs();};el.querySelector('.controls').onclick=e=>{const c=e.target.dataset.c;if(c==='play'&&current){if(!playbackWanted||audio.paused&&playbackPhase!=='loading'){void resumeMainAudioFromMediaSession();}else{playbackWanted=false;++playRequest;cancelPlaybackProbe?.();playbackPhase='idle';audio.pause();updatePlayButton();}}if(c==='mode'){settings.playMode={loop:'one',one:'shuffle',shuffle:'loop'}[settings.playMode]||'loop';updatePlayMode(true);save();}if(c==='prev'||c==='next')void switchMediaTrack(c==='next'?1:-1);};const progress=el.querySelector('.progress'),beginProgress=()=>{progress.classList.add('is-seeking');progressSeeking=true;pendingProgressValue=Number(progress.value)||0;},previewProgress=e=>{progressSeeking=true;pendingProgressValue=Math.max(0,Math.min(1000,Number(e.target.value)||0));e.target.style.setProperty('--range-fill',`${pendingProgressValue/10}%`);const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)el.querySelector('.time').textContent=`${clock(duration*pendingProgressValue/1000)} / ${clock(duration)}`;},commitProgress=()=>{progress.classList.remove('is-seeking');const duration=Number(audio.duration);if(Number.isFinite(duration)&&duration>0)audio.currentTime=duration*pendingProgressValue/1000;progressSeeking=false;updateMediaPosition(true);paintTime();},cancelProgress=()=>{progress.classList.remove('is-seeking');progressSeeking=false;paintTime();};progress.onpointerdown=beginProgress;progress.ontouchstart=beginProgress;progress.oninput=previewProgress;progress.onchange=commitProgress;progress.onpointerup=commitProgress;progress.ontouchend=commitProgress;progress.onpointercancel=cancelProgress;progress.ontouchcancel=cancelProgress;el.querySelector('.volume input').style.setProperty('--range-fill',`${settings.volume*100}%`);el.querySelector('.volume input').oninput=e=>{e.target.style.setProperty('--range-fill',`${e.target.value}%`);audio.volume=e.target.value/100;settings.volume=audio.volume;save();};let p;const head=el.querySelector('.selene-player-head');head.style.touchAction='none';head.onpointerdown=e=>{if(e.target.closest('button,.lyrics-tools')||(e.pointerType==='mouse'&&(e.button!==0||!e.isPrimary)))return;const rect=el.getBoundingClientRect();p={id:e.pointerId,x:e.clientX,y:e.clientY,l:rect.left,t:rect.top,mobile:isMobile()};head.setPointerCapture?.(e.pointerId);e.preventDefault();};head.onpointermove=e=>{if(!p||e.pointerId!==p.id||(e.pointerType==='mouse'&&(e.buttons&1)!==1))return;if(p.mobile){const width=ROOT.visualViewport?.width||ROOT.innerWidth,height=ROOT.visualViewport?.height||ROOT.innerHeight,left=Math.max(6,Math.min(width-el.offsetWidth-6,p.l+e.clientX-p.x)),top=Math.max(6,Math.min(height-el.offsetHeight-6,p.t+e.clientY-p.y));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');}else{el.style.right=`${Math.max(0,parseFloat(el.style.right)-e.clientX+p.x)}px`;el.style.bottom=`${Math.max(0,parseFloat(el.style.bottom)-e.clientY+p.y)}px`;p.x=e.clientX;p.y=e.clientY;}};const finish=()=>{if(!p)return;if(p.mobile){const rect=el.getBoundingClientRect();settings.mobilePosition={left:Math.round(rect.left),top:Math.round(rect.top/(ROOT.visualViewport?.height||ROOT.innerHeight)*100)};}else settings.position={right:parseFloat(el.style.right),bottom:parseFloat(el.style.bottom)};save();p=null;};head.onpointerup=finish;head.onpointercancel=finish;head.onlostpointercapture=finish;}
   function ensureMenuStyle(){if(DOC.getElementById(`${ID}-menu-style`))return;DOC.head?.insertAdjacentHTML('beforeend',`<style id="${ID}-menu-style">#${ID}-menu{display:block!important;width:100%!important;min-width:0!important;padding:0!important;margin:0!important;color:inherit!important}#${ID}-menu>.selene-menu-item{box-sizing:border-box!important;display:flex!important;flex-flow:row nowrap!important;align-items:center!important;column-gap:10px!important;width:100%!important;min-width:0!important;padding:5px!important;color:inherit!important;cursor:pointer!important;white-space:nowrap!important;writing-mode:horizontal-tb!important}#${ID}-menu>.selene-menu-item>.extensionsMenuExtensionButton{display:flex!important;flex:0 0 20px!important;align-items:center!important;justify-content:center!important;width:20px!important;height:20px!important;padding:0!important;pointer-events:none!important}#${ID}-menu>.selene-menu-item>.selene-menu-label{display:block!important;min-width:0!important;padding:0!important;white-space:nowrap!important;writing-mode:horizontal-tb!important}#${ID}-menu>.selene-menu-item:hover{opacity:1!important}</style>`);}
   function styleMenuEntry(wrapper){
     const row=wrapper.firstElementChild,icon=row?.querySelector('.extensionsMenuExtensionButton'),label=row?.querySelector('.selene-menu-label');
@@ -4102,7 +4117,7 @@ ${latest.slice(-1500)}
     const player=DOC.getElementById(ID);hardenResizeInteractions(player);ensureCleanLibraryLayout(player);bindOrbitStyle(player);companionColorScheme?.addEventListener?.('change',syncCompanionAppearance);companionColorScheme?.addEventListener?.('change',syncFloatingPanelThemes);optimizeWindowInteractions(player);setupMediaSession();
     for(const event of ['playing','pause','waiting','ended','emptied','error'])audio.addEventListener(event,syncOrbitMotion);
     audio.addEventListener('play',handleAudioPlay);audio.addEventListener('pause',handleUnexpectedPause);audio.addEventListener('timeupdate',()=>{if(!audioPriming){paintTime();trackCompanionListeningTime();}});audio.addEventListener('loadedmetadata',()=>{if(!audioPriming){paintTime();updateMediaPosition(true);}});audio.addEventListener('durationchange',()=>updateMediaPosition(true));audio.addEventListener('seeked',()=>updateMediaPosition(true));audio.addEventListener('ratechange',()=>updateMediaPosition(true));
-    audio.addEventListener('ended',()=>{if(bilibiliPlayer.isOpen()||audioPriming||!audio.ended)return;trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();paintTime();if(current)createCompanionTicket({automatic:true});if(settings.playMode==='one'&&current){const memories=companionMemoryList(),entry=memories[offlineKey(current)];if(entry){entry.loops=(Number(entry.loops)||0)+1;save();}audio.currentTime=0;playbackWanted=true;void resumeMainAudioFromMediaSession();return;}const song=nextSong(1);if(song)play(song);else playbackWanted=false;});
+    audio.addEventListener('ended',()=>{if(bilibiliPlayer.isOpen()||audioPriming||!audio.ended)return;trackCompanionListeningTime({stop:true,saveNow:true});updatePlayButton();paintTime();if(current)createCompanionTicket({automatic:true});if(settings.playMode==='one'&&current){const memories=companionMemoryList(),entry=memories[offlineKey(current)];if(entry){entry.loops=(Number(entry.loops)||0)+1;save();}audio.currentTime=0;playbackWanted=true;void resumeMainAudioFromMediaSession();return;}if(!switchMediaTrack(1))playbackWanted=false;});
     audioSession?.addEventListener?.('statechange',handleAudioSessionState);
     cleanupContextEvents();const c=context(),source=c?.eventSource,t=c?.eventTypes||ROOT.event_types||{},handler=()=>{if(contextRecommendationTimer)ROOT.clearTimeout(contextRecommendationTimer);contextRecommendationTimer=ROOT.setTimeout(()=>{contextRecommendationTimer=0;if(!disposed)recommendation();},50);};['CHARACTER_MESSAGE_RENDERED','MESSAGE_SWIPED','MESSAGE_EDITED','CHAT_CHANGED'].forEach(n=>{if(t[n]&&source?.on){source.on(t[n],handler);contextEventBindings.push([source,t[n],handler]);}});
   }

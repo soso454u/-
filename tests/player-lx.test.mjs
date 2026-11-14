@@ -22,7 +22,7 @@ function workerQuery(url, options) {
   assert.equal(options.body, undefined);
   return Object.fromEntries(url.searchParams);
 }
-function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, savedSongs = [], { now = Date.now, offline = () => null } = {}) {
+function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, savedSongs = [], { now = Date.now, offline = () => null, delay = setTimeout } = {}) {
   const audio = { dataset: {}, duration: 226, pause() {} };
   const urls = [], lyrics = [], fallback = [], statuses = [], saves = [], countdowns = [];
   const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', 'savedSongs', 'saves', 'Date', 'offline', 'countdowns', `
@@ -47,9 +47,9 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, sa
     ${section('function playbackSourceChoice', 'async function gdCover')}
     ${section('const playlistPlaybackOrigins=', 'function bindDesktopLyrics')}
     ${section('const LX_SOURCES=', 'function parse(text)')}
-    return {play,playLxSource,searchMetingSource,playSaved:()=>{playPlaylistAt(savedSongs);return pendingPlay?.promise;},select:(song,source)=>playbackSources.set(song,source)};
+    return {play,playLxSource,searchMetingSource,cancel:()=>{playbackWanted=false;++playRequest;},playSaved:()=>{playPlaylistAt(savedSongs);return pendingPlay?.promise;},select:(song,source)=>playbackSources.set(song,source)};
   `);
-  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia, savedSongs, saves, { now, parse: Date.parse }, offline, countdowns), urls, lyrics, fallback, statuses, saves, countdowns };
+  return { ...build({ AbortController, setTimeout: delay, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia, savedSongs, saves, { now, parse: Date.parse }, offline, countdowns), urls, lyrics, fallback, statuses, saves, countdowns };
 }
 
 test('explicit LX playback resolves a strict QQ match and retains the original GD song identity', async () => {
@@ -430,4 +430,66 @@ test('LX notice counts down from the deadline and cancels updates when replaced'
   setStatus('正在播放');
   assert.equal(notice, undefined);
   assert.equal(timers.size, 0);
+});
+
+test('a next-track failure gets one retry without changing the selected song or showing a stale warning', async () => {
+  const lookups = [];
+  const song = { ...track, source: 'tencent', mediaId: songId, lxSearch: true };
+  const api = player(async (url, options) => {
+    lookups.push(workerQuery(url, options).id);
+    return lookups.length === 1 ? Response.json({ code: 1 }, { status: 502 })
+      : Response.json({ code: 0, url: 'https://cdn.test/recovered.mp3' });
+  });
+  assert.equal(await api.play(song, false, { retryOnFailure: true }), true);
+  assert.deepEqual(lookups, [songId, songId]);
+  assert.equal(api.statuses.filter(message => message.includes('正在重试当前歌曲')).length, 1);
+  assert.ok(!api.statuses.some(message => message.includes('补充 MP3 直链')));
+  assert.match(api.statuses.at(-1), /正在播放 · LX/);
+});
+
+test('next-track retry is bounded and respects server limits and browser playback denial', async () => {
+  const song = { ...track, source: 'tencent', mediaId: songId, lxSearch: true };
+  for (const [reply, mediaError, requests] of [
+    [() => Response.json({ code: 1 }, { status: 502 }), null, 2],
+    [() => Response.json({ code: 1 }, { status: 502, headers: { 'Retry-After': '30' } }), null, 1],
+    [() => new Response(null, { status: 429 }), null, 1],
+    [() => Response.json({ code: 0, url: 'https://cdn.test/play.mp3' }), 'NotAllowedError', 1],
+  ]) {
+    let calls = 0;
+    const api = player(async () => { calls++; return reply(); }, true, undefined, () => {
+      if (mediaError) throw Object.assign(Error('media rejected'), { name: mediaError });
+    }, [], { delay: (fn, ms) => setTimeout(fn, ms === 800 ? 0 : ms) });
+    await api.play({ ...song }, false, { retryOnFailure: true });
+    assert.equal(calls, requests);
+    const warnings = api.statuses.filter(message => message.includes(mediaError ? '浏览器阻止播放' : '补充 MP3 直链'));
+    assert.equal(warnings.length, 2, 'one final status and one warning');
+  }
+});
+
+test('a newer selection or pause cancels a scheduled next-track retry', async () => {
+  const song = { ...track, source: 'tencent', mediaId: songId, lxSearch: true };
+  const next = { ...song, title: '第三首', mediaId: '0040h3yY3Zk0fM' };
+  for (const cancel of [false, true]) {
+    const lookups = [];
+    let wakeRetry, retryScheduled;
+    const scheduled = new Promise(resolve => { retryScheduled = resolve; });
+    const api = player(async (url, options) => {
+      const id = workerQuery(url, options).id;
+      lookups.push(id);
+      return id === songId ? Response.json({ code: 1 }, { status: 502 })
+        : Response.json({ code: 0, url: 'https://cdn.test/next.mp3' });
+    }, true, undefined, undefined, [], { delay: (fn, ms) => {
+      if (ms !== 800) return setTimeout(fn, ms);
+      wakeRetry = fn;
+      retryScheduled();
+    } });
+    const first = api.play(song, false, { retryOnFailure: true });
+    await scheduled;
+    if (cancel) api.cancel();
+    else assert.equal(await api.play(next), true);
+    wakeRetry();
+    await first;
+    assert.deepEqual(lookups, cancel ? [songId] : [songId, next.mediaId]);
+    assert.ok(!api.statuses.some(message => message.includes('补充 MP3 直链')));
+  }
 });
