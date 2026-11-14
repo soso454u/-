@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.87';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.88';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -2264,17 +2264,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       throw Object.assign(Error(`${message}（冷却中）`),details);
     }
   }
-  function lxRetryDeadline(data,headers,now,defaultWait){
+  function lxRetryDeadline(data,headers,now){
     const timestamp=Number(data?.retryAt);
     const deadline=timestamp<1e12?timestamp*1000:timestamp;
     if(Number.isSafeInteger(deadline)&&deadline>now)return deadline;
     const header=headers.get('Retry-After')?.trim();
-    if(header&&/^\d+$/.test(header)){
+    if(!header)return 0;
+    if(/^\d+$/.test(header)){
       const retryAt=now+Number(header)*1000;
-      if(Number.isSafeInteger(retryAt))return Math.max(now+1000,retryAt);
+      return Number.isSafeInteger(retryAt)&&retryAt>now?retryAt:0;
     }
-    const headerDate=Date.parse(header);
-    return headerDate>now?headerDate:now+defaultWait;
+    const headerDate=/[a-z]/i.test(header)?Date.parse(header):NaN;
+    return headerDate>now?headerDate:0;
   }
   async function requestLxJson(url,timeout=12000){
     const controller=new ROOT.AbortController();
@@ -2354,10 +2355,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         if(blocked){message='LX Music 上游阻断了请求 IP';limitSource='upstream';}
         else if(code===5||data?.msg==='Upstream HTTP 429'){message='LX Music 上游限流';limitSource='upstream';}
         else if(code===429&&data?.msg==='Too many requests'){message='Selene 的 LX 转发服务限流';limitSource='worker';}
-        const retryAt=lxRetryDeadline(data,response.headers,Date.now(),blocked?300000:30000);
-        const details={retryAt,limitSource,kind:blocked?'lx-blocked':'lx-rate-limit',status:response.status,code};
-        if(!lxCooldown||retryAt>=lxCooldown.retryAt)lxCooldown={message,...details};
-        throw Object.assign(Error(message),details,{retryAt:lxCooldown.retryAt});
+        const now=Date.now(),retryAt=lxRetryDeadline(data,response.headers,now);
+        const details={limitSource,kind:blocked?'lx-blocked':'lx-rate-limit',status:response.status,code};
+        if(retryAt&&(!lxCooldown||retryAt>=lxCooldown.retryAt))lxCooldown={message,...details,retryAt};
+        const activeDeadline=lxCooldown?.retryAt>now?lxCooldown.retryAt:0;
+        throw Object.assign(Error(message),details,{retryAt:activeDeadline});
       }
       if(!isActive())return null;
       if([408,504].includes(response.status)||data?.msg==='Upstream timeout')throw Error('LX Music 取址超时');

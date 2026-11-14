@@ -7,7 +7,7 @@ const ROOT = (() => {
 
 // Every local runtime asset inherits the hot reload token, including lazy reloads.
 // This fulfils extension_hot_reload.self_managed_modules in manifest.json.
-const PLAYER_MODULE_VERSION = '2.10.87';
+const PLAYER_MODULE_VERSION = '2.10.88';
 const entryUrl = new URL(import.meta.url);
 const hotReloadToken = entryUrl.searchParams.get('st_hot_reload');
 const extensionAsset = file => {

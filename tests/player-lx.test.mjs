@@ -303,34 +303,31 @@ test('QQ search keeps the exact playable ID and uses the existing LX Worker on s
   assert.equal(api.urls[0].url,'https://cdn.test/qq.mp3');
 });
 
-test('LX distinguishes upstream IP blocking, upstream quota and Worker quota during cooldown', async () => {
+test('LX reports the rejection and allows another song immediately without a server deadline', async () => {
   const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
-  for (const [body, status, source, reason, seconds] of [
-    [{ code: '1' }, 502, 'upstream', /上游.*IP/, 300],
-    [{ error: 'blocked' }, 403, 'upstream', /上游.*IP/, 300],
-    [{ code: 5 }, 429, 'upstream', /上游限流/, 30],
-    [{ code: 429, msg: 'Upstream HTTP 429' }, 429, 'upstream', /上游限流/, 30],
-    [{ code: 429, msg: 'Too many requests' }, 429, 'worker', /转发服务限流/, 30],
-    [null, 429, 'unknown', /来源未确认/, 30],
+  for (const [body, status, source, reason] of [
+    [{ code: '1' }, 502, 'upstream', /上游.*IP/],
+    [{ error: 'blocked' }, 403, 'upstream', /上游.*IP/],
+    [{ code: 5 }, 429, 'upstream', /上游限流/],
+    [{ code: 429, msg: 'Upstream HTTP 429' }, 429, 'upstream', /上游限流/],
+    [{ code: 429, msg: 'Too many requests' }, 429, 'worker', /转发服务限流/],
+    [null, 429, 'unknown', /来源未确认/],
   ]) {
-    let calls = 0, now = 1800000000000;
+    let calls = 0;
+    const now = 1800000000000;
     const api = player(async () => {
       if (++calls > 1) return Response.json({ code: 0, url: 'https://cdn.test/stream' });
       return body ? Response.json(body, { status }) : new Response(null, { status });
     }, true, undefined, undefined, [], { now: () => now });
-    const play = () => api.playLxSource(song, 'netease', () => true);
-    const until = now + seconds * 1000;
-    await assert.rejects(play(), { message: reason, limitSource: source, status, retryAt: until });
-    now = until - 1;
-    await assert.rejects(play(), { message: /冷却中/, limitSource: source, retryAt: until });
-    assert.equal(calls, 1);
-    now = until;
-    assert.deepEqual(await play(), { offline: false });
+    await assert.rejects(api.playLxSource(song, 'netease', () => true), { message: reason, limitSource: source, status, retryAt: 0 });
+    assert.equal(calls, 1, 'the failed selection does not retry another quality');
+    const next = { ...song, mediaId: '456', title: '下一首' };
+    assert.deepEqual(await api.playLxSource(next, 'netease', () => true), { offline: false });
     assert.equal(calls, 2);
   }
 });
 
-test('valid retry deadlines override defaults and expired deadlines fall back to Retry-After', async () => {
+test('LX waits only for a valid future deadline in the response', async () => {
   const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
   const now = 1800000000000;
   for (const [retryAt, header, seconds] of [
@@ -338,11 +335,13 @@ test('valid retry deadlines override defaults and expired deadlines fall back to
     [(now + 70000) / 1000, '5', 70],
     [now - 10000, '45', 45],
     ['invalid', new Date(now + 90000).toUTCString(), 90],
-    [null, '-1', 30],
+    [null, '-2100', 0],
+    [null, '0', 0],
+    [now - 10000, new Date(now - 5000).toUTCString(), 0],
   ]) {
     const api = player(async () => Response.json({ code: 5, retryAt }, { status: 429, headers: { 'Retry-After': header } }),
       true, undefined, undefined, [], { now: () => now });
-    await assert.rejects(api.playLxSource(song, 'netease', () => true), { retryAt: now + seconds * 1000 });
+    await assert.rejects(api.playLxSource(song, 'netease', () => true), { retryAt: seconds ? now + seconds * 1000 : 0 });
   }
 });
 
@@ -368,7 +367,7 @@ test('manual LX and QQ search playback continue to independent sources during LX
   let requests = 0, cached = false, gdAvailable = false;
   const api = player(async () => {
     requests++;
-    return Response.json({ code: 1 }, { status: 502 });
+    return Response.json({ code: 1 }, { status: 502, headers: { 'Retry-After': '300' } });
   }, true, () => {
     if (gdAvailable) return { offline: false };
     throw Object.assign(Error('GD 限流'), { retryAt: now + 600000 });
