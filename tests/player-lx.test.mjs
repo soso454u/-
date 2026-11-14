@@ -22,10 +22,10 @@ function workerQuery(url, options) {
   assert.equal(options.body, undefined);
   return Object.fromEntries(url.searchParams);
 }
-function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, savedSongs = []) {
+function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, savedSongs = [], { now = Date.now, offline = () => null } = {}) {
   const audio = { dataset: {}, duration: 226, pause() {} };
-  const urls = [], lyrics = [], fallback = [], statuses = [], saves = [];
-  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', 'savedSongs', 'saves', `
+  const urls = [], lyrics = [], fallback = [], statuses = [], saves = [], countdowns = [];
+  const build = new Function('ROOT', 'audio', 'fetch', 'enabled', 'urls', 'lyrics', 'fallback', 'statuses', 'resolveGd', 'playMedia', 'savedSongs', 'saves', 'Date', 'offline', 'countdowns', `
     const SELENE_METING_API=${JSON.stringify(meting)},GD_SOURCES=['netease','joox'],GD_SOURCE_LABELS={tencent:'QQ',netease:'网易云'},METING_METADATA_APIS=[SELENE_METING_API],METING_COVER_APIS=METING_METADATA_APIS;
     const getResponseUrl=value=>value||'';
     ${section('const defaults =', 'const KEEPALIVE_NAME').replace('DEFAULT_COMPANION_PRESET', "''")}
@@ -33,11 +33,11 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, sa
     const settings={...defaults,lxMusicEnabled:enabled??defaults.lxMusicEnabled,playlists:[{songs:savedSongs}]},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
     let queue=[],queueIndex=-1;
     const count=()=>{},playListEntry=play,save=()=>saves.push(structuredClone(savedSongs));
-    const setStatus=message=>statuses.push(message),toast=(kind,message)=>statuses.push(message);
+    const setStatus=(message,persistent,retryAt)=>{statuses.push(message);if(retryAt)countdowns.push(retryAt);},toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
     let playbackRecoveryCount=0,playbackBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
     const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{};
-    const playOfflineSong=async()=>null,gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
+    const playOfflineSong=async()=>offline(),gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
     const isNotAllowed=e=>e.name==='NotAllowedError',clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
     const playUrl=async(url,label,isolated,options)=>{urls.push({url,label,isolated,options});return playMedia(url);};
     const recordCompanionPlay=()=>{},maybeAutoCompanion=()=>{},applyCurrentCover=()=>{},loadLyrics=song=>lyrics.push(song.gdLyricId);
@@ -49,7 +49,7 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, sa
     ${section('const LX_SOURCES=', 'function parse(text)')}
     return {play,playLxSource,searchMetingSource,playSaved:()=>{playPlaylistAt(savedSongs);return pendingPlay?.promise;},select:(song,source)=>playbackSources.set(song,source)};
   `);
-  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia, savedSongs, saves), urls, lyrics, fallback, statuses, saves };
+  return { ...build({ AbortController, setTimeout, clearTimeout }, audio, fetch, enabled, urls, lyrics, fallback, statuses, resolveGd, playMedia, savedSongs, saves, { now, parse: Date.parse }, offline, countdowns), urls, lyrics, fallback, statuses, saves, countdowns };
 }
 
 test('explicit LX playback resolves a strict QQ match and retains the original GD song identity', async () => {
@@ -301,4 +301,134 @@ test('QQ search keeps the exact playable ID and uses the existing LX Worker on s
   await api.play(song);
   assert.equal(calls.length,2);
   assert.equal(api.urls[0].url,'https://cdn.test/qq.mp3');
+});
+
+test('LX distinguishes upstream IP blocking, upstream quota and Worker quota during cooldown', async () => {
+  const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
+  for (const [body, status, source, reason, seconds] of [
+    [{ code: '1' }, 502, 'upstream', /上游.*IP/, 300],
+    [{ error: 'blocked' }, 403, 'upstream', /上游.*IP/, 300],
+    [{ code: 5 }, 429, 'upstream', /上游限流/, 30],
+    [{ code: 429, msg: 'Upstream HTTP 429' }, 429, 'upstream', /上游限流/, 30],
+    [{ code: 429, msg: 'Too many requests' }, 429, 'worker', /转发服务限流/, 30],
+    [null, 429, 'unknown', /来源未确认/, 30],
+  ]) {
+    let calls = 0, now = 1800000000000;
+    const api = player(async () => {
+      if (++calls > 1) return Response.json({ code: 0, url: 'https://cdn.test/stream' });
+      return body ? Response.json(body, { status }) : new Response(null, { status });
+    }, true, undefined, undefined, [], { now: () => now });
+    const play = () => api.playLxSource(song, 'netease', () => true);
+    const until = now + seconds * 1000;
+    await assert.rejects(play(), { message: reason, limitSource: source, status, retryAt: until });
+    now = until - 1;
+    await assert.rejects(play(), { message: /冷却中/, limitSource: source, retryAt: until });
+    assert.equal(calls, 1);
+    now = until;
+    assert.deepEqual(await play(), { offline: false });
+    assert.equal(calls, 2);
+  }
+});
+
+test('valid retry deadlines override defaults and expired deadlines fall back to Retry-After', async () => {
+  const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
+  const now = 1800000000000;
+  for (const [retryAt, header, seconds] of [
+    [now + 60000, '5', 60],
+    [(now + 70000) / 1000, '5', 70],
+    [now - 10000, '45', 45],
+    ['invalid', new Date(now + 90000).toUTCString(), 90],
+    [null, '-1', 30],
+  ]) {
+    const api = player(async () => Response.json({ code: 5, retryAt }, { status: 429, headers: { 'Retry-After': header } }),
+      true, undefined, undefined, [], { now: () => now });
+    await assert.rejects(api.playLxSource(song, 'netease', () => true), { retryAt: now + seconds * 1000 });
+  }
+});
+
+test('the Worker can return no playable URL as HTTP 502 with code 2 without starting a cooldown', async () => {
+  const song = { ...track, source: 'netease', gdSource: 'netease', mediaId: '123' };
+  const qualities = [];
+  const api = player(async (url, options) => {
+    qualities.push(workerQuery(url, options).quality);
+    return Response.json({ code: 2, msg: 'Upstream did not return a playable URL' }, { status: 502 });
+  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(api.playLxSource(song, 'netease', () => true), error => {
+      assert.match(error.message, /没有返回有效期内的播放地址/);
+      assert.equal(error.retryAt, undefined);
+      return true;
+    });
+  }
+  assert.deepEqual(qualities, ['128k', '320k', '128k', '320k']);
+});
+
+test('manual LX and QQ search playback continue to independent sources during LX cooldown', async () => {
+  const now = 1800000000000;
+  let requests = 0, cached = false, gdAvailable = false;
+  const api = player(async () => {
+    requests++;
+    return Response.json({ code: 1 }, { status: 502 });
+  }, true, () => {
+    if (gdAvailable) return { offline: false };
+    throw Object.assign(Error('GD 限流'), { retryAt: now + 600000 });
+  }, undefined, [], { now: () => now, offline: () => cached ? { offline: true } : null });
+  const song = { ...track, source: 'tencent', mediaId: songId, lxSearch: true };
+  api.select(song, 'lx-tencent');
+  await api.play(song);
+  assert.match(api.statuses.at(-1), /上游.*IP.*GD 限流/);
+  assert.deepEqual(api.countdowns, [now + 300000]);
+  assert.deepEqual(api.fallback, [['netease', 'joox']]);
+
+  const manual = { ...song, lxSearch: false, customAudio: 'https://cdn.test/manual.mp3' };
+  api.select(manual, 'lx-tencent');
+  assert.equal(await api.play(manual), true);
+  assert.equal(api.urls.at(-1).url, manual.customAudio);
+  cached = true;
+  assert.equal(await api.play({ ...song }), true);
+  assert.match(api.statuses.at(-1), /离线缓存/);
+  cached = false;
+  gdAvailable = true;
+  assert.equal(await api.play({ ...song }), true);
+  assert.equal(api.statuses.at(-1), '正在播放');
+  assert.deepEqual(api.countdowns, [now + 300000]);
+  assert.equal(requests, 1);
+});
+
+test('LX notice counts down from the deadline and cancels updates when replaced', () => {
+  const timers = new Map();
+  const createElement = () => ({
+    classList: { toggle() {} }, setAttribute() {}, children: [], textContent: '',
+    append(node) { this.children.push(node); },
+    remove() { notice = undefined; },
+  });
+  let now = 1800000000000, notice, nextTimer = 0;
+  const status = createElement();
+  const player = {
+    querySelector: selector => ({ '.status': status, '.selene-playback-notice': notice, '.lyrics': { after(node) { notice = node; } } })[selector],
+  };
+  const ROOT = {
+    setInterval(callback) { timers.set(++nextTimer, callback); return nextTimer; },
+    clearInterval(id) { timers.delete(id); },
+  };
+  const setStatus = new Function('ROOT', 'DOC', 'ID', 'Date', `
+    ${section('let playbackNoticeTimer=0;', 'function applyTheme')}
+    return setStatus;
+  `)(ROOT, { getElementById: () => player, createElement }, 'player', { now: () => now });
+  setStatus('LX Music 上游限流', true, now + 30000);
+  assert.match(notice.children[0].textContent, /剩余 30 秒/);
+  const tick = [...timers.values()][0];
+  now += 29001;
+  tick();
+  assert.match(notice.children[0].textContent, /剩余 1 秒/);
+  now++;
+  now += 998;
+  tick();
+  assert.match(notice.children[0].textContent, /冷却已结束/);
+  assert.equal(timers.size, 0);
+  setStatus('LX Music 上游限流', true, now + 30000);
+  assert.equal(timers.size, 1);
+  setStatus('正在播放');
+  assert.equal(notice, undefined);
+  assert.equal(timers.size, 0);
 });

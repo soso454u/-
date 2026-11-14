@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.86';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.87';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1133,13 +1133,25 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     el.dataset.miniShape=playerMiniShape(); el.classList.toggle('touch-layout',isMobile()); el.classList.toggle('pinned',!!settings.windowPinned); el.classList.toggle('immersive',!!settings.immersive); el.classList.toggle('mini',!!settings.miniMode); el.style.right = `${settings.position.right}px`; el.style.bottom = `${settings.position.bottom}px`; applyPlayerSize(el); if(settings.windowSize&&!settings.miniMode){el.style.setProperty('width',`${settings.windowSize.width}px`,'important');el.style.setProperty('height',`${settings.windowSize.height}px`,'important');} applyMobilePosition(el); applyTheme(el); applySkin(el); el.querySelector('.actions').style.flexWrap='wrap'; bind(el); bindCurrentFavorite(el); bindCompanionLyrics(el); bindWindowFeatures(el); bindAdaptiveWindow(el); bindQuickLyrics(el); bindPlaybackSources(el); bindUiPresetOnly(el); bindScaleSettings(el); bindWindowResetSetting(el); applyCustomScales(el); bindFloatingSkinMenu(el); bindMiniPlayer(el); bindTitleGesture(el); bindListHeadingActions(el); bindWorldRecommendations(el); const picker=el.querySelector('.skin-picker');picker.onclick=e=>{const skin=e.target.dataset.skin;if(!skin)return;settings.skin=skin;applySkin(el);picker.classList.add('hidden');save();}; bindDesktopLyrics(); updateLyricsLock(); updatePlayMode(); audio.volume = settings.volume; updatePlayButton(); updateKeepAliveUI(); if(settings.keepAlive)ROOT.setTimeout(()=>startKeepAlive({persist:false,notify:false}),0);
     return el;
   }
-  const setStatus = (x,persistent=false) => {
+  let playbackNoticeTimer=0;
+  const setStatus = (x,persistent=false,retryAt=0) => {
+    ROOT.clearInterval(playbackNoticeTimer);playbackNoticeTimer=0;
     const player=DOC.getElementById(ID),el=player?.querySelector('.status');if(!el)return;
     el.textContent=persistent?'':x;el.classList.toggle('status-alert',!!el.textContent&&!/^(正在播放|已暂停|就绪)$/.test(String(x)));el.setAttribute('role','status');
     let notice=player.querySelector('.selene-playback-notice');
     if(!persistent){notice?.remove();return;}
     if(!notice){notice=DOC.createElement('small');notice.className='selene-playback-notice';notice.setAttribute('role','status');player.querySelector('.lyrics').after(notice);}
     notice.textContent=x;
+    if(!retryAt)return;
+    const countdown=DOC.createElement('span');
+    countdown.setAttribute('aria-live','off');notice.append(countdown);
+    const update=()=>{
+      const seconds=Math.max(0,Math.ceil((retryAt-Date.now())/1000));
+      countdown.textContent=seconds?`。LX Music 冷却剩余 ${seconds} 秒`:'。LX Music 冷却已结束';
+      if(!seconds){ROOT.clearInterval(playbackNoticeTimer);playbackNoticeTimer=0;}
+    };
+    if(Date.now()<retryAt)playbackNoticeTimer=ROOT.setInterval(update,1000);
+    update();
   };
   function applyTheme(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('theme-light','theme-dark');if(settings.theme==='light')el.classList.add('theme-light');if(settings.theme==='dark')el.classList.add('theme-dark');syncFloatingPanelThemes();syncCompanionAppearance();}
   function applySkin(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('skin-film','skin-red','skin-white','skin-black','skin-blue','skin-cream','skin-green','skin-albumglass','skin-orbit');el.classList.add(`skin-${settings.skin||'albumglass'}`);el.classList.remove('lyrics-focus');syncFloatingPanelThemes();syncCompanionAppearance();renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);}
@@ -2245,9 +2257,24 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   const LX_URL_API='https://selene-lx-worker.soivt44.workers.dev/api/lx/url';
   const lxSourceLabel=platform=>`LX Music · ${GD_SOURCE_LABELS[platform]}`;
   const playbackLabel=song=>song.offline?'离线缓存':audio.dataset?.seleneLxSource||(song.customAudio?'手动音源':GD_SOURCE_LABELS[song.source]||'自动');
-  let lxRetryAt=0;
+  let lxCooldown=null;
   function checkLxCooldown(){
-    if(Date.now()<lxRetryAt)throw Object.assign(Error('LX Music 限流冷却中，请稍后再试'),{retryAt:lxRetryAt});
+    if(lxCooldown?.retryAt>Date.now()){
+      const {message,...details}=lxCooldown;
+      throw Object.assign(Error(`${message}（冷却中）`),details);
+    }
+  }
+  function lxRetryDeadline(data,headers,now,defaultWait){
+    const timestamp=Number(data?.retryAt);
+    const deadline=timestamp<1e12?timestamp*1000:timestamp;
+    if(Number.isSafeInteger(deadline)&&deadline>now)return deadline;
+    const header=headers.get('Retry-After')?.trim();
+    if(header&&/^\d+$/.test(header)){
+      const retryAt=now+Number(header)*1000;
+      if(Number.isSafeInteger(retryAt))return Math.max(now+1000,retryAt);
+    }
+    const headerDate=Date.parse(header);
+    return headerDate>now?headerDate:now+defaultWait;
   }
   async function requestLxJson(url,timeout=12000){
     const controller=new ROOT.AbortController();
@@ -2318,17 +2345,23 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       checkLxCooldown();
       const request=new URL(LX_URL_API);
       request.search=new URLSearchParams({source,id:songId,quality});
-      const {response,data}=await requestLxJson(request),code=data?.code;
-      if(response.status===429||[1,5,429].includes(code)){
-        const blocked=data?.error==='blocked'||code===1;
-        const retry=response.headers.get('Retry-After'),seconds=Number(retry),now=Date.now();
-        const retryAt=Number(data?.retryAt)||(retry&&Number.isFinite(seconds)?now+seconds*1000:Date.parse(retry));
-        lxRetryAt=Math.max(lxRetryAt,now+1000,retryAt||now+(blocked?300000:30000));
-        throw Object.assign(Error('LX Music 限流，请稍后再试'),{retryAt:lxRetryAt});
+      const {response,data}=await requestLxJson(request);
+      const code=typeof data?.code==='string'&&/^\d+$/.test(data.code)?Number(data.code):data?.code;
+      const blocked=code===1||data?.error==='blocked';
+      if(blocked||response.status===429||code===5||code===429){
+        let message='LX Music 请求限流（来源未确认）';
+        let limitSource='unknown';
+        if(blocked){message='LX Music 上游阻断了请求 IP';limitSource='upstream';}
+        else if(code===5||data?.msg==='Upstream HTTP 429'){message='LX Music 上游限流';limitSource='upstream';}
+        else if(code===429&&data?.msg==='Too many requests'){message='Selene 的 LX 转发服务限流';limitSource='worker';}
+        const retryAt=lxRetryDeadline(data,response.headers,Date.now(),blocked?300000:30000);
+        const details={retryAt,limitSource,kind:blocked?'lx-blocked':'lx-rate-limit',status:response.status,code};
+        if(!lxCooldown||retryAt>=lxCooldown.retryAt)lxCooldown={message,...details};
+        throw Object.assign(Error(message),details,{retryAt:lxCooldown.retryAt});
       }
       if(!isActive())return null;
-      if([408,504].includes(response.status))throw Error('LX Music 取址超时');
-      if((response.ok||response.status===422)&&(code===2||data?.error==='unavailable'||data?.error==='expired'))continue;
+      if([408,504].includes(response.status)||data?.msg==='Upstream timeout')throw Error('LX Music 取址超时');
+      if(code===2||(response.ok||response.status===422)&&['unavailable','expired'].includes(data?.error))continue;
       if(!response.ok)throw Error(`LX Music 取址失败（HTTP ${response.status}）`);
       if(code!==0)throw Error(code==null?'LX Music 返回无效取址响应':`LX Music 取址失败（代码 ${code}）`);
       const expiry=data.expire??data.extra?.expire,timestamp=Number(expiry?.time??expiry);
@@ -2380,38 +2413,39 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function performPlay(s,recovering=false,companionPick=false){
     const selectedSource=playbackSourceChoice(s);
-    let lxSource=selectedSource.startsWith('lx-')?selectedSource.slice(3):'';
+    const requestedLx=selectedSource.startsWith('lx-')?selectedSource.slice(3):'';
+    const fallbackSource=requestedLx?'auto':selectedSource;
+    let lxSource='',lxRetryAt=0;
     if(audio.dataset)delete audio.dataset.seleneLxSource;
     cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;playbackBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
     const request=++playRequest,isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
+    const noteFailure=error=>{
+      if(isNotAllowed(error)||error.name==='AbortError')throw error;
+      const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
+      lastError=lastError?Object.assign(new AggregateError([lastError,error],`${mediaDetail(lastError)}；${mediaDetail(error)}`),{retryAt}):error;
+    };
+    const tryLx=async platform=>{
+      setStatus(`正在验证 ${lxSourceLabel(platform)}…`);
+      try{const result=await playLxSource(s,platform,isActive);if(result)lxSource=platform;return result;}
+      catch(error){if(error.kind==='lx-blocked'||error.kind==='lx-rate-limit')lxRetryAt=error.retryAt;noteFailure(error);return null;}
+    };
     try{
-      if(lxSource){
-        setStatus(`正在验证 ${lxSourceLabel(lxSource)}…`);
-        played=await playLxSource(s,lxSource,isActive);
-      }else{
+      if(requestedLx)played=await tryLx(requestedLx);
+      if(!isActive())return;
+      if(!played){
         setStatus('正在检查离线缓存…');played=recovering?null:await playOfflineSong(s,isActive);
         if(!isActive())return;
         if(!played&&s.customAudio&&!failedPlaybackUrls.has(s.customAudio)){
           setStatus('正在验证手动音源…');
           try{await playUrl(s.customAudio,'手动音源',false,{isActive});played={...s,audio:s.customAudio,offline:false};}
-          catch(error){if(isNotAllowed(error)||error.name==='AbortError')throw error;lastError=error;}
+          catch(error){noteFailure(error);}
         }
         if(!isActive())return;
-        const noteFailure=error=>{
-          if(isNotAllowed(error)||error.name==='AbortError')throw error;
-          const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
-          lastError=lastError?Object.assign(new AggregateError([lastError,error],`${mediaDetail(lastError)}；${mediaDetail(error)}`),{retryAt}):error;
-        };
-        const tryLxQq=async()=>{
-          setStatus(`正在验证 ${lxSourceLabel('tencent')}…`);
-          try{const result=await playLxSource(s,'tencent',isActive);if(result)lxSource='tencent';return result;}
-          catch(error){noteFailure(error);return null;}
-        };
-        const autoLx=selectedSource==='auto'&&settings.lxMusicEnabled;
+        const autoLx=!requestedLx&&selectedSource==='auto'&&settings.lxMusicEnabled;
         const preferQq=autoLx&&(s.source==='tencent'||knownLxSongId(s,'tencent'));
-        if(!played&&preferQq)played=await tryLxQq();
+        if(!played&&preferQq)played=await tryLx('tencent');
         if(!isActive())return;
-        const useSavedAudio=s.source==='direct'||selectedSource===s.source||selectedSource==='auto'&&['tencent','netease','kugou'].includes(s.source);
+        const useSavedAudio=s.source==='direct'||fallbackSource===s.source||fallbackSource==='auto'&&['tencent','netease','kugou'].includes(s.source);
         if(!played&&useSavedAudio&&!failedPlaybackUrls.has(s.audio)&&/^https?:\/\//i.test(String(s?.audio||''))&&s.audio!==s.customAudio){
           setStatus('正在验证已保存音源…');
           try{await playUrl(s.audio,'已保存音源',false,{isActive,expectedDuration:s.source==='direct'?0:songDuration(s)});played={...s,offline:false};}
@@ -2424,11 +2458,11 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
             try{return await gdFallback(s,0,isActive,failedPlaybackUrls,sources,source=>setStatus(`正在验证${GD_SOURCE_LABELS[source]||source}音源…`));}
             catch(error){gdRetryAt=error.retryAt||0;noteFailure(error);return null;}
           };
-          const sources=playbackSourceOrder(selectedSource);
+          const sources=playbackSourceOrder(fallbackSource);
           if(autoLx&&!preferQq){
             const [primary,...remaining]=sources;
             played=await tryGd([primary]);
-            if(!played&&isActive()&&settings.lxMusicEnabled)played=await tryLxQq();
+            if(!played&&isActive()&&settings.lxMusicEnabled)played=await tryLx('tencent');
             if(!played&&isActive()&&Date.now()>=gdRetryAt&&remaining.length)played=await tryGd(remaining);
           }else played=await tryGd(sources);
         }
@@ -2452,7 +2486,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     console.warn('[音乐播放器] 本轮播放失败',{request,song:{title:s.title,artist:s.artist,source:s.source,mediaId:s.mediaId},error:lastError});
     clearFailedPlayback();
     const detail=`${mediaDetail(lastError)}。可重试、切换音源或补充 MP3 直链`;
-    setStatus(detail,true);
+    setStatus(detail,true,lxRetryAt);
     if(lastError?.retryAt){
       const alreadyWarned=Date.now()<playbackLimitWarningUntil;
       playbackLimitWarningUntil=Math.max(playbackLimitWarningUntil,lastError.retryAt);
@@ -4087,7 +4121,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;watchMiniDock();ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;disposed=true;watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(!event?.persisted)cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
