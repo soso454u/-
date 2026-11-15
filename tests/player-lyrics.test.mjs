@@ -35,6 +35,21 @@ test('common LRC precision, repeated tags, offsets and blank interludes retain r
   ]);
 });
 
+test('Enhanced LRC retains word boundaries, offsets, repeated lines and a final end tag', () => {
+  const { mergeLyricTimeline } = lyrics();
+  const rows = mergeLyricTimeline(
+    '[offset:100]\n[00:02.000][00:08]<00:02.100>今<00:02.400>晚<00:02.900>',
+    '[00:02.100]Tonight',
+  );
+  assert.deepEqual(rows[0].lines, ['今晚', 'Tonight']);
+  assert.deepEqual(rows[0].wordTimes, [
+    { text: '今', start: 2.2, end: 2.5 },
+    { text: '晚', start: 2.5, end: 3 },
+  ]);
+  assert.equal(rows[1].wordTimes[0].start.toFixed(1), '8.2');
+  assert.equal(mergeLyricTimeline('[00:02]<00:03>A<00:02.5>B', '')[0].wordTimes, undefined);
+});
+
 test('translation gaps and tightly spaced lines never steal the next translation', () => {
   const { mergeLyricTimeline } = lyrics();
   assert.deepEqual(mergeLyricTimeline('[00:10]A\n[00:11]B\n[00:12]C', '[00:11]乙\n[00:12.010]丙'), [

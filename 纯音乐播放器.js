@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.94';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.95';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -138,7 +138,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
 
 [最后确认]
 这句话是否有这个人自己的立场与生活，还是只在讨好用户？是否符合当前人设、关系和情绪？是否把人物写成了无条件服务的助手，或者反过来写成刻意找茬的人？只修正实际偏差，保留真实的合作、关心、缺点和个人声音。`;
-  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniPosition: null, mobileMiniPosition: null, miniReturnPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, miniScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
+  const defaults = { enabled: true, autoLoad: true, autoShow: true, menuEnabled: true, theme: 'auto', skin: 'albumglass', playerSize: 'm', playMode: 'loop', searchMode: 'gd', searchSource: 'auto', lxMusicEnabled: true, floatingLyrics: true, lyricLiveColor: false, lyricsLocked: false, desktopLyricFontSize: 22, mobileLyricFontSize: 14, windowPinned: false, immersive: false, miniMode: false, miniShape: 'round', miniSnap: false, miniPosition: null, mobileMiniPosition: null, miniReturnPosition: null, actionsCollapsed: true, libraryLayoutVersion: 0, miniRestore: null, windowSize: null, buttonScale: 1, textScale: 1, coverScale: 1, listScale: 1, miniScale: 1, keepAlive: false, audioSessionMode: 'priority', lyricColor: '#f2cf70', lyricGradientColor: '#b48cff', lyricGradient: true, volume: .7, playlists: [], companionMode: 'custom', companionApiUrl: '', companionModel: '', companionApiKey: '', companionMaxTokens: 300, companionAutoSong: false, companionAutoLimit: 1, companionQuiet: false, companionDuoMode: false, companionTts: false, companionAutoTicket: false, companionMini: false, companionBackground: 'cover', companionWallpaper: '', companionPresetEnabled: true, companionPresetVersion: 4, companionPreset: DEFAULT_COMPANION_PRESET, companionPosition: null, companionMiniPosition: null, companionMobilePosition: null, companionMobileMiniPosition: null, companionModels: [], companionConversations: {}, companionSharedSongs: {}, companionMemories: {}, companionTickets: {}, companionListeningStats: {}, companionAudienceMode: 'single', companionChatMode: 'private', companionRosters: {}, position: { right: 18, bottom: 90 }, mobilePosition: { left: 14, top: 18 }, desktopPosition: { left: 50, bottom: 11 }, mobileLyricsPosition: { left: 50, top: 50 } };
   const KEEPALIVE_NAME = 'SillyTavern';
   const KEEPALIVE_ARTWORK_URL = String(ROOT.__SELENE_KEEPALIVE_ARTWORK_URL__ || 'https://iili.io/CNgVgAF.png').trim();
   let settings,storageWriteWarningShown=false;
@@ -1319,6 +1319,18 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     playListEntry(queue[index]);
   }
   function bindDesktopLyrics(){
+    DOC.getElementById(`${ID}-desktop-style`).textContent+=`
+      #${ID}-desktop-lyrics .lyric-live-line,#${ID}-desktop-lyrics .lyric-live-secondary{display:block}
+      #${ID}-desktop-lyrics .lyric-live-secondary{color:#a2a2ad}
+      #${ID}-desktop-lyrics .lyric-live-word{
+        --lyric-direction:90deg;
+        --lyric-sung:color-mix(in srgb,currentColor,var(--lyric-sung-end,currentColor) var(--lyric-tone,0%));
+        background-image:linear-gradient(var(--lyric-direction),var(--lyric-sung) var(--lyric-fill,0%),#a2a2ad var(--lyric-fill,0%));
+        -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+        box-decoration-break:clone;-webkit-box-decoration-break:clone
+      }
+      #${ID}-desktop-lyrics .lyric-live-line:dir(rtl) .lyric-live-word{--lyric-direction:270deg}
+    `;
     const el=DOC.getElementById(`${ID}-desktop-lyrics`);if(!el)return;
     el.style.pointerEvents='auto';el.style.touchAction='none';el.style.userSelect='none';el.style.webkitUserSelect='none';
     let drag=null;
@@ -1333,19 +1345,105 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const finish=e=>{const pointerId=drag?.pointerId;if(pointerId===undefined||e?.pointerId!==undefined&&e.pointerId!==pointerId)return;drag=null;try{el.releasePointerCapture?.(pointerId);}catch{}save();};
     el.addEventListener('pointerdown',start,{passive:false});el.addEventListener('pointermove',move,{passive:false});el.addEventListener('pointerup',finish);el.addEventListener('pointercancel',finish);el.addEventListener('lostpointercapture',finish);
   }
-  function renderDesktopLyrics(words=''){
+  let floatingLyricFrame=0;
+  function stopFloatingLyricAnimation(){
+    if(floatingLyricFrame)ROOT.cancelAnimationFrame(floatingLyricFrame);
+    floatingLyricFrame=0;
+  }
+  function floatingLyricSegments(row,nextTime,duration){
+    const text=row.lines[0];
+    const boundary=Math.min(...[nextTime,duration].filter(time=>Number.isFinite(time)&&time>row.time));
+    if(row.wordTimes?.length){
+      return row.wordTimes.map(({text,start,end})=>({text,start,end:end??Math.max(start,Math.min(boundary,start+3))}));
+    }
+    // A line-only source can show its approximate progress without claiming exact word timing.
+    const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('zh',{granularity:'word'}):null;
+    const parts=segmenter?Array.from(segmenter.segment(text),item=>item.segment):text.match(/\p{Script=Han}|[^\p{Script=Han}\s]+|\s+/gu)||[text];
+    const weights=parts.map(part=>Array.from(part.trim()).length);
+    const total=weights.reduce((sum,weight)=>sum+weight,0)||1;
+    const span=Math.min(boundary-row.time,Math.max(2,Math.min(14,total/5+2)));
+    let position=0;
+    return parts.map((text,i)=>{
+      const start=row.time+span*position/total;
+      position+=weights[i];
+      return {text,start,end:row.time+span*position/total};
+    });
+  }
+  function renderFloatingLyricSegments(textEl,row,nextTime,lines){
+    const previous=textEl._liveLyric;
+    if(previous?.row===row&&previous.secondary===lines[1]&&Object.is(previous.duration,audio.duration))return;
+    const primary=DOC.createElement('span');
+    primary.className='lyric-live-line';
+    primary.dir='auto';
+    const segments=floatingLyricSegments(row,nextTime,audio.duration);
+    const total=Array.from(lines[0]).length||1;
+    let position=0;
+    const words=segments.map(({text,start,end})=>{
+      const element=DOC.createElement('span');
+      element.className='lyric-live-word';
+      element.textContent=text;
+      element.style.setProperty('--lyric-tone',`${Math.round(position/total*100)}%`);
+      position+=Array.from(text).length;
+      primary.append(element);
+      return {element,start,end,fill:-1};
+    });
+    textEl.replaceChildren(primary);
+    if(lines[1]){
+      const secondary=DOC.createElement('span');
+      secondary.className='lyric-live-secondary';
+      secondary.dir='auto';
+      secondary.textContent=lines[1];
+      textEl.append(secondary);
+    }
+    textEl._liveLyric={row,secondary:lines[1],duration:audio.duration,words};
+  }
+  function paintFloatingLyricProgress(textEl,now){
+    for(const word of textEl._liveLyric?.words||[]){
+      const fraction=now<word.start?0:now>=word.end?1:(now-word.start)/(word.end-word.start);
+      const fill=Math.round(fraction*100);
+      if(fill===word.fill)continue;
+      word.fill=fill;
+      word.element.style.setProperty('--lyric-fill',`${fill}%`);
+    }
+  }
+  function scheduleFloatingLyricAnimation(textEl){
+    if(floatingLyricFrame||audio.paused||audio.ended||DOC.hidden)return;
+    floatingLyricFrame=ROOT.requestAnimationFrame(()=>{
+      floatingLyricFrame=0;
+      if(disposed||!settings.lyricLiveColor||!settings.floatingLyrics||!textEl.isConnected||audio.ended||DOC.hidden)return;
+      const now=audio.currentTime,index=activeLyricIndex(now),row=lyricTimeline[index];
+      if(textEl._liveLyric?.row!==row){
+        renderDesktopLyrics(row?.lines?.join('\n')||'',index,now);
+      }else{
+        paintFloatingLyricProgress(textEl,now);
+        scheduleFloatingLyricAnimation(textEl);
+      }
+    });
+  }
+  function renderDesktopLyrics(words='',index=activeLyricIndex(audio.currentTime),now=audio.currentTime){
     const el=DOC.getElementById(`${ID}-desktop-lyrics`);if(!el)return;
     updateQuickLyricsButton();
     const mobile=isMobile(),currentWords=words.trim(),visible=settings.floatingLyrics&&!!currentWords;
-    el.classList.toggle('hidden',!visible);if(!visible)return;
+    el.classList.toggle('hidden',!visible);
+    if(!visible){stopFloatingLyricAnimation();return;}
     const lines=currentWords.split('\n',2);
     if(lines.length===1){
-      const next=lyricTimeline[activeLyricIndex(audio.currentTime)+1]?.lines.find(Boolean);
+      const next=lyricTimeline[index+1]?.lines.find(Boolean);
       if(next)lines.push(next);
     }
-    const textEl=el.querySelector('.lyric-text'),text=lines.join('\n');
-    if(textEl&&textEl.textContent!==text)textEl.textContent=text;
-    el.classList.toggle('gradient',!!settings.lyricGradient);el.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
+    const textEl=el.querySelector('.lyric-text'),text=lines.join('\n'),row=lyricTimeline[index];
+    const live=!!(settings.lyricLiveColor&&row?.lines[0]===lines[0]);
+    if(textEl&&live){
+      renderFloatingLyricSegments(textEl,row,lyricTimeline[index+1]?.time,lines);
+      paintFloatingLyricProgress(textEl,now);
+      scheduleFloatingLyricAnimation(textEl);
+    }else{
+      stopFloatingLyricAnimation();
+      if(textEl&&(textEl._liveLyric||textEl.textContent!==text))textEl.textContent=text;
+      if(textEl)textEl._liveLyric=null;
+    }
+    el.classList.toggle('gradient',!!settings.lyricGradient&&!live);el.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
+    if(live)el.style.setProperty('--lyric-sung-end',settings.lyricGradient?settings.lyricGradientColor:settings.lyricColor);
     el.style.setProperty('position','fixed','important');el.style.setProperty('z-index','2147483646','important');el.style.setProperty('right','auto','important');
     if(mobile){
       el.style.setProperty('width','min(82vw,320px)','important');el.style.setProperty('max-width','calc(100vw - 24px)','important');el.style.setProperty('padding','5px 18px 5px 7px','important');el.style.setProperty('font-size',`${Math.max(10,Math.min(42,Number(settings.mobileLyricFontSize)||14))}px`,'important');el.style.setProperty('line-height','1.35','important');
@@ -1356,7 +1454,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       const position=settings.desktopPosition||defaults.desktopPosition,viewHeight=ROOT.visualViewport?.height||ROOT.innerHeight||700,lyricHeight=el.getBoundingClientRect().height/viewHeight*100,maxBottom=Math.max(1,99-lyricHeight),left=Math.max(1,Math.min(99,Number(position.left)||50)),bottom=Math.max(1,Math.min(maxBottom,Number(position.bottom)||11));
       settings.desktopPosition={left,bottom};el.style.setProperty('left',`${left}%`,'important');el.style.setProperty('top','auto','important');el.style.setProperty('bottom',`${bottom}vh`,'important');el.style.setProperty('transform','translateX(-50%)','important');
     }
-    el.style.setProperty('white-space','pre-line','important');el.style.cursor=settings.lyricsLocked?'default':'move';el.style.color=settings.lyricColor;el.style.backgroundImage='';if(textEl)textEl.style.backgroundImage=settings.lyricGradient?`linear-gradient(90deg,${settings.lyricColor},${settings.lyricGradientColor},${settings.lyricColor})`:'';
+    el.style.setProperty('white-space','pre-line','important');el.style.cursor=settings.lyricsLocked?'default':'move';el.style.color=settings.lyricColor;el.style.backgroundImage='';if(textEl)textEl.style.backgroundImage=settings.lyricGradient&&!live?`linear-gradient(90deg,${settings.lyricColor},${settings.lyricGradientColor},${settings.lyricColor})`:'';
   }
   function gdSong(source,x){
     const mediaId=String(x.mediaId??x.id??'');
@@ -1807,7 +1905,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function getSongAlbum(song){const album=song?.album??song?.al;return String(typeof album==='object'?album?.name||'':album||'').trim();}
   function lyricText(value){if(typeof value==='string')return value;if(!value||typeof value!=='object')return '';for(const key of ['lyric','lrc','text','content'])if(typeof value[key]==='string')return value[key];return '';}
   function extractLyrics(data){const groups=[data,data?.data,data?.result,data?.data?.[0],data?.result?.[0]],pick=keys=>{for(const group of groups)for(const key of keys){const text=lyricText(group?.[key]);if(text)return text;}return '';};return {original:pick(['lyric','lrc']),translation:pick(['tlyric','translation','translatedLyric','transLyric','trans','translate','lyricTranslation'])};}
-  // LRC is line-timed; never manufacture word timings from character counts.
+  // Ordinary LRC provides line timestamps. Enhanced LRC can also include inline word timestamps.
   function lrcTime(value){
     const text=String(value).trim();
     let m=text.match(/^(\d{1,3}):([0-5]?\d)(?:[.,:](\d{1,3}))?$/);
@@ -1816,14 +1914,49 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3])+Number(`0.${m[4]}`):null;
   }
   function parseLrcGroups(text){
-    const raw=String(text||''),offsets=[...raw.matchAll(/\[offset\s*:\s*([+-]?\d+)\]/gi)],offset=Number(offsets.at(-1)?.[1]||0)/1000,map=new Map();
+    const raw=String(text||''),offsets=[...raw.matchAll(/\[offset\s*:\s*([+-]?\d+)\]/gi)];
+    const offset=Number(offsets.at(-1)?.[1]||0)/1000,map=new Map();
     for(const line of raw.split(/\r\n?|\n/)){
       const times=[...line.matchAll(/\[([^\]]+)\]/g)].map(m=>lrcTime(m[1])).filter(t=>t!==null);
       if(!times.length)continue;
-      const words=line.replace(/\[[^\]]*\]/g,'').replace(/<\d+:\d+(?:[.,]\d+)?>/g,'').trim();
-      for(const time of times){const key=Math.round(Math.max(0,time+offset)*1000)/1000,entry=map.get(key)||{time:key,lines:[]};if(words&&!entry.lines.includes(words))entry.lines.push(words);map.set(key,entry);}
+      const content=line.replace(/\[[^\]]*\]/g,'');
+      const tags=[...content.matchAll(/<(\d{1,3}:[0-5]?\d(?:[.,:]\d{1,3})?)>/g)];
+      const words=content.replace(/<\d+:\d+(?:[.,:]\d+)?>/g,'').trim();
+      const timed=tags.length?enhancedLrcWords(content,tags,times[0],words):null;
+      for(const time of times){
+        const key=Math.round(Math.max(0,time+offset)*1000)/1000;
+        const entry=map.get(key)||{time:key,lines:[]};
+        if(words&&!entry.lines.includes(words)){
+          if(timed&&!entry.lines.length){
+            const shift=time+offset-times[0];
+            entry.wordTimes=timed.map(({text,start,end})=>({
+              text,start:Math.max(key,start+shift),end:end===null?null:Math.max(key,end+shift),
+            }));
+          }
+          entry.lines.push(words);
+        }
+        map.set(key,entry);
+      }
     }
     return [...map.values()].sort((a,b)=>a.time-b.time);
+  }
+  function enhancedLrcWords(content,tags,lineStart,expected){
+    const parts=[];
+    let start=lineStart,from=0;
+    for(const tag of tags){
+      const end=lrcTime(tag[1]);
+      if(end<start-.001)return null;
+      parts.push({text:content.slice(from,tag.index),start,end:Math.max(start,end)});
+      start=Math.max(start,end);
+      from=tag.index+tag[0].length;
+    }
+    parts.push({text:content.slice(from),start,end:null});
+    while(parts.length&&!parts[0].text.trim())parts.shift();
+    while(parts.length&&!parts.at(-1).text.trim())parts.pop();
+    if(!parts.length)return null;
+    parts[0].text=parts[0].text.trimStart();
+    parts.at(-1).text=parts.at(-1).text.trimEnd();
+    return parts.map(part=>part.text).join('')===expected?parts.filter(part=>part.text):null;
   }
   function translationRowIndex(rows,time){
     let best=-1,diff=.081;
@@ -1834,7 +1967,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const original=parseLrcGroups(originalText),translated=parseLrcGroups(translationText);
     if(!original.length)return translated;
     const used=new Set();
-    return original.map((row,index)=>{const lines=[...row.lines],i=translationRowIndex(translated,row.time);if(lines.length&&i>=0&&!used.has(i)&&translationRowIndex(original,translated[i].time)===index){used.add(i);for(const line of translated[i].lines)if(!lines.includes(line))lines.push(line);}return{time:row.time,lines};});
+    return original.map((row,index)=>{const lines=[...row.lines],i=translationRowIndex(translated,row.time);if(lines.length&&i>=0&&!used.has(i)&&translationRowIndex(original,translated[i].time)===index){used.add(i);for(const line of translated[i].lines)if(!lines.includes(line))lines.push(line);}return{...row,lines};});
   }
   function songDuration(song){
     if(Number(song?.dt)>0)return Number(song.dt)/1000;
@@ -2152,7 +2285,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const shownNow=progressSeeking&&usableDuration?duration*pendingProgressValue/1000:now;
     el.querySelector('.time').textContent=`${clock(shownNow)} / ${clock(usableDuration?duration:0)}`;
     const index=activeLyricIndex(now),active=lyricTimeline[index],words=audio.ended?'':active?.lines?.filter(Boolean).join('\n')||'';
-    currentLyricWords=words;el.querySelector('.lyrics').textContent=words||(lyricTimeline.length?'♪':lyricState);renderImmersiveLyrics(audio.ended?-1:index);renderDesktopLyrics(words);maybeMidSongCompanion();const companionLine=DOC.querySelector(`#${ID}-companion .companion-song`);if(companionLine){const song=companionSongContext();companionLine.textContent=`♫ ${song.song}${song.lyric?` · ${song.lyric}`:''}`;}
+    currentLyricWords=words;el.querySelector('.lyrics').textContent=words||(lyricTimeline.length?'♪':lyricState);renderImmersiveLyrics(audio.ended?-1:index);renderDesktopLyrics(words,index,now);maybeMidSongCompanion();const companionLine=DOC.querySelector(`#${ID}-companion .companion-song`);if(companionLine){const song=companionSongContext();companionLine.textContent=`♫ ${song.song}${song.lyric?` · ${song.lyric}`:''}`;}
     updateMediaPosition();
   }
   const mediaText = code => ({1:'MEDIA_ERR_ABORTED：音频加载被中止',2:'MEDIA_ERR_NETWORK：加载音频时发生网络错误',3:'MEDIA_ERR_DECODE：浏览器无法解码音频',4:'MEDIA_ERR_SRC_NOT_SUPPORTED：音频地址或格式不受支持'})[code] || '未知音频错误';
@@ -4463,7 +4596,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(event?.persisted)checkpointPlayback(true);else cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); loadPlaybackRecord();const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();restorePlaybackSelection();DOC.addEventListener('visibilitychange',flushPlaybackOnHide);audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -4602,6 +4735,7 @@ ${latest.slice(-1500)}
         <label><span>手机字号 <output data-for="mobileLyricFontSize"></output></span><input type="range" name="mobileLyricFontSize" min="10" max="42"></label>
       </div>
       <label class="lyric-option"><span>渐变文字</span><input name="lyricGradient" type="checkbox"></label>
+      <label class="lyric-option"><span>实时变色</span><input name="lyricLiveColor" type="checkbox"></label>
       <div class="lyric-colors"><label><span>歌词主色</span><input name="lyricColor" type="color"></label><label><span>渐变副色</span><input name="lyricGradientColor" type="color"></label></div>
       <button type="button" data-lyrics-reset>重置位置与字号</button>`;
     DOC.body.appendChild(menu);
@@ -4609,8 +4743,10 @@ ${latest.slice(-1500)}
     const preview=()=>{
       for(const name of ['desktopLyricFontSize','mobileLyricFontSize'])menu.querySelector(`[data-for="${name}"]`).textContent=`${settings[name]} px`;
       const text=menu.querySelector('.lyrics-preview span');text.style.color=settings.lyricColor;
-      text.style.backgroundImage=settings.lyricGradient?`linear-gradient(90deg,${settings.lyricColor},${settings.lyricGradientColor})`:'';
-      text.classList.toggle('gradient',!!settings.lyricGradient);menu.querySelector('[name=lyricGradientColor]').disabled=!settings.lyricGradient;
+      const end=settings.lyricGradient?settings.lyricGradientColor:settings.lyricColor;
+      const gradient=`linear-gradient(90deg,${settings.lyricColor},${end})`;
+      text.style.backgroundImage=settings.lyricLiveColor?`linear-gradient(90deg,transparent 56%,#a2a2ad 56%),${gradient}`:settings.lyricGradient?gradient:'';
+      text.classList.toggle('gradient',!!(settings.lyricGradient||settings.lyricLiveColor));menu.querySelector('[name=lyricGradientColor]').disabled=!settings.lyricGradient;
     };
     const refresh=()=>{
       syncFloatingPanelThemes();
