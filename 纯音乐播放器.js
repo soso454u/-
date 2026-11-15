@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.92';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.93';
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -1587,8 +1587,37 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const box=DOC.querySelector(`#${ID} .list`),rows=playbackRecord.recent;
     if(!box)return;
     box.hidden=false;
-    const time=new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    box.innerHTML=`<div class="row batch-heading"><b>最近播放</b><button type="button" data-history-back>返回队列</button>${rows.length?'<button type="button" data-history-clear>清空记录</button>':''}</div>${rows.length?rows.map(({song,playedAt},index)=>`<article class="row" data-history-index="${index}"><button type="button" data-history-play><b>${esc(song.title)}</b><span>${esc(song.artist||'未知歌手')}</span></button><time datetime="${new Date(playedAt).toISOString()}">${esc(time.format(playedAt))}</time><button type="button" data-history-add title="加入播放队列" aria-label="将 ${esc(song.title)} 加入播放队列">＋</button></article>`).join(''):'<div class="row">播过的歌曲会显示在这里</div>'}`;
+    const dayAndTime=new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const timeOnly=new Intl.DateTimeFormat('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    const today=new Date().toDateString();
+    const artwork=new Map();
+    for(const song of [current,...results,...queue,...(settings.favorites||[])]){
+      if(!/^https?:\/\//i.test(song?.cover||''))continue;
+      artwork.set(playbackRecordIdentity(playbackRecordTrack(song)),song.cover);
+    }
+    const songs=rows.map(({song,playedAt},index)=>{
+      const date=new Date(playedAt),fullTime=dayAndTime.format(date);
+      const timestamp=date.toDateString()===today?timeOnly.format(date):fullTime;
+      const cover=artwork.get(playbackRecordIdentity(song));
+      return `<article class="row" data-history-index="${index}">
+        <button type="button" data-history-play>
+          <span class="history-art" aria-hidden="true">♪${cover?`<img src="${esc(cover)}" alt="" loading="lazy" decoding="async">`:''}</span>
+          <span class="history-track"><b>${esc(song.title)}</b><small>${esc(song.artist||'未知歌手')}</small></span>
+          <time datetime="${date.toISOString()}" title="${esc(fullTime)}">${esc(timestamp)}</time>
+        </button>
+        <button type="button" data-history-add title="加入播放队列" aria-label="将 ${esc(song.title)} 加入播放队列">＋</button>
+      </article>`;
+    }).join('');
+    box.innerHTML=`<div class="row batch-heading history-heading">
+      <b>最近播放</b>
+      <button type="button" data-history-back>返回队列</button>
+      ${rows.length?'<button type="button" data-history-clear>清空记录</button>':''}
+    </div>${songs||'<div class="row">播过的歌曲会显示在这里</div>'}`;
+    box.querySelectorAll('.history-art img').forEach(img=>{
+      const remove=()=>img.remove();
+      img.addEventListener('error',remove,{once:true});
+      if(img.complete&&!img.naturalWidth)remove();
+    });
     box.onclick=event=>{
       if(event.target.closest('[data-history-back]')){render(queue,'播放队列','queue');return;}
       if(event.target.closest('[data-history-clear]')){
@@ -4201,14 +4230,39 @@ ${latest.slice(-1500)}
       #${ID}:not(.mini):not(.immersive) .list .row:not(.batch-heading) span:not(.row-tools){font-size:11px!important;line-height:1.5!important}
       #${ID}:not(.mini):not(.immersive) .row .row-tools{flex:0 0 auto!important;gap:3px!important;max-width:70px!important;white-space:nowrap!important;display:flex!important;align-items:center!important}
       #${ID}:not(.mini):not(.immersive) .row .row-tools button{width:28px!important;min-width:28px!important;height:30px!important;min-height:30px!important;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;font:400 18px/1 system-ui!important}
-      #${ID} .list [data-history-play]{flex:1 1 0;min-width:0;text-align:left;background:transparent;border:0;padding:4px 2px}
-      #${ID} .list [data-history-index] time{font-size:11px;opacity:.75;white-space:nowrap}
-      #${ID} .list [data-history-add]{flex:0 0 auto;padding:5px 7px;min-width:30px}
+      #${ID}:not(.mini):not(.immersive) .list>[data-history-index]{gap:3px!important;padding:4px 0!important;cursor:default}
+      #${ID} .list [data-history-index]>button{
+        border:0!important;background:transparent!important;box-shadow:none!important;color:inherit!important
+      }
+      #${ID} .list [data-history-index]>button:focus-visible{outline:2px solid var(--smp-switch,#6a9d89)!important;outline-offset:-2px}
+      #${ID} .list [data-history-index]>button:hover{background:var(--smp-control-bg)!important}
+      #${ID} .list [data-history-play]{
+        display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;
+        flex:1 1 0;min-width:0;min-height:46px;padding:6px!important;text-align:left;border-radius:9px!important
+      }
+      #${ID} .list [data-history-play]>.history-art{
+        display:grid;position:relative;place-items:center;width:calc(36px * var(--list-scale,1));
+        aspect-ratio:1;border-radius:7px;background:var(--smp-control-bg);
+        color:var(--smp-muted)!important;font-size:16px!important
+      }
+      #${ID} .list .history-art>img{position:absolute;inset:0;width:100%!important;height:100%!important;object-fit:cover;border-radius:inherit}
+      #${ID} .list .history-track{display:grid;gap:2px;min-width:0}
+      #${ID} .list .history-track small{
+        display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--smp-muted)!important;
+        font-size:calc(11px * var(--text-scale,1));line-height:1.35
+      }
+      #${ID} .list [data-history-index] time{color:var(--smp-muted);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+      #${ID} .list [data-history-index]>[data-history-add]{flex:0 0 34px;min-width:34px;min-height:36px;padding:0!important;border-radius:8px!important}
       #${ID} .row-tools>button[hidden]{display:none!important}
       #${ID}:not(.mini):not(.immersive) .row .row-tools .is-favorite{color:#e95067!important;-webkit-text-fill-color:#e95067!important}
       #${ID}:not(.mini):not(.immersive) .list .batch-heading{gap:7px!important;flex-wrap:wrap!important;border-bottom:0!important;padding:14px 0 10px!important}
       #${ID}:not(.mini):not(.immersive) .list .batch-heading>b{font-size:15px!important;font-weight:600!important;flex-basis:100%!important;min-width:0!important;margin:0 0 6px!important}
       #${ID}:not(.mini):not(.immersive) .list .batch-heading>button{padding:6px 10px!important;font-size:11px!important;border:0!important;min-height:30px!important;background:var(--smp-control-bg)!important}
+      #${ID}:not(.mini):not(.immersive) .list>.history-heading{gap:4px!important;padding:8px 0!important}
+      #${ID}:not(.mini):not(.immersive) .list>.history-heading>b{flex:1 0 auto!important;margin:0!important}
+      #${ID}:not(.mini):not(.immersive) .list>.history-heading>button{
+        background:transparent!important;box-shadow:none!important;color:var(--smp-muted)!important
+      }
       #${ID}:not(.mini):not(.immersive) .list .batch-heading>[data-playlist-play-all],#${ID}:not(.mini):not(.immersive) .list .batch-heading>[data-heading-action=play]{background:var(--smp-switch,#6a9d89)!important;color:#fff!important}
       #${ID}:not(.mini):not(.immersive) .lyrics{flex:0 0 auto!important;min-height:30px!important;max-height:64px!important;margin:0!important;padding:10px 4px 8px!important;border:0!important;border-top:1px solid var(--smp-control-border)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;font-size:13px!important;font-family:system-ui,sans-serif!important;font-style:normal!important;line-height:1.5!important;text-align:center!important}
       #${ID}:not(.mini):not(.immersive) .controls{display:grid!important;grid-template-columns:1fr 34px 44px 34px 1fr!important;gap:8px!important;align-items:center!important;margin:0!important;padding:3px 0 0!important}
