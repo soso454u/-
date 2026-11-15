@@ -43,5 +43,48 @@ async function runSeleneHotReloadRegression(entryUrl) {
   assert(!document.getElementById('safe-music-player'), 'disable waits for an in-flight import without resurrecting the player');
   await racingEntry.onEnable();
   assert(Boolean(window.__SELENE_MUSIC_PLAYER__), 'a disabled in-flight import can be enabled again');
+
+  const api = window.__SELENE_MUSIC_PLAYER__;
+  const oldWindow = document.getElementById('safe-music-player');
+  const getState = api.getState;
+  api.getState = () => ({ ...getState(), version: 'previous-version' });
+  const replacement = await load(`qa-replace-${Date.now()}`);
+  await replacement.onUpdate();
+  assert(!oldWindow.isConnected && window.__SELENE_MUSIC_PLAYER__ !== api, 'an old-version DOM is replaced on update');
+  await racingEntry.onDisable();
+  assert(document.querySelectorAll('#safe-music-player').length === 1, 'a late disable cannot remove the replacement');
+
+  // Provide the magic-wand host when the test page does not already have it.
+  let menuHost = document.getElementById('extensionsMenu');
+  if (!menuHost) {
+    menuHost = document.createElement('div');
+    menuHost.id = 'extensionsMenu';
+    document.body.append(menuHost);
+  }
+  const currentApi = window.__SELENE_MUSIC_PLAYER__;
+  currentApi.setMenuEnabled(true);
+  const menuItem = () => menuHost.querySelector('.selene-menu-item');
+  const player = document.getElementById('safe-music-player');
+  currentApi.setVisible(true);
+  player.style.setProperty('left', '50000px', 'important');
+  player.style.setProperty('top', '50000px', 'important');
+  menuItem().click();
+  const rect = player.getBoundingClientRect();
+  assert(!player.hidden && rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight, 'the first menu click rescues a window placed off-screen');
+  menuItem().click();
+  assert(player.hidden, 'the menu can still hide a reachable window');
+  menuItem().click();
+  player.dispatchEvent(new Event('selene:mini'));
+  assert(player.classList.contains('mini'), 'mini mode is active');
+  menuItem().click();
+  assert(!player.hidden && !player.classList.contains('mini'), 'the menu expands the floating player');
+
+  const oldMenu = menuItem();
+  const newHost = menuHost.cloneNode(false);
+  menuHost.replaceWith(newHost);
+  menuHost = newHost;
+  await new Promise(resolve => setTimeout(resolve, 160));
+  assert(menuItem() && menuItem() !== oldMenu && document.querySelectorAll('#safe-music-player-menu').length === 1, 'a replaced menu host gets one live entry');
+  await replacement.onHotUnload();
   return { passed: checks.length };
 }

@@ -7,7 +7,7 @@ const ROOT = (() => {
 
 // Every local runtime asset inherits the hot reload token, including lazy reloads.
 // This fulfils extension_hot_reload.self_managed_modules in manifest.json.
-const PLAYER_MODULE_VERSION = '2.10.93';
+const PLAYER_MODULE_VERSION = '2.10.94';
 const entryUrl = new URL(import.meta.url);
 const hotReloadToken = entryUrl.searchParams.get('st_hot_reload');
 const extensionAsset = file => {
@@ -32,6 +32,8 @@ const PANEL_ID = 'selene-music-extension-settings';
 const FIRST_RUN_KEY = 'selene-music-extension-first-run-v1';
 const MENU_DEFAULT_KEY = 'selene-music-extension-menu-default-v1';
 let panelObserver;
+let panelPlayer;
+const panelOwner = { detach: detachPanel };
 
 function api() {
   return ROOT.__SELENE_MUSIC_PLAYER__;
@@ -97,7 +99,13 @@ function bindSwitch(selector, setter) {
 }
 
 function mountPanel() {
-  if (DOC.getElementById(PANEL_ID)) return;
+  const player = DOC.getElementById('safe-music-player');
+  const previous = DOC.getElementById(PANEL_ID);
+  if (previous && panelPlayer === player) return;
+  if (previous) {
+    detachPanel();
+    previous.remove();
+  }
 
   const getContainer = () => $(
     DOC.getElementById('selene_music_container')
@@ -214,7 +222,7 @@ function mountPanel() {
   }
 
   ROOT.addEventListener('selene-music-player-state', syncPanel);
-  const player = DOC.getElementById('safe-music-player');
+  panelPlayer = player;
   if (player) {
     panelObserver = new ROOT.MutationObserver(syncPanel);
     panelObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
@@ -224,7 +232,8 @@ function mountPanel() {
 
 async function ensurePlayer() {
   configureRuntimeAssets();
-  if (DOC.getElementById('safe-music-player')) return;
+  const state = api()?.getState?.();
+  if (state?.version === PLAYER_MODULE_VERSION && state.loaded) return;
   if (!playerLoad) {
     const url = playerModuleUrl();
     url.searchParams.set('instance', String(++playerLoadSequence));
@@ -236,8 +245,13 @@ async function ensurePlayer() {
 async function activateRuntime({ announce = false, forceVisible = false } = {}) {
   lifecycleActive = true;
   const epoch = lifecycleEpoch;
+  if (ROOT.__SELENE_EXTENSION_PANEL_OWNER__ !== panelOwner) {
+    ROOT.__SELENE_EXTENSION_PANEL_OWNER__?.detach();
+    DOC.getElementById(PANEL_ID)?.remove();
+    ROOT.__SELENE_EXTENSION_PANEL_OWNER__ = panelOwner;
+  }
   await ensurePlayer();
-  if (!lifecycleActive || epoch !== lifecycleEpoch) return;
+  if (!lifecycleActive || epoch !== lifecycleEpoch || ROOT.__SELENE_EXTENSION_PANEL_OWNER__ !== panelOwner) return;
   mountPanel();
   if (forceVisible) api()?.setVisible(true);
   syncPanel();
@@ -264,15 +278,21 @@ export async function onActivate() {
   await activateRuntime();
 }
 
+function detachPanel() {
+  panelObserver?.disconnect();
+  panelObserver = undefined;
+  panelPlayer = undefined;
+  ROOT.removeEventListener('selene-music-player-state', syncPanel);
+}
+
 export async function onDisable() {
   lifecycleActive = false;
   lifecycleEpoch++;
   // A pending dynamic import must settle before we declare the old runtime gone.
   await playerLoad?.catch(() => {});
-  if (lifecycleActive) return;
-  panelObserver?.disconnect();
-  panelObserver = undefined;
-  ROOT.removeEventListener('selene-music-player-state', syncPanel);
+  if (lifecycleActive || ROOT.__SELENE_EXTENSION_PANEL_OWNER__ !== panelOwner) return;
+  detachPanel();
+  delete ROOT.__SELENE_EXTENSION_PANEL_OWNER__;
   ROOT.__SAFE_MUSIC_CLEANUP__?.();
   DOC.getElementById(PANEL_ID)?.remove();
   delete ROOT.__SELENE_EXTENSION_MODE__;

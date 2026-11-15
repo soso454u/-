@@ -4,7 +4,8 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.93';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.94';
+  try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const SELENE_METING_API = 'https://selene-meting-api.onrender.com/api';
@@ -881,7 +882,6 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }catch(error){console.warn('[音乐播放器] 歌曲缓存失败',error);setStatus(`缓存失败：${error.message}`);if(!quiet)toast('error',`缓存失败：${error.message}`);return false;}
   }
 
-  try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch {}
   DOC.addEventListener('visibilitychange',ensureKeepAlive);
   DOC.addEventListener('resume',ensureKeepAlive);
   ROOT.addEventListener('pageshow',ensureKeepAlive);
@@ -1248,7 +1248,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function restoreMiniGeometry(el,position){
     const {left,top,edge,dock}=position;
-    return placeMiniWindow(el,left,top,{snap:!!settings.miniSnap,edge,dock:dock||(edge?'edge':undefined)});
+    const view=miniViewport();
+    return placeMiniWindow(el,Number.isFinite(left)?left:view.left+view.width,Number.isFinite(top)?top:view.top+12,
+      {snap:!!settings.miniSnap,edge,dock:dock||(edge?'edge':undefined)});
   }
   function preserveMiniGeometry(el=DOC.getElementById(ID)){
     if(!el?.classList.contains('mini'))return false;
@@ -3951,10 +3953,67 @@ ${latest.slice(-1500)}
     apply(icon,{display:'flex',flex:'0 0 20px','align-items':'center','justify-content':'center',width:'20px',height:'20px',padding:'0',margin:'0',color:'inherit','pointer-events':'none'});
     apply(label,{display:'block',flex:'1 1 auto','min-width':'0',padding:'0',margin:'0','white-space':'nowrap','text-align':'left','line-height':'normal',color:'inherit','-webkit-text-fill-color':'currentColor',font:'inherit',overflow:'hidden','text-overflow':'ellipsis','writing-mode':'horizontal-tb'});
   }
+  const magicButtonSelector='#extensionsMenuButton,#extensions_menu_button,[data-testid="extensions-menu-button"]';
+  function togglePlayerFromMenu(){
+    if(disposed)return;
+    const player=DOC.getElementById(ID);
+    if(!player)return;
+    const expand=player.classList.contains('mini');
+    setPublicVisible(expand||!playerWindowReachable(player),{expand});
+  }
+  function scheduleMenuRefresh(){
+    if(disposed||menuAddTimer||EXTENSION_MODE&&settings.menuEnabled===false)return;
+    menuAddTimer=ROOT.setTimeout(menu,80);
+  }
   function menu(){
-    const add=()=>{menuAddTimer=0;const existing=DOC.getElementById(`${ID}-menu`);if(disposed||(EXTENSION_MODE&&settings.menuEnabled===false)){existing?.remove();return;}if(existing?.isConnected)return;existing?.remove();const host=['#extensionsMenu','[data-testid="extensions-menu"]','#extensionsMenuList','#extensionsMenuDrawer .list-group','#extensionsMenuDrawer','#extensionsMenu .drawer-content','#extensionsMenu .list-group'].map(x=>DOC.querySelector(x)).find(Boolean);if(!host)return;ensureMenuStyle();const x=DOC.createElement('div');x.id=`${ID}-menu`;x.className='extension_container';x.innerHTML=`<div class="selene-menu-item list-group-item flex-container flexGap5 interactable" role="button" tabindex="0"><div class="fa-fw fa-solid fa-music extensionsMenuExtensionButton" aria-hidden="true"></div><span class="selene-menu-label">音乐播放器</span></div>`;const item=x.firstElementChild,toggle=()=>setPublicVisible(!settings.enabled);item.onclick=toggle;item.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};styleMenuEntry(x);host.appendChild(x);};
-    const btn=DOC.querySelector('#extensionsMenuButton,#extensions_menu_button,[data-testid="extensions-menu-button"]'),previous=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(previous&&previous.btn!==btn){previous.btn?.removeEventListener('click',previous.handler);previous.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}if(btn&&!ROOT.__SAFE_MUSIC_MENU_HANDLER__){const handler=()=>{if(menuAddTimer)ROOT.clearTimeout(menuAddTimer);menuAddTimer=ROOT.setTimeout(add,80);};ROOT.__SAFE_MUSIC_MENU_HANDLER__={btn,handler};btn.dataset.safeMusic='1';btn.addEventListener('click',handler);}add();
-    if(!menuObserver&&DOC.body){menuObserver=new ROOT.MutationObserver(()=>{const item=DOC.getElementById(`${ID}-menu`),button=DOC.querySelector('#extensionsMenuButton,#extensions_menu_button,[data-testid="extensions-menu-button"]');if(item?.isConnected&&(!button||ROOT.__SAFE_MUSIC_MENU_HANDLER__?.btn===button))return;if(menuAddTimer)ROOT.clearTimeout(menuAddTimer);menuAddTimer=ROOT.setTimeout(menu,80);});menuObserver.observe(DOC.body,{childList:true,subtree:true});}
+    if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}
+    if(disposed)return;
+    const existing=DOC.getElementById(`${ID}-menu`);
+    const enabled=!EXTENSION_MODE||settings.menuEnabled!==false;
+    const button=enabled?DOC.querySelector(magicButtonSelector):null;
+    const previous=ROOT.__SAFE_MUSIC_MENU_HANDLER__;
+    if(previous&&(previous.btn!==button||previous.handler!==scheduleMenuRefresh)){
+      previous.btn?.removeEventListener('click',previous.handler);
+      previous.btn?.removeAttribute('data-safe-music');
+      delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;
+    }
+    if(!enabled){
+      existing?.remove();
+      menuObserver?.disconnect();
+      menuObserver=null;
+      return;
+    }
+    if(button&&!ROOT.__SAFE_MUSIC_MENU_HANDLER__){
+      ROOT.__SAFE_MUSIC_MENU_HANDLER__={btn:button,handler:scheduleMenuRefresh};
+      button.dataset.safeMusic='1';
+      button.addEventListener('click',scheduleMenuRefresh);
+    }
+    if(existing?.firstElementChild?.onclick!==togglePlayerFromMenu){
+      existing?.remove();
+      const host=['#extensionsMenu','[data-testid="extensions-menu"]','#extensionsMenuList','#extensionsMenuDrawer .list-group','#extensionsMenuDrawer'].map(selector=>DOC.querySelector(selector)).find(Boolean);
+      if(host){
+        ensureMenuStyle();
+        const entry=DOC.createElement('div');
+        entry.id=`${ID}-menu`;
+        entry.className='extension_container';
+        entry.innerHTML='<div class="selene-menu-item list-group-item flex-container flexGap5 interactable" role="button" tabindex="0"><div class="fa-fw fa-solid fa-music extensionsMenuExtensionButton" aria-hidden="true"></div><span class="selene-menu-label">音乐播放器</span></div>';
+        const item=entry.firstElementChild;
+        item.onclick=togglePlayerFromMenu;
+        item.onkeydown=event=>{
+          if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlayerFromMenu();}
+        };
+        styleMenuEntry(entry);
+        host.appendChild(entry);
+      }
+    }
+    if(!menuObserver&&DOC.body){
+      menuObserver=new ROOT.MutationObserver(()=>{
+        if(menuAddTimer)return;
+        const item=DOC.getElementById(`${ID}-menu`);
+        if(!item||DOC.querySelector(magicButtonSelector)!==(ROOT.__SAFE_MUSIC_MENU_HANDLER__?.btn||null))scheduleMenuRefresh();
+      });
+      menuObserver.observe(DOC.body,{childList:true,subtree:true});
+    }
   }
   let libraryObserver=null,skinMenuCleanup=null,lyricMenuCleanup=null,sourceMenuCleanup=null,scriptRecoveryListener=null;
   function syncLibraryNavigation(view){
@@ -4800,7 +4859,8 @@ ${latest.slice(-1500)}
       settings.miniReturnPosition=settings[playerMiniPositionKey()]||{
         left:Math.round(rect.left),top:Math.round(rect.top),...(miniAnchor?{dock:miniAnchor}:miniEdge?{dock:'edge',edge:miniEdge}:{}),
       };
-      const width=Math.min(restore.width,view.width-12),height=Math.min(restore.height,view.height-12);
+      const width=Math.max(1,Math.min(Number(restore.width)||365,view.width-12));
+      const height=Math.max(1,Math.min(Number(restore.height)||600,view.height-12));
       const left=Math.max(view.left+6,Math.min(view.left+view.width-width-6,restore.left??rect.left)),top=Math.max(view.top+6,Math.min(view.top+view.height-height-6,restore.top??rect.top));
       settings.miniMode=false;el.classList.remove('mini');delete el.dataset.miniEdge;delete el.dataset.miniDock;delete el.dataset.miniAnchor;watchMiniDock();
       for(const key of ['min-width','min-height','max-width','max-height'])el.style.removeProperty(key);
@@ -4809,6 +4869,7 @@ ${latest.slice(-1500)}
     };
     title.onclick=e=>{e.stopPropagation();enter();};
     el.addEventListener('selene:mini',enter);
+    el.addEventListener('selene:expand',exit);
     cover.onclick=e=>{if(!e.detail)exit();}; // Keyboard and assistive technology.
     const tap=()=>{
       if(miniTapTimer){exit();return;}
@@ -4903,15 +4964,63 @@ ${latest.slice(-1500)}
   function emitPublicState(){
     try{ROOT.dispatchEvent(new ROOT.CustomEvent('selene-music-player-state',{detail:publicState()}));}catch{}
   }
-  function applyPlayerVisibility(visible){
+  function playerWindowReachable(player){
+    if(player.hidden||player.classList.contains('hidden'))return false;
+    const style=ROOT.getComputedStyle(player);
+    if(style.display==='none'||style.visibility!=='visible'||Number(style.opacity)===0)return false;
+    const view=miniViewport(),header=player.querySelector('.selene-player-head')||player;
+    const rect=header.getBoundingClientRect();
+    const visibleWidth=Math.min(view.left+view.width,rect.right)-Math.max(view.left,rect.left);
+    const visibleHeight=Math.min(view.top+view.height,rect.bottom)-Math.max(view.top,rect.top);
+    return rect.width>0&&rect.height>0&&visibleWidth>=Math.min(rect.width,120)&&visibleHeight>=Math.min(rect.height,28);
+  }
+  function fitPlayerWindow(player){
+    const style=ROOT.getComputedStyle(player);
+    if(style.display==='none')player.style.setProperty('display','block','important');
+    if(style.visibility!=='visible')player.style.setProperty('visibility','visible','important');
+    if(Number(style.opacity)===0)player.style.setProperty('opacity','1','important');
+    player.classList.remove('pointer-interacting');
+    player.style.removeProperty('transform');
+    if(preserveMiniGeometry(player))return;
+
+    const view=miniViewport(),rect=player.getBoundingClientRect(),gap=6;
+    const maxWidth=Math.max(1,view.width-2*gap),maxHeight=Math.max(1,view.height-2*gap);
+    const width=Math.min(rect.width,maxWidth),height=Math.min(rect.height,maxHeight);
+    const left=Math.max(view.left+gap,Math.min(rect.left,view.left+view.width-width-gap));
+    const top=Math.max(view.top+gap,Math.min(rect.top,view.top+view.height-height-gap));
+    if(width<rect.width){
+      player.style.setProperty('min-width','0','important');
+      player.style.setProperty('width',`${width}px`,'important');
+    }
+    if(height<rect.height){
+      player.style.setProperty('min-height','0','important');
+      player.style.setProperty('height',`${height}px`,'important');
+    }
+    if(Math.abs(left-rect.left)<1&&Math.abs(top-rect.top)<1&&width===rect.width&&height===rect.height)return;
+    player.style.setProperty('left',`${left}px`,'important');
+    player.style.setProperty('top',`${top}px`,'important');
+    player.style.setProperty('right','auto','important');
+    player.style.setProperty('bottom','auto','important');
+  }
+  function applyPlayerVisibility(visible,{expand=false}={}){
     const player=DOC.getElementById(ID);if(!player)return;
     player.hidden=!visible;player.classList.toggle('hidden',!visible);
-    if(visible){player.style.removeProperty('display');if(settings.miniMode)preserveMiniGeometry(player);}
-    else{bilibili.closeSearch();player.style.setProperty('display','none','important');DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');closeSkinMenu(player);const lyrics=DOC.getElementById(`${ID}-lyrics-float`);if(lyrics)lyrics.hidden=true;}
+    if(visible){
+      player.style.removeProperty('display');
+      if(expand)player.dispatchEvent(new ROOT.Event('selene:expand'));
+      fitPlayerWindow(player);
+    }else{
+      bilibili.closeSearch();
+      player.style.setProperty('display','none','important');
+      DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');
+      closeSkinMenu(player);
+      const lyrics=DOC.getElementById(`${ID}-lyrics-float`);
+      if(lyrics)lyrics.hidden=true;
+    }
   }
-  function setPublicVisible(value,{persist=true}={}){
+  function setPublicVisible(value,{persist=true,expand=false}={}){
     settings.enabled=!!value;
-    applyPlayerVisibility(settings.enabled);
+    applyPlayerVisibility(settings.enabled,{expand});
     if(persist)save();
     emitPublicState();
     return publicState();

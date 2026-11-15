@@ -56,10 +56,10 @@ function visibilityController(save) {
     style: { setProperty: (name, value, priority) => properties.set(name, { value, priority }), removeProperty: name => properties.delete(name) },
   };
   const settings = { enabled: true };
-  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', 'bilibili', `${section('function closeSkinMenu', 'function bindFloatingSkinMenu')}${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
+  const controller = new Function('DOC', 'ID', 'settings', 'save', 'emitPublicState', 'publicState', 'bilibili', 'fitPlayerWindow', `${section('function closeSkinMenu', 'function bindFloatingSkinMenu')}${section('function applyPlayerVisibility', 'function setPublicCompanionVisible')};return setPublicVisible;`)(
     { getElementById: id => id === 'player' ? player : null }, 'player', settings,
     () => { events.push({ hiddenAtSave: player.hidden }); return save?.(); }, () => events.push('state'), () => ({ visible: !player.hidden }),
-    { closeSearch: () => events.push('closeSearch') },
+    { closeSearch: () => events.push('closeSearch') }, () => {},
   );
   return { controller, player, classes, properties, events, menuClasses, skinAttributes };
 }

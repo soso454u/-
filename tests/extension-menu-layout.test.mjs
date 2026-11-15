@@ -12,9 +12,9 @@ assert.notEqual(end, -1, 'extension menu helper boundary should exist');
 const menuSource = player.slice(start, end);
 
 test('uses the SillyTavern extension container as a wrapper', () => {
-  assert.match(menuSource, /x\.className='extension_container'/);
-  assert.match(menuSource, /x\.firstElementChild/);
-  assert.doesNotMatch(menuSource, /x\.className='list-group-item[^']*extension_container'/);
+  assert.match(menuSource, /\b\w+\.className='extension_container'/);
+  assert.match(menuSource, /\b\w+\.firstElementChild/);
+  assert.doesNotMatch(menuSource, /\b\w+\.className='list-group-item[^']*extension_container'/);
 });
 
 test('keeps the icon and label inside one keyboard-accessible menu row', () => {
