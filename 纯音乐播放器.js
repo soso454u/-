@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.99';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.100';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -4415,6 +4415,7 @@ ${latest.slice(-1500)}
     syncMoonlight();
     const moon=`#${ID}.skin-moonlight:not(.mini)`;
     const front=`${moon}:not(.immersive):not(.moonlight-library)`;
+    const playAll=`${moon}:not(.immersive) .list .batch-heading>:is([data-heading-action=play],[data-playlist-play-all])`;
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-moonlight-style">
       #${ID} :is(.selene-moonlight-stage,.selene-moonlight-library,.selene-moonlight-progress){display:none!important}
       ${moon}{--smp-text:#f8eee7;--smp-head-text:#f8eee7;--smp-muted:#dcc8bf;--smp-control-bg:#ffffff16;
@@ -4474,6 +4475,17 @@ ${latest.slice(-1500)}
       ${moon}.moonlight-library:not(.immersive)>.body>.selene-moonlight-library{margin-bottom:8px!important}
       ${moon}.moonlight-library:not(.immersive)>.body>form{display:flex!important}
       ${moon}.moonlight-library:not(.immersive) .selene-library-nav{display:flex!important}
+      ${playAll}{
+        display:inline-flex!important;align-items:center;justify-content:center;gap:6px;
+        border:1px solid #e7ddff52!important;border-radius:9px!important;
+        background:#261d37a6!important;color:#f7efff!important;font-weight:600!important;box-shadow:none!important
+      }
+      ${playAll}::before{
+        content:'';width:8px;height:9px;flex:none;background:#ddcffa;clip-path:polygon(0 0,100% 50%,0 100%)
+      }
+      @media(hover:hover){${playAll}:hover{background:#4b3b65d9!important;border-color:#e7ddff87!important}}
+      ${playAll}:focus-visible{outline:2px solid #e7ddff;outline-offset:2px}
+
       ${moon}.moonlight-library:not(.immersive) :is(.now,.lyrics),${front}.moonlight-lyrics :is(.now,.lyrics){display:none!important}
       ${moon}.moonlight-library:not(.immersive) .list:not([hidden]){flex:1 1 auto!important;min-height:44px!important}
       ${front}.moonlight-lyrics .immersive-view{display:flex!important;flex:1 1 0;position:relative;min-height:0}
