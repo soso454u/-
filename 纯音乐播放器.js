@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.100';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.101';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -4290,7 +4290,7 @@ ${latest.slice(-1500)}
       #${ID}.skin-orbit:not(.mini):not(.immersive).orbit-library-open .selene-library-nav{display:flex!important}
       #${ID}.skin-orbit:not(.mini):not(.immersive) .lyrics{border:0!important;min-height:36px!important;max-height:68px!important;padding:8px 0!important;font-size:13px!important;color:var(--smp-muted)!important}
       #${ID}:is(.skin-orbit,.skin-moonlight):not(.mini):not(.immersive) .controls{padding-top:6px!important;gap:10px!important}
-      #${ID}:is(.skin-orbit,.skin-moonlight):not(.mini):not(.immersive) .controls [data-c=play]{background:#ffe4d9!important;color:#56232a!important}
+      #${ID}.skin-orbit:not(.mini):not(.immersive) .controls [data-c=play]{background:#ffe4d9!important;color:#56232a!important}
       #${ID}.skin-orbit.immersive .cover-glass{position:relative;isolation:isolate;display:grid;place-items:center;aspect-ratio:1;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important}
       #${ID}.skin-orbit.immersive .immersive-cover{position:relative;z-index:1;width:65%!important;height:auto!important;aspect-ratio:1;object-fit:cover;border-radius:50%!important;clip-path:circle(50%);animation:selene-orbit-turn 28s linear infinite;animation-play-state:paused}
       #${ID}.skin-orbit.orbit-playing:not(.mini):not(.orbit-library-open) .selene-orbit-disc img,#${ID}.skin-orbit.orbit-playing:not(.mini):not(.orbit-library-open) .selene-orbit-disc:after,#${ID}.skin-orbit.orbit-playing.immersive:not(.mini) .immersive-cover,#${ID}.skin-orbit.orbit-playing.immersive:not(.mini) .cover-glass:after{animation-play-state:running!important}
@@ -4415,11 +4415,16 @@ ${latest.slice(-1500)}
     syncMoonlight();
     const moon=`#${ID}.skin-moonlight:not(.mini)`;
     const front=`${moon}:not(.immersive):not(.moonlight-library)`;
+    const libraryActions=`${moon}:not(.immersive) :is(.selene-moonlight-library,.selene-search-form>button,.list .batch-heading>button,.playlist-batch-bar>button,.actions>button)`;
     const playAll=`${moon}:not(.immersive) .list .batch-heading>:is([data-heading-action=play],[data-playlist-play-all])`;
+    const header=`${moon}>.selene-player-head`;
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-moonlight-style">
       #${ID} :is(.selene-moonlight-stage,.selene-moonlight-library,.selene-moonlight-progress){display:none!important}
       ${moon}{--smp-text:#f8eee7;--smp-head-text:#f8eee7;--smp-muted:#dcc8bf;--smp-control-bg:#ffffff16;
         --smp-control-border:#fff1e02a;--smp-input-bg:#291b19bb;--smp-settings-bg:#382823f7;--smp-switch:#f1d4c3;
+        --moonlight-accent:#decef7;--moonlight-ink:#2c1d41;--moonlight-rail:#eadcff36;
+        --moonlight-action:#30243c79;--moonlight-primary:#261d37a6;--moonlight-hover:#4b3b65d9;
+        --moonlight-line:#e7ddff38;--moonlight-primary-line:#e7ddff67;--moonlight-action-text:#f7efff;
         background:linear-gradient(176deg,#19243c,#110e1b)!important;border-color:#efeaff2b!important;color-scheme:dark!important;isolation:isolate}
       ${moon}::before{
         content:'';display:block!important;position:absolute;z-index:0;inset:-7%;pointer-events:none;opacity:.86;
@@ -4450,7 +4455,7 @@ ${latest.slice(-1500)}
       ${moon}:not(.immersive):not(.moonlight-lyrics)>.body>.selene-moonlight-library{
         display:block!important;order:-5;align-self:flex-end;flex:0 0 auto;
         width:auto!important;min-width:0!important;min-height:28px!important;margin:0!important;padding:4px 10px!important;
-        border:0!important;border-radius:8px!important;background:var(--smp-control-bg)!important;font:500 11px/1.3 system-ui!important
+        font:500 11px/1.3 system-ui!important
       }
       ${front} :is(.selene-search-form,.selene-library-nav,.list,.actions),${front} .now>.selene-orbit-disc{display:none!important}
       ${front}:not(.moonlight-lyrics) .selene-moonlight-stage{position:relative;display:grid!important;place-items:end center;container-type:size;flex:1 1 0;order:-4;
@@ -4475,16 +4480,51 @@ ${latest.slice(-1500)}
       ${moon}.moonlight-library:not(.immersive)>.body>.selene-moonlight-library{margin-bottom:8px!important}
       ${moon}.moonlight-library:not(.immersive)>.body>form{display:flex!important}
       ${moon}.moonlight-library:not(.immersive) .selene-library-nav{display:flex!important}
+      ${libraryActions}{
+        border:1px solid var(--moonlight-line)!important;border-radius:9px!important;
+        background:var(--moonlight-action)!important;color:var(--moonlight-action-text)!important;box-shadow:none!important
+      }
       ${playAll}{
         display:inline-flex!important;align-items:center;justify-content:center;gap:6px;
-        border:1px solid #e7ddff52!important;border-radius:9px!important;
-        background:#261d37a6!important;color:#f7efff!important;font-weight:600!important;box-shadow:none!important
+        border-color:var(--moonlight-primary-line)!important;background:var(--moonlight-primary)!important;font-weight:600!important
       }
       ${playAll}::before{
-        content:'';width:8px;height:9px;flex:none;background:#ddcffa;clip-path:polygon(0 0,100% 50%,0 100%)
+        content:'';width:8px;height:9px;flex:none;background:var(--moonlight-accent);clip-path:polygon(0 0,100% 50%,0 100%)
       }
-      @media(hover:hover){${playAll}:hover{background:#4b3b65d9!important;border-color:#e7ddff87!important}}
-      ${playAll}:focus-visible{outline:2px solid #e7ddff;outline-offset:2px}
+      ${header}>:is(.selene-player-close,.pin,.skin,.gear,.lyrics-tools){
+        border:1px solid var(--moonlight-line)!important;background:var(--moonlight-action)!important
+      }
+      ${header} button{color:var(--moonlight-action-text)!important}
+      ${moon}.pinned>.selene-player-head>button.pin{
+        background:var(--moonlight-primary)!important;border-color:var(--moonlight-accent)!important
+      }
+      ${moon}:not(.immersive) .selene-library-nav>[data-library]{
+        border-radius:7px!important;color:#e0d4ee!important
+      }
+      ${moon}:not(.immersive) .selene-library-nav>[data-library][aria-pressed=true]{
+        background:var(--moonlight-action)!important;color:var(--moonlight-action-text)!important
+      }
+      ${moon} .selene-library-nav>[aria-pressed=true]::after{background:var(--moonlight-accent)}
+      ${moon} .list .row-tools>button:not(.is-favorite){color:var(--moonlight-accent)!important}
+      ${moon} .selene-row-menu{background:#241b35f2;border-color:var(--moonlight-line)}
+      @media(hover:hover){
+        ${libraryActions}:hover:not(:disabled),${header}>button:hover,
+        ${moon}:not(.immersive) .selene-library-nav>button:hover,${moon}:not(.immersive) .list .row-tools>button:hover,
+        ${moon} .selene-row-menu>button:hover:not(:disabled){background:var(--moonlight-hover)!important}
+        ${libraryActions}:hover:not(:disabled){border-color:var(--moonlight-primary-line)!important}
+      }
+      ${libraryActions}:focus-visible,${header} button:focus-visible,
+      ${moon} :is(.selene-library-nav,.row-tools,.selene-row-menu,.controls) button:focus-visible{
+        outline-color:var(--moonlight-accent)!important
+      }
+      ${moon} .controls [data-c=play]{background:var(--moonlight-accent)!important;color:var(--moonlight-ink)!important}
+      ${moon} .volume{--smp-switch:var(--moonlight-accent)}
+      ${moon}.immersive .volume input::-webkit-slider-runnable-track{
+        background:linear-gradient(to right,var(--moonlight-accent) var(--range-fill,0%),var(--moonlight-rail) var(--range-fill,0%))!important
+      }
+      ${moon}.immersive .volume input::-webkit-slider-thumb{background:var(--moonlight-accent)!important}
+      ${moon}.immersive .volume input::-moz-range-track{background:var(--moonlight-rail)}
+      ${moon}.immersive .volume input::-moz-range-progress,${moon}.immersive .volume input::-moz-range-thumb{background:var(--moonlight-accent)}
 
       ${moon}.moonlight-library:not(.immersive) :is(.now,.lyrics),${front}.moonlight-lyrics :is(.now,.lyrics){display:none!important}
       ${moon}.moonlight-library:not(.immersive) .list:not([hidden]){flex:1 1 auto!important;min-height:44px!important}
@@ -4507,13 +4547,13 @@ ${latest.slice(-1500)}
       ${moon} .controls>.selene-moonlight-progress{
         display:block!important;position:relative;align-self:center;grid-area:2 / 1 / 3 / -1;
         height:2px;border-radius:99px;pointer-events:none;
-        background:linear-gradient(to right,#f7dfd3 var(--range-fill,0%),#fff1e031 var(--range-fill,0%))
+        background:linear-gradient(to right,var(--moonlight-accent) var(--range-fill,0%),var(--moonlight-rail) var(--range-fill,0%))
       }
       ${moon} .selene-moonlight-progress::after{
         content:'';position:absolute;top:50%;left:clamp(3.5px,var(--range-fill,0%),calc(100% - 3.5px));
-        width:7px;height:7px;border-radius:50%;background:#f7dfd3;transform:translate(-50%,-50%)
+        width:7px;height:7px;border-radius:50%;background:var(--moonlight-accent);transform:translate(-50%,-50%)
       }
-      ${moon} .progress:focus-visible+.selene-moonlight-progress{outline:1px solid #f7dfd3;outline-offset:4px}
+      ${moon} .progress:focus-visible+.selene-moonlight-progress{outline:1px solid var(--moonlight-accent);outline-offset:4px}
       @container(max-height:390px){
         ${front} .now{min-height:39px!important;padding-bottom:2px!important}
         ${front} .lyrics{margin-bottom:0!important}
