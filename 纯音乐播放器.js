@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.95';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.96';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -891,7 +891,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     DOC.getElementById(`${ID}-companion`)?.remove(); DOC.getElementById(`${ID}-companion-style`)?.remove();
     DOC.getElementById(ID)?.remove(); DOC.getElementById(`${ID}-style`)?.remove(); DOC.getElementById(`${ID}-theme-style`)?.remove(); DOC.getElementById(`${ID}-polish-style`)?.remove(); DOC.getElementById(`${ID}-skin-style`)?.remove(); DOC.getElementById(`${ID}-mobile-style`)?.remove(); DOC.getElementById(`${ID}-mobile-ux-style`)?.remove(); DOC.getElementById(`${ID}-current-favorite-style`)?.remove(); DOC.getElementById(`${ID}-desktop-lyrics`)?.remove(); DOC.getElementById(`${ID}-desktop-style`)?.remove(); DOC.getElementById(`${ID}-feature-style`)?.remove(); DOC.getElementById(`${ID}-immersive-style`)?.remove(); DOC.getElementById(`${ID}-adaptive-style`)?.remove(); DOC.getElementById(`${ID}-album-glass-style`)?.remove(); DOC.getElementById(`${ID}-album-glass-fix`)?.remove(); DOC.getElementById(`${ID}-responsive-content-style`)?.remove(); DOC.getElementById(`${ID}-skin-restore-style`)?.remove(); DOC.getElementById(`${ID}-compact-controls-style`)?.remove(); DOC.getElementById(`${ID}-size-preset-style`)?.remove(); DOC.getElementById(`${ID}-custom-scale-style`)?.remove(); DOC.getElementById(`${ID}-custom-scale-priority`)?.remove(); DOC.getElementById(`${ID}-small-priority-style`)?.remove(); DOC.getElementById(`${ID}-mini-style`)?.remove(); DOC.getElementById(`${ID}-mini-selene-style`)?.remove(); DOC.getElementById(`${ID}-skin-float`)?.remove(); DOC.getElementById(`${ID}-lyrics-float`)?.remove(); DOC.getElementById(`${ID}-source-float`)?.remove(); DOC.getElementById(`${ID}-gesture-batch-style`)?.remove(); DOC.getElementById(`${ID}-heading-actions-style`)?.remove(); DOC.getElementById(`${ID}-interaction-polish-style`)?.remove();
     if(!audio.isConnected)DOC.body.appendChild(audio);
-    DOC.body.insertAdjacentHTML('beforeend', `<section id="${ID}" class="${settings.enabled ? '' : 'hidden'}"><div class="selene-player-head" role="toolbar" aria-label="播放器操作" title="拖动移动"><button type="button" class="selene-player-close">×</button><b>♫ 「Selene」播放器</b><button type="button" class="skin" title="选择外观">✦</button><button type="button" class="gear">⚙</button></div><div class="skin-picker hidden"><button data-skin="albumglass">专辑玻璃</button><button data-skin="film">胶片</button><button data-skin="red">中国红</button><button data-skin="white">简约白</button><button data-skin="black">简约黑</button><button data-skin="blue">深海蓝</button><button data-skin="cream">INS 奶油</button><button data-skin="green">森系绿</button></div><div class="body"><div class="now"><img><div><b class="title">尚未选择歌曲</b><span class="artist">搜索歌曲，或读取本层推荐</span><small class="reason"></small><small class="status"></small></div><button type="button" class="current-favorite" aria-label="收藏当前歌曲" aria-pressed="false" title="收藏当前歌曲" disabled>♡</button></div><form class="selene-search-form"><input class="search-query" aria-label="搜索关键词" enterkeyhint="search"><button type="button">搜索</button></form><div class="actions"><button data-a="rec">本层推荐</button><button data-a="world-rec">读取推荐</button><button data-a="offline">离线歌曲</button><button data-a="history">最近播放</button></div><div class="list" hidden></div><div class="selene-video-inline" role="group" aria-label="B 站视频" hidden><span>B 站 · 仅听声音</span><button type="button" data-video-stop title="停止播放" aria-label="停止 B 站播放">×</button></div><div class="lyrics" aria-live="polite">暂无歌词</div><div class="controls"><button data-c="prev" title="上一首" aria-label="上一首">‹‹</button><button data-c="play" title="播放或暂停" aria-label="播放或暂停">▶</button><button data-c="mode" class="play-mode-icon" data-mode="loop" title="播放模式 · 顺序循环" aria-label="播放模式 · 顺序循环"></button><button data-c="next" title="下一首" aria-label="下一首">››</button><input class="progress" type="range" min="0" max="1000" value="0"></div><div class="time">00:00 / 00:00</div><div class="volume">音量 <input type="range" min="0" max="100" value="${settings.volume * 100}"></div></div></section>`);
+    DOC.body.insertAdjacentHTML('beforeend', `<section id="${ID}" class="${settings.enabled ? '' : 'hidden'}"><div class="selene-player-head" role="toolbar" aria-label="播放器操作" title="拖动移动"><button type="button" class="selene-player-close">×</button><b>♫ 「Selene」播放器</b><button type="button" class="skin" title="选择外观">✦</button><button type="button" class="gear">⚙</button></div><div class="skin-picker hidden"><button data-skin="albumglass">专辑玻璃</button><button data-skin="film">胶片</button><button data-skin="red">中国红</button><button data-skin="white">简约白</button><button data-skin="black">简约黑</button><button data-skin="blue">深海蓝</button><button data-skin="cream">INS 奶油</button><button data-skin="green">森系绿</button></div><div class="body"><div class="now"><img><div><b class="title">尚未选择歌曲</b><span class="artist">搜索歌曲，或读取本层推荐</span><small class="reason"></small><small class="status"></small></div><button type="button" class="current-favorite" aria-label="收藏当前歌曲" aria-pressed="false" title="收藏当前歌曲" disabled>♡</button></div><form class="selene-search-form"><input class="search-query" aria-label="搜索关键词" enterkeyhint="search"><button type="button">搜索</button></form><div class="actions"><button data-a="rec">本层推荐</button><button data-a="world-rec">读取推荐</button><button data-a="offline">离线歌曲</button><button data-a="history">最近播放</button></div><div class="list" hidden></div><div class="selene-video-inline" role="group" aria-label="B 站视频" hidden><span>B 站 · 仅听声音</span><button type="button" data-video-stop title="停止播放" aria-label="停止 B 站播放">×</button></div><div class="lyrics" aria-live="polite">暂无歌词</div><div class="controls"><button data-c="prev" title="上一首" aria-label="上一首">‹‹</button><button data-c="play" title="播放或暂停" aria-label="播放或暂停">▶</button><button data-c="mode" class="play-mode-icon" data-mode="loop" title="播放模式 · 顺序循环" aria-label="播放模式 · 顺序循环"></button><button data-c="next" title="下一首" aria-label="下一首">››</button><input class="progress" type="range" min="0" max="1000" value="0"></div><div class="time"><span class="time-elapsed">00:00</span><span class="time-divider"> / </span><span class="time-duration">00:00</span></div><div class="volume">音量 <input type="range" min="0" max="100" value="${settings.volume * 100}"></div></div></section>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-style">#${ID}{position:fixed;z-index:10000;width:min(365px,calc(100vw - 24px));right:18px;bottom:90px;background:#20232bf0;color:#eee;border:1px solid #ffffff28;border-radius:14px;box-shadow:0 8px 25px #0008;font:14px system-ui;overflow:hidden}#${ID}.hidden,#${ID}[hidden]{display:none!important;visibility:hidden!important;pointer-events:none!important}#${ID} *{box-sizing:border-box}#${ID} button{color:inherit;background:#ffffff14;border:1px solid #ffffff24;border-radius:7px;padding:5px 8px;cursor:pointer}.selene-player-head{height:39px;display:flex;align-items:center;gap:8px;padding:0 9px;background:#ffffff0b;cursor:move}.selene-player-head .selene-player-close{border:0;background:transparent;font-size:18px}.selene-player-head .gear{margin-left:auto;border:0;background:transparent}.body{padding:10px}.now{display:flex;gap:9px;min-height:58px}.now img{width:58px;height:58px;border-radius:8px;object-fit:cover;background:#ffffff12}.now div{min-width:0;display:flex;flex:1;flex-direction:column;gap:3px;justify-content:center}.title,.artist,.reason,.status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{color:#c4c4ce}.reason{color:#d8bc78}.status{color:#9eb8ff;font-size:11px;min-height:14px}form{display:flex;gap:6px;margin:9px 0}form input{min-width:0;flex:1;color:inherit;background:#0003;border:1px solid #ffffff30;border-radius:7px;padding:7px}.actions{display:flex;gap:5px}.list{max-height:210px;overflow:auto;margin-top:8px;border-top:1px solid #ffffff18}.row{display:flex;gap:7px;align-items:center;padding:7px 1px;border-bottom:1px solid #ffffff12;cursor:pointer}.row img{width:32px;height:32px;border-radius:5px;object-fit:cover}.row div{min-width:0;flex:1}.row b,.row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row span{font-size:12px;color:#bfc0c9}.lyrics{height:38px;margin-top:8px;padding:9px 6px;text-align:center;color:#d8d9e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#0002;border-radius:7px}.controls{display:flex;gap:5px;align-items:center;margin-top:9px}.controls input,.volume input{min-width:0;flex:1;accent-color:#9db4f7}.time{text-align:center;font-variant-numeric:tabular-nums;color:#bfc0c9;font-size:12px;margin-top:4px}.volume{display:flex;gap:7px;align-items:center;margin-top:6px;color:#ccc}@media(prefers-color-scheme:light){#${ID}{background:#f6f7fbf2;color:#20232b;border-color:#0000001c;box-shadow:0 8px 25px #0003}.selene-player-head{background:#00000008}.artist,.volume,.time{color:#555866}.lyrics{background:#00000008;color:#343746}}@media(max-width:480px){#${ID}{right:12px!important;bottom:12px!important;width:calc(100vw - 24px)}}</style>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-theme-style">#${ID}.theme-light{background:#f6f7fbf2;color:#20232b;border-color:#0000001c;box-shadow:0 8px 25px #0003}#${ID}.theme-light .selene-player-head,#${ID}.theme-light .lyrics{background:#00000008}#${ID}.theme-light .artist,#${ID}.theme-light .volume,#${ID}.theme-light .time{color:#555866}#${ID}.theme-dark{background:#20232bf0;color:#eee;border-color:#ffffff28;box-shadow:0 8px 25px #0008}#${ID}.theme-dark .selene-player-head{background:#ffffff0b}#${ID}.theme-dark .lyrics{background:#0002}#${ID}.theme-dark .artist,#${ID}.theme-dark .volume,#${ID}.theme-dark .time{color:#c4c4ce}</style>`);
     DOC.head.insertAdjacentHTML('beforeend', `<style id="${ID}-polish-style">#${ID}{border-radius:18px;border-color:#d7bc6f55;box-shadow:0 18px 48px #0009}#${ID}::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.16;background:repeating-linear-gradient(0deg,#fff1 0 1px,transparent 1px 4px);z-index:1}#${ID} .selene-player-head,#${ID} .body{position:relative;z-index:2}#${ID} .selene-player-head{height:45px;background:linear-gradient(100deg,#3f2b26,#181a24 55%,#342d22);letter-spacing:.4px;border-bottom:1px solid #d7bc6f44}#${ID} .selene-player-head b{font-family:Georgia,serif;font-size:16px;letter-spacing:1px}#${ID} button{transition:transform .15s,background .15s,border-color .15s}#${ID} button:hover{transform:translateY(-1px);background:#d7bc6f24;border-color:#e8cd7c99}#${ID} .now img{border:1px solid #d7bc6f77;box-shadow:inset 0 0 0 3px #0004,0 4px 12px #0008}#${ID} .lyrics{border:1px solid #d7bc6f33;font-family:Georgia,serif;font-style:italic;white-space:pre-line;height:auto;min-height:38px;line-height:1.45}#${ID} .settings-panel{background:linear-gradient(145deg,#29202a,#161923)!important;border-top:1px solid #d7bc6f55}#${ID} .settings-panel h3{font-family:Georgia,serif;letter-spacing:1px;color:#f0d98c}#${ID} .settings-panel select,#${ID} .settings-panel input[type=range]{accent-color:#d7bc6f}#${ID} .settings-panel .set-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}#${ID} .settings-panel .set-card{padding:9px;border:1px solid #ffffff18;border-radius:10px;background:#0003}</style>`);
@@ -1095,10 +1095,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         #${ID}.immersive>.body>.controls{grid-template-rows:36px 12px!important;margin-top:2px!important;row-gap:0!important}
         #${ID}.immersive .controls [data-c=play]{width:32px!important;height:32px!important}
       }
-      #${ID}.immersive .controls [data-c=prev]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M5%205h2v14H5zm14%200v14l-10-7z%22%2F%3E%3C%2Fsvg%3E")}
-      #${ID}.immersive .controls [data-c=next]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M17%205h2v14h-2zM5%205l10%207-10%207z%22%2F%3E%3C%2Fsvg%3E")}
-      #${ID}.immersive .controls [data-c=play]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M8%205v14l11-7z%22%2F%3E%3C%2Fsvg%3E")}
-      #${ID}.immersive .controls [data-c=play].is-playing{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M7%205h3v14H7zm7%200h3v14h-3z%22%2F%3E%3C%2Fsvg%3E")}
+      #${ID}:is(.immersive,.skin-moonlight) .controls [data-c=prev]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M5%205h2v14H5zm14%200v14l-10-7z%22%2F%3E%3C%2Fsvg%3E")}
+      #${ID}:is(.immersive,.skin-moonlight) .controls [data-c=next]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M17%205h2v14h-2zM5%205l10%207-10%207z%22%2F%3E%3C%2Fsvg%3E")}
+      #${ID}:is(.immersive,.skin-moonlight) .controls [data-c=play]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M8%205v14l11-7z%22%2F%3E%3C%2Fsvg%3E")}
+      #${ID}:is(.immersive,.skin-moonlight) .controls [data-c=play].is-playing{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M7%205h3v14H7zm7%200h3v14h-3z%22%2F%3E%3C%2Fsvg%3E")}
       #${ID} .controls [data-c=mode][data-mode=loop]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M17%202l4%204-4%204M3%2011V9a3%203%200%20013-3h15M7%2022l-4-4%204-4m14-1v2a3%203%200%2001-3%203H3%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")}
       #${ID} .controls [data-c=mode][data-mode=one]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M17%203l3%203-3%203M4%2010V9a3%203%200%20013-3h13M7%2021l-3-3%203-3m13-1v1a3%203%200%2001-3%203H4M11%2010l2-1v6%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")}
       #${ID} .controls [data-c=mode][data-mode=shuffle]{--control-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22white%22%3E%3Cpath%20d%3D%22M3%206h3c5%200%207%2012%2012%2012h3m-4-4l4%204-4%204M3%2018h3c2%200%204-3%205-6s4-6%207-6h3m-4-4l4%204-4%204%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")}
@@ -1167,7 +1167,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     update();
   };
   function applyTheme(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('theme-light','theme-dark');if(settings.theme==='light')el.classList.add('theme-light');if(settings.theme==='dark')el.classList.add('theme-dark');syncFloatingPanelThemes();syncCompanionAppearance();}
-  function applySkin(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('skin-film','skin-red','skin-white','skin-black','skin-blue','skin-cream','skin-green','skin-albumglass','skin-orbit');el.classList.add(`skin-${settings.skin||'albumglass'}`);el.classList.remove('lyrics-focus');syncFloatingPanelThemes();syncCompanionAppearance();renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);}
+  function applySkin(el=DOC.getElementById(ID)){if(!el)return;el.classList.remove('skin-film','skin-red','skin-white','skin-black','skin-blue','skin-cream','skin-green','skin-albumglass','skin-orbit','skin-moonlight');el.classList.add(`skin-${settings.skin||'albumglass'}`);el.classList.remove('lyrics-focus');syncMoonlight?.();syncFloatingPanelThemes();syncCompanionAppearance();renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);}
   let stableMobileViewportHeight=Math.max(Number(ROOT.innerHeight)||0,Number(ROOT.visualViewport?.height)||0)||700;
   function editableHasFocus(){const active=DOC.activeElement;return !!active?.matches?.('input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]');}
   function mobileKeyboardOpen(){if(!isMobile()||!editableHasFocus())return false;const visible=Number(ROOT.visualViewport?.height)||Number(ROOT.innerHeight)||0,baseline=Math.max(stableMobileViewportHeight,Number(ROOT.innerHeight)||0);return baseline-visible>Math.max(120,baseline*.18);}
@@ -2271,7 +2271,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       }
     }
     if(!lyricTimeline.length&&box.textContent!==lyricState)box.textContent=lyricState;
-    const player=DOC.getElementById(ID);if(!player?.classList.contains('immersive')){box._active=-2;return;}
+    const player=DOC.getElementById(ID);const classes=player?.classList;
+    if(!classes?.contains('immersive')&&!classes?.contains('moonlight-lyrics')){box._active=-2;return;}
     if(box._active===index&&!force)return;box._active=index;
     box.style.setProperty('--lyric-edge',`${Math.max(0,box.clientHeight/2-22)}px`);
     [...box.children].forEach((row,i)=>{row.classList.toggle('active',i===index);row.classList.toggle('near',Math.abs(i-index)===1);if(i===index)row.setAttribute('aria-current','true');else row.removeAttribute('aria-current');});
@@ -2283,7 +2284,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(!progressSeeking)progress.value=usableDuration?Math.round(now/duration*1000):0;
     progress.style.setProperty('--range-fill',`${Math.max(0,Math.min(100,Number(progress.value)/10))}%`);
     const shownNow=progressSeeking&&usableDuration?duration*pendingProgressValue/1000:now;
-    el.querySelector('.time').textContent=`${clock(shownNow)} / ${clock(usableDuration?duration:0)}`;
+    el.querySelector('.time-elapsed').textContent=clock(shownNow);
+    el.querySelector('.time-duration').textContent=clock(usableDuration?duration:0);
     const index=activeLyricIndex(now),active=lyricTimeline[index],words=audio.ended?'':active?.lines?.filter(Boolean).join('\n')||'';
     currentLyricWords=words;el.querySelector('.lyrics').textContent=words||(lyricTimeline.length?'♪':lyricState);renderImmersiveLyrics(audio.ended?-1:index);renderDesktopLyrics(words,index,now);maybeMidSongCompanion();const companionLine=DOC.querySelector(`#${ID}-companion .companion-song`);if(companionLine){const song=companionSongContext();companionLine.textContent=`♫ ${song.song}${song.lyric?` · ${song.lyric}`:''}`;}
     updateMediaPosition();
@@ -4288,6 +4290,201 @@ ${latest.slice(-1500)}
       @media(prefers-reduced-motion:reduce){#${ID}.skin-orbit .selene-orbit-disc img,#${ID}.skin-orbit .selene-orbit-disc:before,#${ID}.skin-orbit .selene-orbit-disc:after,#${ID}.skin-orbit .selene-orbit-energy,#${ID}.skin-orbit .immersive-cover,#${ID}.skin-orbit .cover-glass:before,#${ID}.skin-orbit .cover-glass:after{animation:none!important}}
     </style>`);
   }
+  let syncMoonlight,cleanupMoonlight;
+  function bindMoonlightStyle(player){
+    const body=player.querySelector('.body'),controls=body.querySelector('.controls'),time=body.querySelector('.time');
+    const back=body.querySelector('.immersive-close');
+    body.insertAdjacentHTML('afterbegin',`<button type="button" class="selene-moonlight-stage" aria-label="展开同步歌词" aria-expanded="false"><span class="selene-moonlight-art" aria-hidden="true"><span class="selene-moonlight-disc">♫</span><span class="selene-moonlight-halo"><canvas width="500" height="500"></canvas><canvas width="500" height="500"></canvas></span></span></button>`);
+    const stage=body.querySelector('.selene-moonlight-stage'),halo=stage.querySelector('.selene-moonlight-halo');
+    const library=DOC.createElement('button');
+    library.type='button';library.className='selene-moonlight-library';
+    function setView(view){
+      player.classList.toggle('moonlight-lyrics',view==='lyrics');
+      player.classList.toggle('moonlight-library',view==='library');
+      stage.setAttribute('aria-expanded',String(view==='lyrics'));
+      library.setAttribute('aria-expanded',String(view==='library'));
+      library.title=view==='library'?'返回唱片':'搜索和播放队列';
+      library.setAttribute('aria-label',library.title);
+      renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);
+      syncMotion();
+    }
+    stage.onclick=()=>{setView('lyrics');back.focus({preventScroll:true});};
+    back.addEventListener('click',event=>{
+      if(!player.classList.contains('moonlight-lyrics'))return;
+      event.stopImmediatePropagation();
+      setView('cover');stage.focus({preventScroll:true});
+    },true);
+    library.onclick=()=>{
+      const opening=!player.classList.contains('moonlight-library');
+      setView(opening?'library':'cover');
+      if(!settings.actionsCollapsed)player.querySelector('.actions-toggle')?.click();
+      if(opening)player.querySelector('[data-library=queue]')?.click();
+    };
+    player.addEventListener('keydown',event=>{
+      if(event.key!=='Escape'||!player.classList.contains('skin-moonlight')||!body.contains(event.target))return;
+      if(player.classList.contains('moonlight-lyrics'))back.click();
+      if(player.classList.contains('moonlight-library')){setView('cover');library.focus({preventScroll:true});}
+    });
+    const motion=ROOT.matchMedia?.('(prefers-reduced-motion:reduce)');
+    let painted=false,context,stream,analyser,bins,frame=0,level=0,attemptedSrc;
+    function stopFrames(){
+      ROOT.cancelAnimationFrame(frame);frame=0;level=0;halo.style.removeProperty('--moonlight-level');
+    }
+    function release(){
+      stopFrames();stream?.getTracks().forEach(track=>track.stop());context?.close().catch(()=>{});
+      context=stream=analyser=bins=attemptedSrc=undefined;
+    }
+    function sample(){
+      if(context.state==='running'){
+        analyser.getByteFrequencyData(bins);
+        const first=Math.max(1,Math.round(45*analyser.fftSize/context.sampleRate));
+        const last=Math.max(first+1,Math.round(260*analyser.fftSize/context.sampleRate));
+        let sum=0;
+        for(let i=first;i<=last;i++)sum+=bins[i];
+        const target=Math.min(1,sum/(last-first+1)/220);
+        level+=(target-level)*(target>level?.38:.12);
+        halo.style.setProperty('--moonlight-level',level.toFixed(3));
+      }
+      frame=ROOT.requestAnimationFrame(sample);
+    }
+    function syncMotion(event){
+      if(!player.classList.contains('skin-moonlight')||motion?.matches||event?.type==='emptied'){release();return;}
+      if(!player.classList.contains('orbit-playing')||player.matches('.hidden,.mini,.immersive,.moonlight-lyrics,.moonlight-library')){
+        stopFrames();return;
+      }
+      const capture=audio.captureStream||audio.mozCaptureStream,AudioContext=ROOT.AudioContext||ROOT.webkitAudioContext;
+      if(!capture||!AudioContext||!audio.currentSrc)return;
+      const endedTrack=event?.type==='playing'&&stream?.getAudioTracks().every(track=>track.readyState==='ended');
+      if(attemptedSrc!==audio.currentSrc||endedTrack){
+        release();attemptedSrc=audio.currentSrc;
+        try{
+          // Analyse a copy of the stream while the original media element keeps its audio output.
+          stream=capture.call(audio);
+          context=new AudioContext();
+          analyser=context.createAnalyser();
+          analyser.fftSize=2048;analyser.smoothingTimeConstant=.45;
+          bins=new Uint8Array(analyser.frequencyBinCount);
+          context.createMediaStreamSource(stream).connect(analyser);
+        }catch{release();attemptedSrc=audio.currentSrc;return;}
+      }
+      if(context?.state==='suspended')context.resume().catch(()=>{});
+      if(analyser&&!frame)sample();
+    }
+    syncMoonlight=()=>{
+      if(player.classList.contains('skin-moonlight')){
+        if(time.parentElement!==controls){controls.append(time,library);setView('cover');}
+        if(!painted){[...halo.querySelectorAll('canvas')].forEach(paintMoonlightDust);painted=true;}
+      }else if(time.parentElement===controls){controls.after(time);library.remove();setView('cover');}
+      syncMotion();
+    };
+    player.addEventListener('click',syncMotion);
+    motion?.addEventListener?.('change',syncMotion);
+    const mediaEvents=['playing','pause','waiting','ended','emptied','error'];
+    for(const event of mediaEvents)audio.addEventListener(event,syncMotion);
+    cleanupMoonlight=()=>{
+      for(const event of mediaEvents)audio.removeEventListener(event,syncMotion);
+      motion?.removeEventListener?.('change',syncMotion);
+      release();
+    };
+    syncMoonlight();
+    const moon=`#${ID}.skin-moonlight:not(.mini)`;
+    const front=`${moon}:not(.immersive):not(.moonlight-library)`;
+    DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-moonlight-style">
+      #${ID} .selene-moonlight-stage,#${ID}.mini .selene-moonlight-library{display:none!important}
+      ${moon}{--smp-text:#f8eee7;--smp-head-text:#f8eee7;--smp-muted:#dcc8bf;--smp-control-bg:#ffffff16;
+        --smp-control-border:#fff1e02a;--smp-input-bg:#291b19bb;--smp-settings-bg:#382823f7;--smp-switch:#f1d4c3;
+        background:linear-gradient(176deg,#73514a,#322321)!important;border-color:#fff0e02b!important;color-scheme:dark!important;isolation:isolate}
+      ${moon}:before{display:none!important}
+      ${moon}:after{content:'';display:block!important;position:absolute;z-index:0;inset:-45px;pointer-events:none;
+        background:linear-gradient(175deg,#66423e38,#260d0e9c),var(--album-cover) center/cover;filter:blur(46px) saturate(.65);opacity:.36}
+      ${moon}>.selene-player-head{background:transparent!important;border-bottom-color:transparent!important}
+      ${moon}>.body{padding:4px clamp(14px,5cqw,30px) 12px!important;gap:0!important}
+      ${front} :is(.selene-search-form,.selene-library-nav,.list,.actions),${front} .now>.selene-orbit-disc{display:none!important}
+      ${front}:not(.moonlight-lyrics) .selene-moonlight-stage{position:relative;display:grid!important;place-items:end center;container-type:size;flex:1 1 0;order:-4;
+        width:100%!important;min-width:0!important;min-height:48px!important;height:auto!important;max-height:none!important;
+        margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;transform:none!important;cursor:pointer}
+      ${front} .selene-moonlight-stage:focus-visible{outline:2px solid var(--smp-switch);outline-offset:-2px}
+      ${front} .selene-moonlight-art{position:relative;display:grid;place-items:center;width:min(94%,100cqh,360px,calc(94% * var(--cover-scale,1)));
+        aspect-ratio:1;pointer-events:none}
+      ${front} .selene-moonlight-disc{position:relative;z-index:1;display:grid;place-items:center;width:68%;aspect-ratio:1;border-radius:50%;overflow:hidden;
+        background:radial-gradient(circle at 37% 25%,#a37c6e,#4b3437 82%);font:400 clamp(18px,19cqh,40px)/1 system-ui;animation:selene-orbit-turn 26s linear infinite paused}
+      ${front} .selene-moonlight-disc:after{content:'';position:absolute;inset:0;background:var(--album-cover) center/cover}
+      ${front} .selene-moonlight-halo{position:absolute;inset:0;transform:scale(calc(1 + var(--moonlight-level,0) * .035));
+        opacity:calc(.7 + var(--moonlight-level,0) * .28)}
+      ${front} .selene-moonlight-halo canvas{position:absolute;inset:0;width:100%;height:100%}
+      ${front} .selene-moonlight-halo canvas:last-child{animation:selene-orbit-turn 23s linear infinite reverse paused;opacity:.75}
+      ${front}.orbit-playing :is(.selene-moonlight-disc,.selene-moonlight-halo canvas:last-child){animation-play-state:running}
+      ${front} .selene-moonlight-halo canvas:first-child{animation:selene-moonlight-flicker 3.1s ease-in-out infinite alternate paused}
+      ${front}.orbit-playing .selene-moonlight-halo canvas:first-child{animation-play-state:running}
+      @keyframes selene-moonlight-flicker{from{opacity:.74}to{opacity:1}}
+      ${front} .lyrics{order:-3;max-height:46px!important;min-height:26px!important;margin:0 0 5px!important;padding:4px 0!important;
+        border:0!important;color:var(--smp-muted)!important;font:500 calc(13px * var(--text-scale,1))/1.4 system-ui!important}
+      ${front} .now{order:-2;min-height:46px!important;max-height:none!important;margin:0!important;padding:1px 0 8px!important;gap:4px!important}
+      ${front} .now .title{font-size:calc(17px * var(--text-scale,1))!important}
+      ${moon}.moonlight-library:not(.immersive)>.body>form{display:flex!important}
+      ${moon}.moonlight-library:not(.immersive) .selene-library-nav{display:flex!important}
+      ${moon}.moonlight-library:not(.immersive) :is(.now,.lyrics),${front}.moonlight-lyrics :is(.now,.lyrics){display:none!important}
+      ${moon}.moonlight-library:not(.immersive) .list:not([hidden]){flex:1 1 auto!important;min-height:44px!important}
+      ${front}.moonlight-lyrics .immersive-view{display:flex!important;flex:1 1 0;position:relative;min-height:0}
+      ${front}.moonlight-lyrics .immersive-info{display:flex;flex:1;min-width:0;min-height:0;padding-top:28px}
+      ${front}.moonlight-lyrics :is(.ambient,.cover-glass,.immersive-info>small,.immersive-info>h2,.immersive-info>p){display:none!important}
+      ${front}.moonlight-lyrics .immersive-close{position:absolute;z-index:2;top:0;right:0;display:grid!important;place-items:center;
+        width:30px!important;height:30px!important;min-width:30px!important;padding:0!important;border:0!important;border-radius:50%;background:var(--smp-control-bg)!important}
+      ${front}.moonlight-lyrics .immersive-lyric{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;
+        scrollbar-width:none;text-align:center;mask-image:linear-gradient(transparent,#000 12% 88%,transparent)}
+      ${front}.moonlight-lyrics .immersive-lyric:before,${front}.moonlight-lyrics .immersive-lyric:after{content:'';display:block;height:var(--lyric-edge,0)}
+      ${front}.moonlight-lyrics .immersive-line{display:block!important;width:100%!important;height:auto!important;min-height:0!important;
+        margin:0!important;padding:7px 0!important;border:0!important;background:transparent!important;box-shadow:none!important;
+        font:500 calc(16px * var(--text-scale,1))/1.4 system-ui!important;white-space:normal;overflow-wrap:anywhere;opacity:.35}
+      ${front}.moonlight-lyrics .immersive-line.near{opacity:.65}
+      ${front}.moonlight-lyrics .immersive-line.active{opacity:1;font-weight:700!important}
+      ${moon}>.body>.controls{display:grid!important;position:relative;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+        grid-template-rows:12px 13px minmax(36px,auto) 24px!important;gap:2px!important;margin:0!important;padding:0!important}
+      ${moon} .controls .progress{grid-row:1!important;grid-column:1/-1!important;margin:0!important;height:12px!important}
+      ${moon} .controls .time{grid-row:2;grid-column:1/-1;display:flex!important;justify-content:space-between!important;
+        padding:0!important;margin:0!important;font:400 10px/13px system-ui!important;font-variant-numeric:tabular-nums}
+      ${moon} .controls .time>.time-divider{display:none}
+      ${moon} .controls button{grid-row:3!important;background:transparent!important;border:0!important;box-shadow:none!important;color:var(--smp-text)!important}
+      ${moon} .controls [data-c=mode]{grid-column:1!important}
+      ${moon} .controls [data-c=play]{width:44px!important;height:38px!important;background:transparent!important;color:var(--smp-text)!important}
+      ${moon} .controls :is([data-c=prev],[data-c=next],[data-c=play]:not([aria-busy=true])){font-size:0!important}
+      ${moon} .controls :is([data-c=prev],[data-c=next],[data-c=play]:not([aria-busy=true]))::before{
+        content:'';display:block;width:24px;height:24px;margin:auto;background:currentColor;
+        mask:var(--control-icon) center/contain no-repeat;-webkit-mask:var(--control-icon) center/contain no-repeat
+      }
+      ${moon} .controls [data-c=play][aria-busy=true]{font-size:18px!important}
+      ${moon} .controls [data-c=play][aria-busy=true]::before{display:none!important}
+      ${moon} .controls .selene-moonlight-library{grid-column:5!important;display:grid!important;place-items:center}
+      ${moon}.immersive .controls .selene-moonlight-library{visibility:hidden}
+      ${moon} .controls .selene-moonlight-library::before{content:'';width:21px;height:17px;background:
+        radial-gradient(circle at 2px 3px,currentColor 1.3px,transparent 1.7px) left top/5px 5.5px repeat-y,
+        repeating-linear-gradient(to bottom,transparent 0 2px,currentColor 2px 3.5px,transparent 3.5px 5.5px) right top/14px 100% no-repeat}
+      ${moon} .controls [data-c=source]{grid-column:1!important;grid-row:4!important;height:24px!important;min-height:24px!important}
+      ${moon}>.body>.volume{position:relative;width:42%!important;min-height:24px!important;margin:-24px 0 0!important}
+      @container(max-height:390px){
+        ${front} .now{min-height:39px!important;padding-bottom:2px!important}
+        ${front} .lyrics{margin-bottom:0!important}
+        ${moon}>.body{padding-bottom:6px!important}
+        ${moon}.moonlight-library>.body{overflow:auto!important}
+      }
+      @media(prefers-reduced-motion:reduce){${front} :is(.selene-moonlight-disc,.selene-moonlight-halo canvas){animation:none!important}}
+    </style>`);
+  }
+  function paintMoonlightDust(canvas,layer){
+    const context=canvas.getContext('2d');if(!context)return;
+    const center=canvas.width/2;
+    let seed=layer?9641:3187;
+    const random=()=>{seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;};
+    context.fillStyle='#fff0e4';
+    for(let i=0;i<(layer?1700:3500);i++){
+      const angle=layer?(i%2===0?.4:3.8)+(random()+random()-1)*1.4:random()*Math.PI*2;
+      const scatter=random()**2.4*(layer?48:39);
+      const radius=184+scatter+Math.sin(angle*5)*3*scatter/40;
+      const size=.55+random()**2*1.55;
+      context.globalAlpha=(.22+random()*.55)*(1-scatter/61);
+      context.fillRect(center+Math.cos(angle)*radius,center+Math.sin(angle)*radius,size,size);
+    }
+  }
   function syncOrbitMotion(event){
     const playing=event?.type==='playing'||(!audio.paused&&!audio.ended&&audio.readyState>=3&&!['waiting','emptied','error'].includes(event?.type));
     DOC.getElementById(ID)?.classList.toggle('orbit-playing',playing);
@@ -4574,6 +4771,7 @@ ${latest.slice(-1500)}
   function events(){
     const player=DOC.getElementById(ID);hardenResizeInteractions(player);ensureCleanLibraryLayout(player);bindOrbitStyle(player);companionColorScheme?.addEventListener?.('change',syncCompanionAppearance);companionColorScheme?.addEventListener?.('change',syncFloatingPanelThemes);optimizeWindowInteractions(player);setupMediaSession();
     for(const event of ['playing','pause','waiting','ended','emptied','error'])audio.addEventListener(event,syncOrbitMotion);
+    bindMoonlightStyle(player);
     audio.addEventListener('play',handleAudioPlay);audio.addEventListener('pause',handleUnexpectedPause);audio.addEventListener('timeupdate',()=>{if(!audioPriming){paintTime();trackCompanionListeningTime();checkpointPlayback();}});audio.addEventListener('loadedmetadata',()=>{if(!audioPriming){paintTime();updateMediaPosition(true);}});audio.addEventListener('durationchange',()=>updateMediaPosition(true));audio.addEventListener('seeked',()=>{updateMediaPosition(true);checkpointPlayback(true);});audio.addEventListener('ratechange',()=>updateMediaPosition(true));
     audio.addEventListener('ended',()=>{if(bilibiliPlayer.isOpen()||audioPriming||!audio.ended)return;trackCompanionListeningTime({stop:true,saveNow:true});checkpointPlayback(true);updatePlayButton();paintTime();if(current)createCompanionTicket({automatic:true});if(settings.playMode==='one'&&current){const memories=companionMemoryList(),entry=memories[offlineKey(current)];if(entry){entry.loops=(Number(entry.loops)||0)+1;save();}audio.currentTime=0;playbackWanted=true;void resumeMainAudioFromMediaSession();return;}if(!switchMediaTrack(1))playbackWanted=false;});
     audioSession?.addEventListener?.('statechange',handleAudioSessionState);
@@ -4596,7 +4794,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;cleanupMoonlight?.();stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(event?.persisted)checkpointPlayback(true);else cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); loadPlaybackRecord();const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();restorePlaybackSelection();DOC.addEventListener('visibilitychange',flushPlaybackOnHide);audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -4661,7 +4859,7 @@ ${latest.slice(-1500)}
       '--picker-line':read('--smp-control-border',light?'#00000020':'#ffffff26'),
       '--picker-accent':read('--smp-switch',light?'#367b6d':'#a8d9ce'),
       '--picker-control':read('--smp-control-bg',light?'#00000008':'#ffffff0d'),
-      '--picker-cover':['albumglass','orbit'].includes(settings.skin)?read('--album-cover','none'):'none'
+      '--picker-cover':['albumglass','orbit','moonlight'].includes(settings.skin)?read('--album-cover','none'):'none'
     };
     for(const suffix of ['source-float','skin-float','lyrics-float','video','bilibili-search']){
       const panel=DOC.getElementById(`${ID}-${suffix}`);if(!panel)continue;
@@ -4853,7 +5051,7 @@ ${latest.slice(-1500)}
   }
   function bindFloatingSkinMenu(el){
     const button=el.querySelector('.skin');
-    const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
+    const skins=[['albumglass','专辑玻璃','默认 · 随封面变色'],['orbit','流光唱片','圆形唱片 · 动态流光'],['moonlight','月晕唱片','旋转封面 · 细粒律动'],['film','胶片','复古暖调'],['red','中国红','绛红与鎏金'],['white','简约白','干净明亮'],['black','简约黑','安静深邃'],['blue','深海蓝','清透海蓝'],['cream','INS 奶油','柔和暖色'],['green','森系绿','自然清新']];
     DOC.getElementById(`${ID}-skin-float`)?.remove();
     const menu=DOC.createElement('div');menu.id=`${ID}-skin-float`;menu.className='hidden';menu.setAttribute('role','dialog');menu.setAttribute('aria-label','选择播放器外观');
     menu.innerHTML='<div class="selene-skin-heading">选择外观</div><div class="selene-skin-options">'+skins.map(([key,label,note])=>`<button type="button" data-skin="${key}" aria-pressed="false"><i class="selene-skin-swatch" aria-hidden="true"></i><span>${label}</span><small>${note}</small><i class="selene-skin-check" aria-hidden="true">✓</i></button>`).join('')+'</div>';
@@ -4899,6 +5097,9 @@ ${latest.slice(-1500)}
       #${ID}-skin-float [data-skin=albumglass] .selene-skin-swatch{background-image:linear-gradient(120deg,#527a8d66,#172133aa),var(--skin-preview-cover);background-position:center;background-size:cover;background-color:#4d6972}
       #${ID}-skin-float [data-skin=orbit] .selene-skin-swatch{background:repeating-radial-gradient(circle at 50% 50%,#f5947955 0 1px,transparent 1px 4px),linear-gradient(120deg,#932f2b,#391525)}
       #${ID}-skin-float [data-skin=orbit] .selene-skin-swatch:after{inset:7px auto 7px calc(50% - 11px);width:22px;border:0;border-radius:50%;background:#f2a48d;box-shadow:0 0 10px #ffad8e}
+      #${ID}-skin-float [data-skin=moonlight] .selene-skin-swatch{background:linear-gradient(145deg,#795650,#3c2a29)}
+      #${ID}-skin-float [data-skin=moonlight] .selene-skin-swatch:after{inset:8px auto auto calc(50% - 10px);width:20px;height:20px;border:0;
+        border-radius:50%;background:var(--skin-preview-cover) center/cover,#b17d72;outline:2px dotted #efd6c9;outline-offset:2px}
       #${ID}-skin-float [data-skin=film] .selene-skin-swatch{background:linear-gradient(120deg,#705044,#292234)}
       #${ID}-skin-float [data-skin=red] .selene-skin-swatch{background:linear-gradient(120deg,#cf3048,#710d26)}
       #${ID}-skin-float [data-skin=white] .selene-skin-swatch{background:linear-gradient(120deg,#fff,#dfe4ee)}
