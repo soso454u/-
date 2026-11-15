@@ -230,7 +230,7 @@ test('GD artwork waits for foreground playback and skips obsolete result rows',a
 });
 test('resuming a cancelled selection resolves that selection instead of playing an older source',async()=>{
   const calls=[];
-  const resume=new Function('play',`let current={title:'new selection'},playbackWanted=false,pendingPlaybackSelection=true,audioPriming=false;const bilibiliPlayer={close(){}},audio={error:null,currentSrc:'https://old.test/track.mp3',src:'https://old.test/track.mp3'},syncKeepAliveWithPlayback=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},updateMediaMetadata=()=>{};${section('async function resumeMainAudioFromMediaSession','function setupMediaSession')};return resumeMainAudioFromMediaSession;`)(async song=>calls.push(song.title));
+  const resume=new Function('play',`let current={title:'new selection'},playbackWanted=false,pendingPlaybackSelection=true,audioPriming=false,resumePoint=null;const bilibiliPlayer={close(){}},audio={error:null,currentSrc:'https://old.test/track.mp3',src:'https://old.test/track.mp3'},syncKeepAliveWithPlayback=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},updateMediaMetadata=()=>{};${section('async function resumeMainAudioFromMediaSession','function setupMediaSession')};return resumeMainAudioFromMediaSession;`)(async song=>calls.push(song.title));
   await resume();assert.deepEqual(calls,['new selection']);
 });
 

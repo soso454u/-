@@ -40,7 +40,7 @@ test('replacing and clearing manual audio updates saved copies without losing pl
   const favorite = { ...song }, queued = { ...song }, unrelated = { ...song, title: '晴天' };
   const settings = { favorites: [favorite, unrelated], playlists: [{ songs: [song] }] };
   let saves = 0;
-  const setSongAudio = new Function('offlineKey', 'settings', 'current', 'queue', 'results', 'save', `${audioHelpers};return setSongAudio;`)(offlineKey, settings, null, [queued], [], () => saves++);
+  const setSongAudio = new Function('offlineKey', 'settings', 'current', 'queue', 'results', 'save', 'playbackRecord', `${audioHelpers};return setSongAudio;`)(offlineKey, settings, null, [queued], [], () => saves++, null);
   setSongAudio(song, 'https://cdn.test/new.mp3');
   for (const item of [song, favorite, queued]) {
     assert.equal(item.customAudio, 'https://cdn.test/new.mp3');

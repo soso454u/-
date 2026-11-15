@@ -31,7 +31,8 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, sa
     ${section('const defaults =', 'const KEEPALIVE_NAME').replace('DEFAULT_COMPANION_PRESET', "''")}
     const isVideoEntry=()=>false,bilibiliPlayer={close(){}};
     const settings={...defaults,lxMusicEnabled:enabled??defaults.lxMusicEnabled,playlists:[{songs:savedSongs}]},playbackSources=new WeakMap(),dataRequestControllers=new Set(),failedPlaybackUrls=new Set();
-    let queue=[],queueIndex=-1;
+    let queue=[],queueIndex=-1,verifiedPlaybackSong=null,resumePoint=null;
+    const checkpointPlayback=()=>{},recordPlaybackStart=()=>false;
     const count=()=>{},playListEntry=play,save=()=>saves.push(structuredClone(savedSongs));
     const setStatus=(message,persistent,retryAt)=>{statuses.push(message);if(retryAt)countdowns.push(retryAt);},toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;

@@ -87,10 +87,11 @@ test('reopening clears every hiding state and nonpersistent visibility changes d
 });
 
 test('pagehide unloads the owning runtime while a browser back-forward cache transition preserves it', () => {
-  let cleanups = 0;
-  const handlePageHide = new Function('cleanupPlayer', `${section('function handlePlayerPageHide', 'ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer')};return handlePlayerPageHide;`)(() => cleanups++);
+  let cleanups = 0, checkpoints = 0;
+  const handlePageHide = new Function('cleanupPlayer', 'checkpointPlayback', `${section('function handlePlayerPageHide', 'ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer')};return handlePlayerPageHide;`)(() => cleanups++, () => checkpoints++);
   handlePageHide({ persisted: true });
   assert.equal(cleanups, 0);
+  assert.equal(checkpoints, 1);
   handlePageHide({ persisted: false });
   assert.equal(cleanups, 1);
 });
