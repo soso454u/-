@@ -184,3 +184,17 @@ test('a source error after play acceptance still rejects and enables fallback', 
   const error = await rejection;
   assert.match(error.message, /media error 4/);
 });
+
+
+test('the current floor can be manually retried after its first search returned no song',async()=>{
+  let searches=0;
+  const chat=[recommendationMessage('Butterfly','G-Dragon')];
+  const run=new Function('context','parse','offlineKey','floorRecommendationWasUsed','search',`
+    const ID='test',ROOT={},DOC={querySelector:()=>({textContent:''})},settings={autoLoad:true},toast=()=>{},setStatus=()=>{};
+    let lastRecommendation='',lastRecommendationChat=null,lastTauriRecommendationChatKey;
+    ${playerSource.slice(playerSource.indexOf('async function recommendation('),playerSource.indexOf('  function parseWorldPlaylist('))};
+    return recommendation;
+  `)(()=>({chat}),parse,offlineKey,floorRecommendationWasUsed,async()=>{searches++;});
+  await run();await run();assert.equal(searches,1,'repeated automatic events stay deduplicated');
+  await run(true);assert.equal(searches,2,'manual read starts a new search');
+});

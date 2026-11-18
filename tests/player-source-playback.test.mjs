@@ -5,7 +5,7 @@ import test from 'node:test';
 const source=readFileSync(new URL('../纯音乐播放器.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a,b);}
 const matching=section('function normalizeSongText','// Share upstream cooldown');
-function matcher(){return new Function(`${matching};${section('function querySongHits','async function search(word')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText};`)();}
+function matcher(){return new Function(`${matching};${section('function querySongHits','async function searchRecommendationCandidates')};return {scoreSongHit,scorePlaybackHit,bestSongHit,querySongHits,rankSearchResults,normalizeSongText,scoreRecommendationHit,recommendationQueries};`)();}
 const jay={title:'七里香',artist:'周杰伦',duration:299,album:'七里香'};
 
 test('explicit singers reject covers and substring identities; known Jay aliases match',()=>{
@@ -28,13 +28,17 @@ test('version, album version and available duration evidence constrain candidate
 });
 
 function searchHarness(responses,settings={}){
-  const calls=[],statuses=[],api=matcher();let played;
-  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText',`
+  const calls=[],metingCalls=[],statuses=[],api=matcher();let played;
+  const searchSource=async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];};
+  const searchRecommendationCandidates=new Function('settings','GD_SOURCES','recommendationQueries','scoreRecommendationHit','searchSource','searchMetingSource',
+    `let disposed=false;${section('async function searchRecommendationCandidates','async function search(word')};return searchRecommendationCandidates;`
+  )(settings,['netease','joox'],api.recommendationQueries,api.scoreRecommendationHit,searchSource,async(platform,word)=>{metingCalls.push([platform,word]);return responses.meting?responses.meting(platform,word):[];});
+  const search=new Function('GD_SOURCES','searchSource','querySongHits','play','DOC','ROOT','render','setStatus','toast','hydrateResultCovers','settings','rankSearchResults','normalizeSongText','searchRecommendationCandidates',`
     let searchRequest=0,disposed=false,results=[];const ID='test',current=null,queue=[],save=()=>{};
     ${section('async function search(word','async function searchOtherMusic')}
     return {search,results:()=>results};
-  `)(['netease','joox'],async(source,word)=>{calls.push(source);return typeof responses[source]==='function'?responses[source](word):responses[source]||[];},api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},message=>statuses.push(message),()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText);
-  return {...search,calls,statuses,played:()=>played};
+  `)(['netease','joox'],searchSource,api.querySongHits,async song=>{played=song;},{querySelector:()=>null},{setTimeout:()=>{}},()=>{},message=>statuses.push(message),()=>{},()=>{},settings,api.rankSearchResults,api.normalizeSongText,searchRecommendationCandidates);
+  return {...search,calls,metingCalls,statuses,played:()=>played};
 }
 test('search stops at correct Netease result; wrong singer falls through to JOOX',async()=>{
   const first=searchHarness({netease:[{...jay,source:'netease'}],joox:[jay]});
@@ -279,4 +283,53 @@ test('playlist queues keep every entry and shuffle excludes the same recording i
   assert.equal(player.step(-1).id,'n1');
   player.mode('shuffle');
   assert.equal(player.step().id,'j2');
+});
+
+test('recommendations accept bilingual titles and lead-artist feature credits',()=>{
+  const api=matcher(),choice={title:'Obsession (악몽)',artist:'G-Dragon'};
+  assert.ok(Number.isFinite(api.scoreRecommendationHit({title:'악몽',artist:'G-DRAGON'},choice)));
+  assert.ok(Number.isFinite(api.scoreRecommendationHit({title:'악몽 (Obsession)',artist:'G-DRAGON'},choice)));
+  for(const song of [
+    {title:'Butterfly',artist:'G-DRAGON / JIN JUNG'},
+    {title:'Butterfly (Feat. Jin Jung)',artist:'G-DRAGON'},
+  ])assert.ok(Number.isFinite(api.scoreRecommendationHit(song,{title:'Butterfly',artist:'G-Dragon'})));
+  assert.deepEqual(api.recommendationQueries(choice),['Obsession (악몽) G-Dragon','Obsession G-Dragon','악몽 G-Dragon','Obsession (악몽)']);
+  for(const song of [
+    {title:'악몽 (Obsession) (Live)',artist:'G-DRAGON'},
+    {title:'악몽',artist:'ASH ISLAND'},
+  ])assert.equal(api.scoreRecommendationHit(song,choice),-Infinity);
+  for(const song of [
+    {title:'Butterfly',artist:'BTS'},
+    {title:'Butterfly',artist:'JIN JUNG / G-DRAGON'},
+    {title:'Butterfly (Remix)',artist:'G-DRAGON'},
+    {title:'Butterfly (Part 2)',artist:'G-DRAGON'},
+  ])assert.equal(api.scoreRecommendationHit(song,{title:'Butterfly',artist:'G-Dragon'}),-Infinity);
+  assert.equal(api.scoreSongHit({title:'Butterfly',artist:'G-DRAGON / JIN JUNG'},{title:'Butterfly',artist:'G-Dragon'}),-Infinity,'audio recording matching keeps its duration requirements');
+});
+
+test('structured floor search retries the Korean title without changing the requested artist',async()=>{
+  const correct={title:'악몽',artist:'G-DRAGON',source:'netease'};
+  const api=searchHarness({netease:word=>word==='악몽 G-Dragon'?[correct]:[]},{searchSource:'netease'});
+  await api.search('Obsession (악몽) G-Dragon',true,true,'',false,{title:'Obsession (악몽)',artist:'G-Dragon'});
+  assert.equal(api.played(),correct);
+});
+
+test('a recommendation can use existing metadata fallback after GD rejects requests',async()=>{
+  const correct={title:'Butterfly',artist:'G-DRAGON / JIN JUNG',source:'netease',mediaId:'22833494'};
+  const blocked=()=>{throw Object.assign(Error('HTTP 403'),{status:403});};
+  const api=searchHarness({netease:blocked,joox:blocked,meting:async()=>[correct]});
+  await api.search('Butterfly G-Dragon',true,true,'',false,{title:'Butterfly',artist:'G-Dragon'});
+  assert.equal(api.played(),correct);
+  assert.deepEqual(api.calls,['netease','joox'],'failed GD sources are not repeated for each query');
+  assert.deepEqual(api.metingCalls,[['netease','Butterfly G-Dragon']]);
+});
+
+test('an obsolete recommendation search does not use fallback or play its result',async()=>{
+  let resolveFirst;
+  const api=searchHarness({netease:word=>word==='Butterfly G-Dragon'?new Promise(resolve=>{resolveFirst=resolve;}):[]},{searchSource:'netease'});
+  const old=api.search('Butterfly G-Dragon',true,true,'',false,{title:'Butterfly',artist:'G-Dragon'});
+  await api.search('another query');
+  resolveFirst([{title:'Butterfly',artist:'G-DRAGON'}]);await old;
+  assert.equal(api.played(),undefined);
+  assert.deepEqual(api.metingCalls,[]);
 });

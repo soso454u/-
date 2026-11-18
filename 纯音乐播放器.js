@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.101';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.102';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -1492,13 +1492,54 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const exact=new Set(querySongHits(rows,word)),score=song=>exact.has(song)?100:artistMatches(song.artist,word)?80:0;
     return rows.filter((song,index,list)=>list.findIndex(item=>item.source===song.source&&item.id===song.id&&item.title===song.title&&item.artist===song.artist)===index).sort((a,b)=>score(b)-score(a));
   }
+  async function searchRecommendationCandidates(choice,{isActive=()=>!disposed}={}){
+    const selected=GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto';
+    const sources=selected==='auto'?GD_SOURCES:[selected],queries=recommendationQueries(choice);
+    const match=rows=>rows.map(song=>({song,score:scoreRecommendationHit(song,choice)}))
+      .filter(hit=>Number.isFinite(hit.score)).sort((a,b)=>b.score-a.score).map(hit=>hit.song);
+    let lastError,received=false,gdLimited=false;
+    const unavailable=new Set();
+    for(const word of queries){
+      for(const source of sources){
+        if(unavailable.has(source))continue;
+        if(!isActive())return [];
+        try{
+          const rows=await searchSource(source,word);
+          if(!isActive())return [];
+          received=true;
+          const hits=match(rows);
+          if(hits.length)return hits;
+        }catch(error){lastError=error;unavailable.add(source);if(error.retryAt){gdLimited=true;break;}}
+      }
+      if(gdLimited||unavailable.size===sources.length)break;
+    }
+    // The existing metadata service supplies real platform IDs when GD cannot find a recommendation.
+    const platforms=selected==='auto'?['netease','tencent']:selected==='netease'?['netease']:[];
+    for(const word of queries){
+      for(const platform of platforms){
+        if(!isActive())return [];
+        try{
+          const rows=await searchMetingSource(platform,word,{isActive});
+          if(!isActive())return [];
+          received=true;
+          const hits=match(rows);
+          if(hits.length)return hits;
+        }catch(error){lastError=error;}
+      }
+    }
+    if(!received&&lastError)throw lastError;
+    return [];
+  }
   async function search(word,autoPlayFirst=false,showList=true,heading='',quiet=false,preferredSong=null){
     word=String(word||'').trim();if(!word)return;
     const request=++searchRequest,strict=autoPlayFirst||!!preferredSong;
     const selected=GD_SOURCES.includes(settings.searchSource)?settings.searchSource:'auto';
     const sources=selected==='auto'?GD_SOURCES:[selected];
     setStatus('正在搜索…',showList&&!strict);let found=[],lastError;
-    for(const source of sources){
+    if(preferredSong){
+      try{found=await searchRecommendationCandidates(preferredSong,{isActive:()=>request===searchRequest&&!disposed});}
+      catch(error){lastError=error;}
+    }else for(const source of sources){
       try{
         const rows=await searchSource(source,word);if(request!==searchRequest||disposed)return;
         if(strict){found=querySongHits(rows,word,preferredSong);if(found.length)break;}
@@ -2012,6 +2053,37 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(a&&b&&Math.abs(a-b)>Math.max(10,b*.05))return -Infinity;
     let score=1000+(wantedArtist?300:0)+(exactArtist?80:0)+(album&&album===wantedAlbum?100:0)+(a&&b?60-Math.abs(a-b):0);
     return score;
+  }
+  function recommendationTitleNames(song){
+    const title=getSongTitle(song).normalize('NFKC')
+      .replace(/\(\s*(?:feat(?:uring)?|ft)\.?\s+[^()]+\)/gi,'').trim();
+    const names=[title],pair=title.match(/^(.+?)\s*\(([^()]+)\)$/);
+    if(pair&&!lyricVersion({title:pair[2]})){
+      const scripts=text=>[/[a-z]/i,/[\uac00-\ud7af]/,/[\u3400-\u9fff]/,/[\u3040-\u30ff]/,/[\u0400-\u04ff]/]
+        .reduce((mask,pattern,index)=>mask|(pattern.test(text)?1<<index:0),0);
+      const base=scripts(pair[1]),alias=scripts(pair[2]);
+      if(base&&alias&&!(base&alias))names.push(pair[1].trim(),pair[2].trim());
+    }
+    return [...new Set(names.filter(Boolean))];
+  }
+  function recommendationQueries(song){
+    const names=recommendationTitleNames(song),artist=getSongArtist(song);
+    return [...new Set([...names.map(title=>`${title} ${artist}`.trim()),getSongTitle(song)].filter(Boolean))];
+  }
+  function scoreRecommendationHit(item,song){
+    const strict=scoreSongHit(item,song);
+    if(Number.isFinite(strict))return strict;
+    if(lyricVersion(item)!==lyricVersion(song))return -Infinity;
+    const names=recommendationTitleNames(song).map(normalizeSongText);
+    if(!recommendationTitleNames(item).some(title=>names.includes(normalizeSongText(title))))return -Infinity;
+    const wanted=artistParts(getSongArtist(song)),found=artistParts(getSongArtist(item));
+    const sameArtist=artistMatches(getSongArtist(item),getSongArtist(song));
+    const leadArtist=wanted.length&&found[0]===wanted[0]&&wanted.every(artist=>found.includes(artist))
+      &&!/cover|tribute|翻唱|致敬/i.test(getSongArtist(item));
+    if(wanted.length&&!sameArtist&&!leadArtist)return -Infinity;
+    const a=songDuration(item),b=songDuration(song);
+    if(a&&b&&Math.abs(a-b)>Math.max(10,b*.05))return -Infinity;
+    return 800+(sameArtist?80:0)+(a&&b?60-Math.abs(a-b):0);
   }
   function bestSongHit(rows,song){return(Array.isArray(rows)?rows:[]).map(item=>({item,score:scoreSongHit(item,song)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>b.score-a.score)[0]?.item||null;}
   function recordingTitle(song){
@@ -2882,7 +2954,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       lastTauriRecommendationChatKey=tauriChatKey;
       lastRecommendation='';
     }
-    let m;for(let i=chat.length-1;i>=0;i--)if(!chat[i]?.is_user){m={i,text:chat[i].mes};break;}const r=m&&parse(m.text);if(!r){if(force)toast('warning','本层没有 music_recommend 标签');return;}const key=`${m.i}:${offlineKey(r)}`;if(key===lastRecommendation)return;lastRecommendation=key;if(floorRecommendationWasUsed(r,chat,m.i,30)){const message=`已跳过重复推荐：《${r.title}》 · ${r.artist}`;setStatus(message);DOC.querySelector(`#${ID} .reason`).textContent=message;if(force)toast('info','这首在最近 30 个楼层推荐过，已跳过');return;}DOC.querySelector(`#${ID} .reason`).textContent=r.reason?`推荐：${r.reason}`:'';if(settings.autoLoad||force)await search(`${r.title} ${r.artist}`,true,true,'本层推荐候选',false,r);}
+    let m;for(let i=chat.length-1;i>=0;i--)if(!chat[i]?.is_user){m={i,text:chat[i].mes};break;}const r=m&&parse(m.text);if(!r){if(force)toast('warning','本层没有 music_recommend 标签');return;}const key=`${m.i}:${offlineKey(r)}`;if(key===lastRecommendation&&!force)return;lastRecommendation=key;if(floorRecommendationWasUsed(r,chat,m.i,30)){const message=`已跳过重复推荐：《${r.title}》 · ${r.artist}`;setStatus(message);DOC.querySelector(`#${ID} .reason`).textContent=message;if(force)toast('info','这首在最近 30 个楼层推荐过，已跳过');return;}DOC.querySelector(`#${ID} .reason`).textContent=r.reason?`推荐：${r.reason}`:'';if(settings.autoLoad||force)await search(`${r.title} ${r.artist}`,true,true,'本层推荐候选',false,r);}
   function parseWorldPlaylist(content,bookName=''){
     const songs=[];
     for(const section of String(content||'').matchAll(/<selene_playlist(?:\s[^>]*)?>([\s\S]*?)<\/selene_playlist>/gi)){
