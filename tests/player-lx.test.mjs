@@ -277,6 +277,20 @@ test('expired addresses are skipped, fresh addresses are never persisted, and HT
   assert.equal(failures, 1);
 });
 
+test('upstream outages report the upstream status and continue to a working fallback without retrying LX', async () => {
+  let calls = 0;
+  const api = player(async () => {
+    calls++;
+    return Response.json({ code: 502, msg: 'Upstream HTTP 503' }, { status: 502 });
+  }, true, () => ({ source: 'netease', offline: false }));
+  await assert.rejects(api.playLxSource({ ...track, source: 'tencent', mediaId: songId }, 'tencent', () => true), /上游服务暂时不可用.*上游 HTTP 503.*转发 HTTP 502/);
+  calls = 0;
+  await api.play({ ...track, source: 'tencent', mediaId: songId, gdSource: 'tencent' });
+  assert.equal(calls, 1);
+  assert.deepEqual(api.fallback, [['netease', 'joox']]);
+  assert.equal(api.lyrics.length, 1);
+});
+
 test('QQ search keeps the exact playable ID and uses the existing LX Worker on selection', async () => {
   const calls=[];
   const api=player(async (url,options)=>{

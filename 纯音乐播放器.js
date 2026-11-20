@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.103';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.104';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -2792,6 +2792,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       if(!isActive())return null;
       if([408,504].includes(response.status)||data?.msg==='Upstream timeout')throw Error('LX Music 取址超时');
       if(code===2||(response.ok||response.status===422)&&['unavailable','expired'].includes(data?.error))continue;
+      const upstreamStatus=String(data?.msg||'').match(/^Upstream HTTP (5\d{2})$/)?.[1];
+      if(upstreamStatus)throw Error(`LX Music 上游服务暂时不可用（上游 HTTP ${upstreamStatus}，转发 HTTP ${response.status}），请稍后重试`);
+      if(response.status>=500)throw Error(`LX Music 取址服务暂时不可用（HTTP ${response.status}），请稍后重试`);
       if(!response.ok)throw Error(`LX Music 取址失败（HTTP ${response.status}）`);
       if(code!==0)throw Error(code==null?'LX Music 返回无效取址响应':`LX Music 取址失败（代码 ${code}）`);
       const expiry=data.expire??data.extra?.expire,timestamp=Number(expiry?.time??expiry);
@@ -4538,9 +4541,9 @@ ${latest.slice(-1500)}
       ${front} .selene-moonlight-stage:focus-visible{outline:2px solid var(--smp-switch);outline-offset:-2px}
       ${front} .selene-moonlight-art{position:relative;display:grid;place-items:center;width:min(94%,100cqh,360px,calc(94% * var(--cover-scale,1)));
         aspect-ratio:1;pointer-events:none}
-      ${front} .selene-moonlight-disc{position:relative;z-index:1;display:grid;place-items:center;width:68%;aspect-ratio:1;border-radius:50%;overflow:hidden;
+      ${front} .selene-moonlight-disc{position:relative;z-index:1;display:grid;place-items:center;width:68%;aspect-ratio:1;border-radius:50%!important;overflow:hidden!important;clip-path:circle(50%)!important;
         background:radial-gradient(circle at 37% 25%,#a37c6e,#4b3437 82%);font:400 clamp(18px,19cqh,40px)/1 system-ui;animation:selene-orbit-turn 26s linear infinite paused}
-      ${front} .selene-moonlight-disc:after{content:'';position:absolute;inset:0;background:var(--album-cover) center/cover}
+      ${front} .selene-moonlight-disc:after{content:'';position:absolute;inset:0;border-radius:50%!important;clip-path:circle(50%)!important;background:var(--album-cover) center/cover}
       ${front} .selene-moonlight-halo{
         position:absolute;inset:0;filter:hue-rotate(195deg) saturate(1.5);
         animation:selene-moonlight-tint 42s ease-in-out infinite paused
