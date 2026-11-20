@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.105';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.106';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -4498,8 +4498,8 @@ ${latest.slice(-1500)}
     const header=`${moon}>.selene-player-head`;
     DOC.head.insertAdjacentHTML('beforeend',`<style id="${ID}-moonlight-style">
       #${ID} :is(.selene-moonlight-stage,.selene-moonlight-library,.selene-moonlight-progress){display:none!important}
-      ${moon}{--smp-text:#f8eee7;--smp-head-text:#f8eee7;--smp-muted:#dcc8bf;--smp-control-bg:#ffffff16;
-        --smp-control-border:#fff1e02a;--smp-input-bg:#291b19bb;--smp-settings-bg:#382823f7;--smp-switch:#f1d4c3;
+      ${moon}{--smp-text:#f7efff;--smp-head-text:#f7efff;--smp-muted:#bcb6cf;--smp-control-bg:var(--moonlight-action);
+        --smp-control-border:var(--moonlight-line);--smp-input-bg:#171a2dde;--smp-settings-bg:#22243bf7;--smp-switch:var(--moonlight-accent);
         --moonlight-accent:#decef7;--moonlight-ink:#2c1d41;--moonlight-rail:#eadcff36;
         --moonlight-action:#30243c79;--moonlight-primary:#261d37a6;--moonlight-hover:#4b3b65d9;
         --moonlight-line:#e7ddff38;--moonlight-primary-line:#e7ddff67;--moonlight-action-text:#f7efff;
@@ -4585,6 +4585,8 @@ ${latest.slice(-1500)}
       ${moon} .selene-library-nav>[aria-pressed=true]::after{background:var(--moonlight-accent)}
       ${moon} .list .row-tools>button:not(.is-favorite){color:var(--moonlight-accent)!important}
       ${moon} .selene-row-menu{background:#241b35f2;border-color:var(--moonlight-line)}
+      ${moon} .settings-panel input[type=checkbox]:checked::before{background:var(--moonlight-ink)!important}
+      ${moon} .settings-panel :is(button,input,select):focus-visible{outline:2px solid var(--moonlight-accent)!important;outline-offset:3px!important}
       @media(hover:hover){
         ${libraryActions}:hover:not(:disabled),${header}>button:hover,
         ${moon}:not(.immersive) .selene-library-nav>button:hover,${moon}:not(.immersive) .list .row-tools>button:hover,
