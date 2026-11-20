@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.102';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.103';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -2975,8 +2975,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     return songs;
   }
   function worldEntryContents(data){const entries=data?.entries;return Array.isArray(entries)?entries.map(x=>x?.content):entries&&typeof entries==='object'?Object.values(entries).map(x=>x?.content):[];}
-  async function currentWorldNames(ctx,allNames){
-    const allowed=new Set(allNames),names=[],characters=[],add=value=>{const name=String(value||'').trim();if(name&&allowed.has(name)&&!names.includes(name))names.push(name);};
+  async function currentWorldNames(ctx){
+    const names=new Set(),characters=[],add=value=>{const name=String(value||'').trim();if(name)names.add(name);};
     const group=ctx?.groups?.find?.(item=>String(item.id)===String(ctx?.groupId));
     if(group){
       for(const avatar of group.members||[]){const character=ctx?.characters?.find?.(item=>item.avatar===avatar);if(character)characters.push(character);}
@@ -2990,12 +2990,16 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       try{const escaped=avatar.replace(/\\/g,'\\\\').replace(/"/g,'\\"'),result=await execute(`/getcharbook type=all create=false "${escaped}"`,{handleParserErrors:false,handleExecutionErrors:false});for(const name of companionBookNamesFrom(result?.pipe))add(name);}catch(error){console.warn('[音乐播放器] 读取当前角色卡绑定世界书失败',error);}
     }
     DOC.querySelectorAll('.character_extra_world_info_selector option:checked').forEach(option=>add(option.value||option.textContent));
-    return names;
+    return [...names];
   }
   async function loadWorldPlaylistBooks(ctx,names){
-    const settled=await Promise.allSettled(names.map(async name=>({name,data:await ctx.loadWorldInfo(name)}))),songs=[],loaded=[];
-    for(const item of settled)if(item.status==='fulfilled'&&item.value.data){loaded.push(item.value.name);for(const content of worldEntryContents(item.value.data))songs.push(...parseWorldPlaylist(content,item.value.name));}
-    return {songs,loaded,failures:settled.filter(x=>x.status==='rejected').length};
+    const settled=await Promise.allSettled(names.map(async name=>({name,data:await ctx.loadWorldInfo(name)}))),songs=[];
+    let failures=0;
+    for(const item of settled){
+      if(item.status==='rejected'||!item.value.data){failures++;continue;}
+      for(const content of worldEntryContents(item.value.data))songs.push(...parseWorldPlaylist(content,item.value.name));
+    }
+    return {songs,failures};
   }
   function renderWorldPlaylist(songs,bookNames){
     results=songs;render(songs,`作者推荐 · ${songs.length} 首`,'results',false);
@@ -3007,12 +3011,10 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   async function readWorldRecommendations(){
     const ctx=context();
-    if(typeof ctx?.getWorldInfoNames!=='function'||typeof ctx?.loadWorldInfo!=='function'){const message='当前 SillyTavern 版本没有提供世界书读取接口，请更新后重试';setStatus(message);toast('error',message);return;}
-    const allNames=[...new Set((ctx.getWorldInfoNames()||[]).map(String).filter(Boolean))];
-    if(!allNames.length){const message='尚未导入世界书，请先导入作者推荐歌单模板';setStatus(message);toast('warning',message);return;}
+    if(typeof ctx?.loadWorldInfo!=='function'){const message='当前无法调用 SillyTavern 世界书读取接口，请刷新页面后重试';setStatus(message);toast('error',message);return;}
     setStatus('正在读取世界书作者推荐…');
     try{
-      const active=await currentWorldNames(ctx,allNames);
+      const active=await currentWorldNames(ctx);
       if(!active.length){const message='当前角色卡没有绑定世界书';setStatus(message);toast('warning',message);return;}
       const primary=await loadWorldPlaylistBooks(ctx,active),raw=primary.songs,seen=new Set(),songs=[];
       for(const item of raw){const key=`${normalizeSongText(item.title)}:${normalizeSongText(item.artist)}`;if(!key||seen.has(key))continue;seen.add(key);songs.push({id:`world:${key}`,mediaId:'',title:item.title,artist:item.artist,album:item.bookName||'作者推荐',cover:'',coverId:'',lyricId:'',audio:'',source:'netease'});if(songs.length>=300)break;}
