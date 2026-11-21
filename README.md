@@ -342,6 +342,61 @@ v2.10.33 同时修复窗口拖动：窗口挂到最外层可访问的同源父�
 
 > “优先播放”和“允许同时播放”是两种不同的系统音频策略：前者更积极地争取媒体焦点，后者允许混音。网页扩展不能越过 Android/iOS 强制获得永久最高优先级，实际行为仍取决于浏览器内核、系统省电策略和厂商限制。
 
+## 外部播放联动接口（v2.10.107）
+
+可选供独立的「Selene 小手机」等同源脚本读取和控制，不需要安装联动脚本。接口在实际酒馆页面的 `ROOT.__SELENE_MUSIC_PLAYER__` 上，脚本 iframe 应向上寻找可访问的同源父窗口。原有公开方法、`getState()` 与 `selene-music-player-state` 保持兼容。
+
+| 新增方法 | 行为 |
+| --- | --- |
+| `getPlaybackState()` | 同步读取当前真实播放状态，返回新的普通对象 |
+| `play()` | 复用现有播放/续播流程；没有当前歌曲时从原队列选歌，加载中不重复启动 |
+| `pause()` | 暂停歌曲，并取消正在加载的播放请求 |
+| `togglePlayback()` | 与主播放按钮相同，播放/加载时暂停或取消，否则继续播放 |
+| `previousTrack()` / `nextTrack()` | 复用上一首/下一首与原有队列、播放模式及音源回退 |
+| `seekTo(seconds)` | 复用现有进度控制；秒数须为有限数字，自动限制到可用范围；歌曲尚未加载时忽略 |
+
+控制方法返回调用后的状态快照；`play()` 返回 Promise，`togglePlayback()` 在启动播放时也返回 Promise。切歌快照可能处于加载中，后续状态以事件或再次读取为准。
+
+```js
+{
+  protocolVersion: 1,
+  loaded: true,
+  trackId: '',
+  title: '',
+  artist: '',
+  artwork: '',
+  playing: false,
+  loading: false,
+  currentTime: 0,
+  duration: 0,
+  playbackRate: 1
+}
+```
+
+`trackId` 使用当前歌曲 ID（缺失时使用 mediaId），标题和歌手来自当前歌曲；没有当前歌曲时四个歌曲字符串字段为空。`artwork` 读取播放器当前显示的封面地址，失败封面清空时也同步清空，不额外请求封面。时间和时长的单位为秒，未知值为 0；加载新歌曲时不暴露上一首的进度，恢复待播歌曲时返回已保存的续播位置。
+
+`playing` 仅在原播放状态机已确认主歌曲实际播放、主音频未暂停/结束/出错且数据可用时为 true。静音保活、预加载、等待加载、失败音源与暂停都不会报成正在播放。
+
+新增独立事件 **`selene-music-playback-state`**，在 `ROOT` 上通过 `ROOT.CustomEvent` 广播，`event.detail` 与 `getPlaybackState()` 结构相同。初始化、歌曲或封面变更、真实播放、暂停、加载变化、结束、跳转、时长及倍速变化时通知；相同状态去重，不为正常进度新增定时器或高频广播。需要实时进度时按界面自身需要读取快照即可。
+
+```js
+let ROOT = window;
+try { while (ROOT.parent !== ROOT && ROOT.parent.document) ROOT = ROOT.parent; } catch {}
+
+const onPlaybackState = event => {
+  const state = event.detail;
+  // 联动界面按需消费 state；loaded=false 时停止展示播放状态。
+};
+ROOT.addEventListener('selene-music-playback-state', onPlaybackState);
+const initial = ROOT.__SELENE_MUSIC_PLAYER__?.getPlaybackState();
+await ROOT.__SELENE_MUSIC_PLAYER__?.play();
+ROOT.__SELENE_MUSIC_PLAYER__?.pause();
+// 联动脚本卸载时：
+ROOT.removeEventListener('selene-music-playback-state', onPlaybackState);
+```
+
+播放器卸载前先广播 `loaded=false、playing=false、loading=false`，再按原逻辑移除公开对象；热重载时新实例重新广播初始化状态。联动脚本应在调用时重新读取 `ROOT.__SELENE_MUSIC_PLAYER__`，避免保留旧实例。脚本版、扩展版共用该协议，不新增网络请求、音频实例、音频上下文或 localStorage 读取。
+
 ## 更新
 
 扩展已启用自动更新。

@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.106';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.107';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -663,6 +663,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   keepAliveAudio.addEventListener('error',()=>{if(settings.keepAlive&&!keepAliveSuspendedForTrack)keepAliveError='保活媒体加载失败';updateKeepAliveUI();emitPublicState();});
   let results = [], current = null, queue = [], queueIndex = -1, lastRecommendation = '', lastRecommendationChat = null, lyricTimeline = [], currentLyricWords = '', playRequest = 0, disposed = false, menuAddTimer = 0, menuObserver = null, progressSeeking = false, pendingProgressValue = 0, currentCacheObjectUrl = '', playbackWanted = false, interruptionRetryTimer = 0, interruptionRetryCount = 0, companionBusy = false, companionRequest = 0, companionAutoSongKey = '', companionAutoCount = 0, companionMidSongDone = false, companionDragged = false, companionQueueDraining = false, companionListeningClock = null, companionListeningSavedAt = 0, companionListeningAwaitingPlay = false; const companionMessageQueue=[],lyricCache = new Map(),lyricRequests=new Map();
   let lyricState='暂无歌词',immersiveLyricsObserver=null;
+  let playbackPublicReady=false,lastPlaybackStateKey='';
   let cancelPlaybackProbe=null,playbackPhase='idle',audioPriming=false,playbackRecoveryCount=0,pendingPlaybackSelection=false,audioPrimeUrl='',playbackBlobRetryUsed=false;
   const failedPlaybackUrls=new Set();let playbackSources=new WeakMap();
   let searchRequest=0;
@@ -1281,7 +1282,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const left=Math.max(leftEdge+6,Math.min(Math.max(leftEdge+6,leftEdge+width-el.offsetWidth-6),Number(settings.mobilePosition.left)||leftEdge+6)),top=Math.max(topEdge+6,Math.min(Math.max(topEdge+6,topEdge+height-el.offsetHeight-6),topEdge+height*(Number(settings.mobilePosition.top)||18)/100));
     el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');
   }
-  function updatePlayButton(){const playing=playbackPhase==='playing'&&!audio.paused,loading=playbackWanted&&playbackPhase==='loading',player=DOC.getElementById(ID),button=player?.querySelector('[data-c="play"]');player?.classList.toggle('selene-mini-playing',playing);if(button){button.textContent=loading?'…':playing?'❚❚':'▶';button.classList.toggle('is-playing',playing);button.setAttribute('aria-busy',String(loading));button.title=loading?'正在加载，点击取消':playing?'暂停':'播放';}if(playing&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);}
+  function updatePlayButton(){const playing=playbackPhase==='playing'&&!audio.paused,loading=playbackWanted&&playbackPhase==='loading',player=DOC.getElementById(ID),button=player?.querySelector('[data-c="play"]');player?.classList.toggle('selene-mini-playing',playing);if(button){button.textContent=loading?'…':playing?'❚❚':'▶';button.classList.toggle('is-playing',playing);button.setAttribute('aria-busy',String(loading));button.title=loading?'正在加载，点击取消':playing?'暂停':'播放';}if(playing&&current){pauseKeepAliveForTrack();updateMediaMetadata(current,true);}else scheduleKeepAliveSync();updateMediaPlaybackState(true);emitPlaybackState();}
   function updateLyricsLock(){
     const lyrics=DOC.getElementById(`${ID}-desktop-lyrics`),quick=DOC.querySelector(`#${ID} .quick-lyrics-lock`);
     lyrics?.classList.toggle('lyrics-locked',!!settings.lyricsLocked);
@@ -1939,7 +1940,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function favorite(s){const i=settings.favorites?.findIndex(x=>x.id===s.id);if(i>=0)settings.favorites.splice(i,1);else{settings.favorites=settings.favorites||[];settings.favorites.unshift(strip(s));}save();refreshLibraryHearts();}
   function saveFavorite(s){settings.favorites=settings.favorites||[];if(!settings.favorites.some(x=>x.id===s.id)){settings.favorites.unshift(strip(s));save();refreshLibraryHearts();}}
   function count(){const badge=DOC.querySelector(`#${ID} [data-library-queue-count]`);if(badge){badge.textContent=queue.length;badge.hidden=!queue.length;}syncPlaybackQueue();}
-  function show(s){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){s.cover=cover;applyCover(cover);if(settings.favorites?.includes(s))save();}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
+  function show(s){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();emitPlaybackState();};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){s.cover=cover;applyCover(cover);if(settings.favorites?.includes(s))save();}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
   const clock = seconds => { seconds=Number.isFinite(seconds)?Math.max(0,seconds):0;return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`; };
   const mediaDetail = error => String(error?.message||'暂时无法播放这首歌，请重试或切换音源');
   function normalizeSongText(value){return String(value||'').toLowerCase().normalize('NFKC').replace(/\b(feat(?:uring)?|ft)\.?\b/g,' ').replace(/[\s·•._\-—–()（）\[\]【】'"“”‘’/\\,:：;；!?！？]+/g,'');}
@@ -5002,7 +5003,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;cleanupMoonlight?.();stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;emitPlaybackState(true);playbackPublicReady=false;for(const event of playbackPublicEvents)audio.removeEventListener(event,handlePublicPlaybackEvent);cleanupMoonlight?.();stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(event?.persisted)checkpointPlayback(true);else cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); loadPlaybackRecord();const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();restorePlaybackSelection();DOC.addEventListener('visibilitychange',flushPlaybackOnHide);audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -5496,6 +5497,62 @@ ${latest.slice(-1500)}
   }
   function bindListBatchActions(el){el.querySelector('[data-a="fav-queue"]')?.remove();const inject=kind=>{const box=el.querySelector('.list');if(!box||box.hidden)return;box.querySelector('.batch-bar')?.remove();const bar=DOC.createElement('div');bar.className='batch-bar';bar.innerHTML=`<b>${kind==='fav'?'收藏歌曲':'播放队列'}</b>${kind==='fav'?'<button data-batch-queue>收藏入队</button>':''}<button data-batch-play>一键播放</button>`;box.prepend(bar);bar.onclick=e=>{const favorites=settings.favorites||[];if(e.target.closest('[data-batch-queue]')){const known=new Set(queue.map(x=>x.id));let added=0;for(const song of favorites)if(!known.has(song.id)){queue.push(strip(song));known.add(song.id);added++;}count();setStatus(added?`已将 ${added} 首收藏加入播放队列`:'收藏歌曲已在播放队列中');}if(e.target.closest('[data-batch-play]')){if(kind==='fav'){queue=favorites.map(strip);count();}if(!queue.length){setStatus('没有可播放的歌曲');return;}queueIndex=0;playListEntry(queue[0]);}};};el.querySelector('.actions').addEventListener('click',e=>{const action=e.target.dataset.a;if(action==='fav'||action==='queue')ROOT.setTimeout(()=>inject(action),0);});}
   function bindListHeadingActions(el){el.querySelector('[data-a="fav-queue"]')?.remove();}
+  // Read only the existing main-track runtime; keep-alive and source probes are separate audio.
+  function getPlaybackState(){
+    const loaded=playbackPublicReady&&!disposed&&!!DOC.getElementById(ID),song=current;
+    const preparing=audioPriming||pendingPlaybackSelection,saved=resumePoint?.song===song;
+    const finite=value=>Number.isFinite(Number(value))?Math.max(0,Number(value)):0;
+    return {
+      protocolVersion:1,
+      loaded,
+      trackId:song?String(song.id||song.mediaId||''):'',
+      title:song?String(song.title||''):'',
+      artist:song?String(song.artist||''):'',
+      artwork:song?DOC.querySelector(`#${ID} .now img`)?.getAttribute('src')||'':'',
+      playing:!!(loaded&&song&&playbackWanted&&!preparing&&playbackPhase==='playing'&&!audio.paused&&!audio.ended&&!audio.error&&audio.readyState>=3),
+      loading:!!(loaded&&song&&playbackWanted&&!audio.error&&!audio.ended&&(preparing||playbackPhase==='loading')),
+      currentTime:song?finite(saved?resumePoint.position:preparing?0:audio.currentTime):0,
+      duration:song?finite(preparing||saved?song.duration:audio.duration):0,
+      playbackRate:finite(audio.playbackRate)||1,
+    };
+  }
+  function emitPlaybackState(force=false){
+    if(!playbackPublicReady)return;
+    const state=getPlaybackState();
+    // Progress is available on demand. Broadcast transitions without a polling timer.
+    const {currentTime,...transition}=state,key=JSON.stringify(transition);
+    if(!force&&key===lastPlaybackStateKey)return;
+    lastPlaybackStateKey=key;
+    try{ROOT.dispatchEvent(new ROOT.CustomEvent('selene-music-playback-state',{detail:state}));}catch{}
+  }
+  const playbackPublicEvents=['play','playing','pause','waiting','stalled','ended','emptied','error','loadedmetadata','durationchange','seeked','ratechange'];
+  function handlePublicPlaybackEvent(event){
+    // Let the existing state machine finish processing this media event first.
+    const force=event.type==='seeked';
+    Promise.resolve().then(()=>emitPlaybackState(force));
+  }
+  async function playPublicPlayback(){
+    if(!disposed&&(!playbackWanted||audio.paused&&playbackPhase!=='loading'))await resumeMainAudioFromMediaSession();
+    return getPlaybackState();
+  }
+  function pausePublicPlayback(){
+    if(!disposed){
+      // Same cancellation path as the main play/pause control, including pending sources.
+      playbackWanted=false;++playRequest;cancelPlaybackProbe?.();playbackPhase='idle';audio.pause();updatePlayButton();
+    }
+    return getPlaybackState();
+  }
+  function togglePublicPlayback(){
+    return !playbackWanted||audio.paused&&playbackPhase!=='loading'?playPublicPlayback():pausePublicPlayback();
+  }
+  function previousPublicTrack(){if(!disposed)switchMediaTrack(-1);return getPlaybackState();}
+  function nextPublicTrack(){if(!disposed)switchMediaTrack(1);return getPlaybackState();}
+  function seekPublicPlayback(seconds){
+    if(!disposed&&current&&!audioPriming&&!pendingPlaybackSelection&&Number.isFinite(seconds)){
+      seekMediaTo(seconds);emitPlaybackState(true);
+    }
+    return getPlaybackState();
+  }
   function publicState(){
     const player=DOC.getElementById(ID);
     return {
@@ -5686,6 +5743,13 @@ ${latest.slice(-1500)}
   }
   ROOT.__SELENE_MUSIC_PLAYER__={
     getState:publicState,
+    getPlaybackState,
+    play:playPublicPlayback,
+    pause:pausePublicPlayback,
+    togglePlayback:togglePublicPlayback,
+    previousTrack:previousPublicTrack,
+    nextTrack:nextPublicTrack,
+    seekTo:seekPublicPlayback,
     setVisible:setPublicVisible,
     setCompanionVisible:setPublicCompanionVisible,
     setAutoShow:setPublicAutoShow,
@@ -5698,5 +5762,8 @@ ${latest.slice(-1500)}
     resetWindow:resetPublicWindow,
     resetCompanionPosition:resetPublicCompanionPosition,
   };
+  for(const event of playbackPublicEvents)audio.addEventListener(event,handlePublicPlaybackEvent);
+  playbackPublicReady=true;
   emitPublicState();
+  emitPlaybackState(true);
 })();
