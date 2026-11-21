@@ -180,7 +180,7 @@ test('post-start recovery is bounded to one source-resolution pass per user sele
 
 test('visible result artwork loads one row at a time and ignores a track that switched source',async()=>{
   const rows=Array.from({length:6},(_,i)=>({...jay,source:'netease',mediaId:`N-${i}`,cover:''}));
-  const images=rows.map((_,i)=>({isConnected:true,parentElement:{dataset:{i}},hasAttribute(){return !!this.src;}}));
+  const images=rows.map((_,i)=>({isConnected:true,parentElement:{dataset:{i}},hasAttribute(){return !!this.src;},getAttribute(){return this.src||null;}}));
   const observed=[],pending=[];
   let notify;
   class Observer{
@@ -190,7 +190,7 @@ test('visible result artwork loads one row at a time and ignores a track that sw
     disconnect(){}
   }
   const box={querySelectorAll:()=>images};
-  const art=new Function('rows','resolveCover','ROOT','DOC',`let results=rows,disposed=false;const ID='test',isVideoEntry=()=>false;${section('let resultCoverObserver=null','function render(')};return {hydrateResultCovers,syncResultCover};`)(rows,song=>new Promise(resolve=>pending.push({song,resolve})),{IntersectionObserver:Observer},{querySelector:()=>box,querySelectorAll:()=>images.filter(img=>!img.src)});
+  const art=new Function('rows','resolveCover','ROOT','DOC',`let results=rows,disposed=false,current=null;const settings={favorites:[],playlists:[]},queue=[],playlistPlaybackOrigins=new WeakMap(),scheduleMusicLibraryState=()=>{},save=()=>{},setArtworkSource=(img,cover)=>{img.src=cover;};const ID='test',isVideoEntry=()=>false;${section('let resultCoverObserver=null','function render(')};return {hydrateResultCovers,syncResultCover};`)(rows,song=>new Promise(resolve=>pending.push({song,resolve})),{IntersectionObserver:Observer},{querySelector:()=>box,querySelectorAll:()=>images.filter(img=>!img.src)});
   art.hydrateResultCovers(rows);
   assert.equal(observed.length,6);
   assert.equal(pending.length,0);
@@ -271,7 +271,7 @@ test('playlist queues keep every entry and shuffle excludes the same recording i
     let queue=[],queueIndex=-1,current=null;
     const settings={playMode:'loop'},bilibiliPlayer={isOpen:()=>false};
     const isVideoEntry=song=>song?.source==='bilibili-video';
-    const count=()=>{},playListEntry=song=>{current={...song};};
+    const reuseLibraryCovers=()=>false,count=()=>{},playListEntry=song=>{current={...song};};
     const Math={random:()=>0,floor:globalThis.Math.floor};
     ${section('function nextSong(','function bindDesktopLyrics')}
     playPlaylistAt(tracks,0);

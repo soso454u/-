@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.108';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.109';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -1326,6 +1326,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   const playlistPlaybackOrigins=new WeakMap();
   function playPlaylistAt(songs,index=0){
     if(!songs[index]){setStatus('这个歌单还是空的');return;}
+    reuseLibraryCovers(songs);
     queue=songs.map(song=>{
       const copy={...song};
       playlistPlaybackOrigins.set(copy,song);
@@ -1596,7 +1597,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
 
   const coverResponses=new Map(),coverRequests=new Map();
-  let resultCoverObserver=null;
+  let resultCoverObserver=null,displayedSongRows=null;
   function hydrateResultCovers(rows){
     if(disposed||results!==rows)return;
     const box=DOC.querySelector(`#${ID} .list`);
@@ -1614,7 +1615,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       try{
         const cover=song.cover||await resolveCover({...song},[],isActive);
         if(!isActive()||!cover)return;
-        song.cover=song.cover||cover;
+        shareLibraryCover(song,song.cover||cover);
         img.src=song.cover;
         observer?.unobserve(img);
         syncResultCover(song);
@@ -1677,10 +1678,55 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(bvid)bilibiliPlayer.open(bvid,song.title);
     else setStatus('这条旧版 B 站记录没有有效 BV 号，可用标题到 B 站搜索',true);
   }
+  // Cover metadata can be shared; playback objects and source state remain independent.
+  function songArtworkKey(song){
+    const id=song?.mediaId||song?.id;
+    return id?JSON.stringify([song.source||'netease',String(id),song.version||'']):'';
+  }
+  function reuseLibraryCovers(rows){
+    if(!Array.isArray(rows)||!rows.some(song=>song&&!song.cover))return false;
+    const covers=new Map(),savedRows=new Set(),remember=song=>{const key=songArtworkKey(song);if(key&&song.cover&&!covers.has(key))covers.set(key,song.cover);};
+    for(const song of settings.favorites||[]){savedRows.add(song);remember(song);}
+    for(const list of settings.playlists||[])for(const song of list.songs||[]){savedRows.add(song);remember(song);}
+    for(const song of queue)remember(song);
+    for(const song of results)remember(song);
+    if(current)remember(current);
+    let changed=false,persist=false;
+    for(const song of rows){
+      if(!song||song.cover)continue;
+      const origin=playlistPlaybackOrigins.get(song),cover=origin?.cover||covers.get(songArtworkKey(song));
+      if(cover){song.cover=cover;changed=true;if(savedRows.has(song))persist=true;}
+    }
+    if(persist)save();
+    if(changed)scheduleMusicLibraryState('all');
+    return changed;
+  }
+  function shareLibraryCover(song,cover){
+    if(disposed||!song||!cover)return;
+    const origin=playlistPlaybackOrigins.get(song),keys=new Set([songArtworkKey(song),songArtworkKey(origin)].filter(Boolean));
+    let saved=false,changed=false;
+    const update=(row,persist=false)=>{
+      if(!row||(row!==song&&row!==origin&&!keys.has(songArtworkKey(row)))||row.cover===cover)return;
+      row.cover=cover;changed=true;if(persist)saved=true;
+    };
+    for(const row of settings.favorites||[])update(row,true);
+    for(const list of settings.playlists||[])for(const row of list.songs||[])update(row,true);
+    update(song);if(origin)update(origin);
+    for(const row of queue)update(row);
+    for(const row of results)update(row);
+    // Update existing row images in place, preserving the current list and scroll position.
+    DOC.querySelectorAll(`#${ID} .list .row[data-i]>img,#${ID} .list .row[data-song-index]>img`).forEach(img=>{
+      const index=Number(img.parentElement.dataset.songIndex??img.parentElement.dataset.i),row=displayedSongRows?.[index];
+      if(row&&(row===song||row===origin||keys.has(songArtworkKey(row)))&&img.getAttribute('src')!==row.cover)setArtworkSource(img,row.cover);
+    });
+    if(saved)save();
+    if(changed)scheduleMusicLibraryState('all');
+  }
   function render(rows, heading='', kind='results', hydrateCovers=true, emptyMessage='没有歌曲') {
     resultCoverObserver?.disconnect();
     syncLibraryNavigation(kind==='fav'?'favorites':kind==='queue'?'queue':'');
     const box=DOC.querySelector(`#${ID} .list`),saved=kind==='fav'||kind==='queue';
+    reuseLibraryCovers(rows);displayedSongRows=rows;
     const headingActions=saved?`${kind==='fav'?'<button data-heading-action="clear">清空收藏</button><button data-heading-action="queue">收藏入队</button>':'<button data-heading-action="clear">清空队列</button>'}<button data-heading-action="play">一键播放</button>`:'';
     box.hidden=false;
     box.innerHTML=`${heading?`<div class="row${saved?' batch-heading':''}"><b>${esc(heading)}</b>${headingActions}</div>`:''}${rows.map((s,i)=>{
@@ -1695,7 +1741,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     }).join('')||`<div class="row">${esc(emptyMessage)}</div>`}`;
     box.querySelectorAll('.row[data-i]>img').forEach(img=>{img.onerror=async()=>{
       img.onerror=null;const song=rows[Number(img.parentElement.dataset.i)],source=song.source,id=song.mediaId,failed=img.src;img.removeAttribute('src');
-      const cover=await resolveCover({...song,cover:''},[failed]);if(!img.isConnected||song.source!==source||song.mediaId!==id||!cover)return;song.cover=cover;img.src=cover;if(saved)save();
+      const cover=await resolveCover({...song,cover:''},[failed]);if(!img.isConnected||song.source!==source||song.mediaId!==id||!cover)return;shareLibraryCover(song,cover);img.src=cover;
     };});
     box.onclick=e=>{
       const headingAction=e.target.closest('[data-heading-action]')?.dataset.headingAction;
@@ -1917,6 +1963,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     playbackRecordStore=openPlaybackRecordStore();
     playbackRecord=readPlaybackRecord(playbackRecordStore.read());
     queue=playbackRecord.queue.map(song=>({...song}));
+    reuseLibraryCovers(queue);
     queueIndex=playbackRecord.queueIndex;
   }
   function restorePlaybackSelection(){
@@ -1941,7 +1988,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function favorite(s){const i=settings.favorites?.findIndex(x=>x.id===s.id);if(i>=0)settings.favorites.splice(i,1);else{settings.favorites=settings.favorites||[];settings.favorites.unshift(strip(s));}save();refreshLibraryHearts();}
   function saveFavorite(s){settings.favorites=settings.favorites||[];if(!settings.favorites.some(x=>x.id===s.id)){settings.favorites.unshift(strip(s));save();refreshLibraryHearts();}}
   function count(){const badge=DOC.querySelector(`#${ID} [data-library-queue-count]`);if(badge){badge.textContent=queue.length;badge.hidden=!queue.length;}syncPlaybackQueue();scheduleMusicLibraryState('queue');}
-  function show(s){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();emitPlaybackState();scheduleMusicLibraryState('all');};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){s.cover=cover;applyCover(cover);if(settings.favorites?.includes(s))save();}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
+  function show(s){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();emitPlaybackState();scheduleMusicLibraryState('all');};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){shareLibraryCover(s,cover);applyCover(cover);}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
   const clock = seconds => { seconds=Number.isFinite(seconds)?Math.max(0,seconds):0;return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`; };
   const mediaDetail = error => String(error?.message||'暂时无法播放这首歌，请重试或切换音源');
   function normalizeSongText(value){return String(value||'').toLowerCase().normalize('NFKC').replace(/\b(feat(?:uring)?|ft)\.?\b/g,' ').replace(/[\s·•._\-—–()（）\[\]【】'"“”‘’/\\,:：;；!?！？]+/g,'');}
@@ -2669,8 +2716,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const cover=await gdCover({...s,cover:''},isActive);
     return await usable(cover)?cover:'';
   }
-  async function applyCurrentCover(s,request){const source=s.source,id=s.mediaId,pic=await resolveCover({...s});if(request!==playRequest||current!==s||s.source!==source||s.mediaId!==id||!pic)return;s.cover=pic;syncResultCover(s);show(s);if(settings.favorites?.includes(s))save();}
-  async function hydrateSavedCovers(rows,heading='',kind='fav'){if(!Array.isArray(rows)||rows._coverHydrating)return;rows._coverHydrating=true;try{for(const song of rows.slice(0,12)){if(song.source==='direct'||isVideoEntry(song)||song.cover)continue;const source=song.source,id=song.mediaId,cover=await resolveCover({...song});if(song.source===source&&song.mediaId===id&&!song.cover)song.cover=cover;}if(kind==='fav')save();}finally{rows._coverHydrating=false;}if(kind==='fav')render(rows,heading,kind,false);}
+  async function applyCurrentCover(s,request){reuseLibraryCovers([s]);const source=s.source,id=s.mediaId,pic=s.cover||await resolveCover({...s});if(request!==playRequest||current!==s||s.source!==source||s.mediaId!==id||!pic)return;shareLibraryCover(s,pic);syncResultCover(s);show(s);}
+  async function hydrateSavedCovers(rows,heading='',kind='fav'){if(!Array.isArray(rows)||rows._coverHydrating)return;reuseLibraryCovers(rows);rows._coverHydrating=true;try{for(const song of rows.slice(0,12)){if(song.source==='direct'||isVideoEntry(song)||song.cover)continue;const source=song.source,id=song.mediaId,cover=await resolveCover({...song});if(song.source===source&&song.mediaId===id&&!song.cover)shareLibraryCover(song,cover);}if(kind==='fav')save();}finally{rows._coverHydrating=false;}if(kind==='fav')render(rows,heading,kind,false);}
   async function loadLyrics(s,request){
     const isActive=()=>!disposed&&request===playRequest&&current===s;if(!isActive())return;
     lyricTimeline=[];currentLyricWords='';lyricState='加载歌词…';paintTime();
@@ -3103,6 +3150,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function showPlaylistSongs(playlist,{batch=false,selected=new Set()}={}){
     const box=DOC.querySelector(`#${ID} .list`),isFavorites=!!playlist?.isFavorites,songs=isFavorites?(settings.favorites||[]):(playlist?.songs||[]);if(!box)return;box.hidden=false;
     syncLibraryNavigation(isFavorites?'favorites':'my-playlists');
+    reuseLibraryCovers(songs);displayedSongRows=songs;
     const selection=selected instanceof Set?selected:new Set(),syncBatchCount=()=>{const countOutput=box.querySelector('[data-batch-count]');if(countOutput)countOutput.textContent=`已选 ${selection.size} 首`;box.querySelectorAll('[data-batch-needs-selection]').forEach(button=>button.disabled=!selection.size);};
     box.innerHTML=`<div class="row batch-heading feature-heading"><button data-playlist-back>‹ 歌单</button><b style="margin-right:auto">${esc(playlist.name)}</b>${!batch?'<button data-import-audio>导入 MP3</button>':''}${songs.length&&!batch?'<button data-playlist-batch>批量管理</button>':''}<button data-playlist-play-all>一键播放</button></div>${batch&&songs.length?`<div class="playlist-batch-bar"><b data-batch-count>已选 ${selection.size} 首</b><button data-batch-select-all>${selection.size===songs.length?'取消全选':'全选'}</button><button data-batch-play data-batch-needs-selection>播放</button><button data-batch-queue data-batch-needs-selection>入队</button><button data-batch-add data-batch-needs-selection>加歌单</button><button data-batch-cache data-batch-needs-selection>缓存</button><button data-batch-remove data-batch-needs-selection>${isFavorites?'取消收藏':'移出'}</button><button data-playlist-batch class="playlist-batch-done">完成</button></div>`:''}${songs.map((song,index)=>`<article class="row${batch?' playlist-batch-row':''}${batch&&selection.has(index)?' selene-batch-selected':''}" data-song-index="${index}" data-track-id="${esc(song.id)}">${batch?`<label class="playlist-select" title="选择 ${esc(song.title)}"><input type="checkbox" data-song-select ${selection.has(index)?'checked':''}><i></i></label>`:''}<img loading="lazy" decoding="async" ${song.cover?`src="${esc(song.cover)}"`:''}><div><b>${esc(song.title)}</b><span>${isVideoEntry(song)?esc(bilibiliVideoInfo(song)):esc(song.artist)}${song.customAudio&&!isVideoEntry(song)?' · 手动音源':''}</span></div>${batch?'':`<span class="row-tools">${isFavorites?'':'<button data-song-fav title="收藏">☆</button>'}<button data-song-add title="加入歌单">歌单</button>${isVideoEntry(song)?'':`<button data-song-audio title="补充或更换 MP3 音源">音源</button><button data-song-cache title="下载离线缓存">⇩</button>`}${bilibiliMenuButtons(song)}<button data-song-queue title="加入队列">＋</button><button data-song-remove ${isFavorites?'data-row-heart':''} title="${isFavorites?'取消收藏':'移出歌单'}">×</button></span>`}</article>`).join('')||`<div class="row">${isFavorites?'收藏歌单还是空的，点击当前歌曲红心即可加入':'歌单还是空的，可从搜索结果或收藏中添加歌曲'}</div>`}`;
     syncBatchCount();
@@ -5585,6 +5633,7 @@ ${latest.slice(-1500)}
   function getPublicQueueState(options={}){
     activateMusicLibrary();if(!musicLibraryLoaded())return musicLibraryError('UNLOADED','播放器未就绪');
     if(!options||typeof options!=='object')return musicLibraryError('INVALID_OPTIONS','options 必须是对象');
+    reuseLibraryCovers(queue);
     const page=musicPage(queue,options,(song,index)=>({...musicTrackData(song,{kind:'queue'}),index}));
     return page?musicLibraryResult({...page,queueIndex:musicQueueIndex(),currentTrackId:musicTrackId(current),currentTrack:current?musicTrackData(current,{kind:'current'}):null}):musicLibraryError('INVALID_OPTIONS','offset 须为非负整数，limit 须为 1–100');
   }

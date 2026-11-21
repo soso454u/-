@@ -12,7 +12,7 @@ function harness(provider=async()=>[]){
     const ID='player',GD_SOURCES=['netease','joox'];let publicMusicLibrary=null,disposed=false,playbackPublicReady=true,current=null,queue=[],queueIndex=-1;
     const getSongTitle=s=>s.title||'',getSongArtist=s=>s.artist||'',getSongAlbum=s=>s.album||'',songDuration=s=>Number(s?.duration)||0;
     const isVideoEntry=s=>s?.source==='bilibili-video',offlineKey=s=>s.title+'::'+s.artist;
-    const playlistPlaybackOrigins=new WeakMap();
+    const playlistPlaybackOrigins=new WeakMap(),reuseLibraryCovers=()=>false;
     const strip=s=>({...s}),currentIsFavorite=s=>(settings.favorites||[]).some(x=>x.id===s.id);
     const save=()=>{calls.push('save');scheduleMusicLibraryState();},refreshLibraryHearts=()=>{},setStatus=()=>{},toast=()=>{};
     const syncPlaybackQueue=()=>calls.push('persistQueue'),count=()=>{syncPlaybackQueue();scheduleMusicLibraryState('queue');};

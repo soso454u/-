@@ -14,6 +14,7 @@ const makeRuntime = new Function('ROOT', 'accountStorage', `
   const DOC={querySelector:()=>null},ID='player',audio={currentTime:0,duration:200};
   let current=null,queue=[],queueIndex=-1,disposed=false,storageWriteWarningShown=false;
   let lyricState='',pendingPlaybackSelection=false,audioPriming=false,playbackWanted=false;
+  const reuseLibraryCovers=()=>false;
   const context=()=>({accountStorage}), isVideoEntry=s=>s?.source==='bilibili-video';
   const seekMediaTo=seconds=>audio.currentTime=seconds;
   const show=s=>{current=s;},paintTime=()=>{},updatePlayButton=()=>{},setStatus=()=>{};
