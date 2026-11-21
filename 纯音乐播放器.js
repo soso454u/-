@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.112';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.113';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -4270,12 +4270,15 @@ ${latest.slice(-1500)}
   #${ID}-companion[data-tone] input:-webkit-autofill{-webkit-text-fill-color:var(--cp-text)!important;box-shadow:0 0 0 1000px var(--cp-bg) inset!important}
   #${ID}-companion[data-tone] .companion-settings-head,#${ID}-companion[data-tone] .companion-sheet-head{background:var(--im-chrome)!important;color:var(--cp-text)!important}
 
-  /* Album artwork is decorative; readable surfaces do not inherit player ink. */
-  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]){--im-chrome:color-mix(in srgb,var(--cp-bg) 94%,transparent)!important;--cp-panel:color-mix(in srgb,var(--cp-bg) 93%,var(--cp-text) 7%)!important;--cp-field:color-mix(in srgb,var(--cp-bg) 95%,var(--cp-text) 5%);--im-incoming:color-mix(in srgb,var(--cp-bg) 88%,var(--cp-text) 12%)!important;background:var(--cp-bg)!important;backdrop-filter:blur(24px) saturate(1.1)!important;-webkit-backdrop-filter:blur(24px) saturate(1.1)!important;border-color:var(--im-line)!important;box-shadow:0 18px 48px #0004,inset 0 1px #ffffff20!important}
-  #${ID}-companion:not(.companion-mini)[data-wallpaper=cover]:before{inset:-40px!important;filter:blur(32px) saturate(1.1)!important;opacity:.32!important;transform:scale(1.12)}
-  #${ID}-companion:not(.companion-mini)[data-wallpaper=image]:before{inset:-5px!important;filter:blur(2px)!important;opacity:.3!important}
-  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]):after{background:color-mix(in srgb,var(--cp-bg) 55%,transparent)!important}
-  #${ID}-companion:not(.companion-mini) :is(.companion-settings,.companion-feature){background:var(--cp-bg)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  /* Keep the original translucent glass; the sampled image controls the ink palette. */
+  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]){--im-chrome:color-mix(in srgb,var(--cp-bg) 42%,transparent)!important;--cp-panel:color-mix(in srgb,var(--cp-text) 8%,transparent)!important;--cp-field:color-mix(in srgb,var(--cp-bg) 30%,transparent);--im-incoming:color-mix(in srgb,var(--cp-bg) 38%,transparent)!important;--cp-sheet:var(--im-chrome);--cp-sheet-head:color-mix(in srgb,var(--cp-bg) 80%,transparent);background:color-mix(in srgb,var(--cp-bg) 22%,transparent)!important;backdrop-filter:blur(26px) saturate(1.18)!important;-webkit-backdrop-filter:blur(26px) saturate(1.18)!important;border-color:color-mix(in srgb,var(--cp-text) 18%,transparent)!important;box-shadow:0 18px 48px #0004,inset 0 1px #ffffff40!important}
+  #${ID}-companion:not(.companion-mini)[data-wallpaper=cover]:before{inset:-40px!important;filter:blur(32px) saturate(1.2)!important;opacity:.65!important;transform:scale(1.12)}
+  #${ID}-companion:not(.companion-mini)[data-wallpaper=image]:before{inset:-5px!important;filter:blur(2px)!important;opacity:.82!important;background-color:transparent!important}
+  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]):after{background:color-mix(in srgb,var(--cp-bg) 24%,transparent)!important}
+  #${ID}-companion:not(.companion-mini) :is(.companion-settings,.companion-feature){background:var(--cp-sheet,var(--cp-bg))!important;backdrop-filter:blur(28px) saturate(1.2)!important;-webkit-backdrop-filter:blur(28px) saturate(1.2)!important}
+  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]) :is(.companion-head,.companion-modes,.companion-song,.companion-tools,.companion-form,.companion-settings-head,.companion-sheet-head){backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15)}
+  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]) :is(button,input:not([type=checkbox]),select,textarea,.companion-wallpaper-editor,.companion-preset-editor,.companion-bubble-surface){backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  #${ID}-companion:not(.companion-mini):is([data-wallpaper=cover],[data-wallpaper=image]) .companion-message.user{--bubble-color:#008fd6c2}
   #${ID}-companion .model-fetch>[data-fetch-models]{width:auto!important;min-width:0!important;white-space:nowrap!important;writing-mode:horizontal-tb!important;padding:8px 10px!important;line-height:1.3!important}
   #${ID}-companion .model-combobox [data-toggle-models]{display:grid!important;place-items:center;white-space:nowrap!important;min-height:0!important;line-height:1!important}
   /* Checkbox fill and a contrasting, real check mark survive host form themes. */
@@ -4303,9 +4306,9 @@ ${latest.slice(-1500)}
   #${ID}-companion .companion-tools .companion-tool-secondary{display:none!important}
   #${ID}-companion:not(.companion-mini) .companion-tools button{min-width:0!important;min-height:34px!important;padding:6px!important;font-size:11px!important;border-radius:10px!important}
   #${ID}-companion.companion-phone-home .companion-tools{display:none!important}
-  #${ID}-companion.companion-sheet-open:not(.companion-mini) :is(.companion-settings,.companion-feature){inset:0!important;z-index:20!important;padding:0!important;border:0!important;border-radius:inherit!important;background:var(--cp-bg)!important;overflow:auto!important;overscroll-behavior:contain;box-shadow:none!important}
+  #${ID}-companion.companion-sheet-open:not(.companion-mini) :is(.companion-settings,.companion-feature){inset:0!important;z-index:20!important;padding:0!important;border:0!important;border-radius:inherit!important;background:var(--cp-sheet,var(--cp-bg))!important;overflow:auto!important;overscroll-behavior:contain;box-shadow:none!important}
   #${ID}-companion.companion-sheet-open>:is(.companion-head,.companion-modes,.companion-song,.companion-messages,.companion-tools,.companion-form){visibility:hidden!important;pointer-events:none!important}
-  #${ID}-companion .companion-settings-head,#${ID}-companion .companion-sheet-head{top:0!important;margin:0!important;padding:14px 16px!important;min-height:58px!important;gap:12px!important;border-bottom:1px solid var(--im-line)!important;background:var(--cp-bg)!important;font-size:14px!important;z-index:4!important}
+  #${ID}-companion .companion-settings-head,#${ID}-companion .companion-sheet-head{top:0!important;margin:0!important;padding:14px 16px!important;min-height:58px!important;gap:12px!important;border-bottom:1px solid var(--im-line)!important;background:var(--cp-sheet-head,var(--cp-bg))!important;font-size:14px!important;z-index:4!important}
   #${ID}-companion :is(.companion-settings-head,.companion-sheet-head)>b{min-width:0;overflow-wrap:anywhere}
   #${ID}-companion :is([data-sheet-close],[data-settings-close]){flex:none;display:grid;place-items:center;width:32px;min-width:32px;min-height:32px;padding:0!important;font-size:20px!important;line-height:1!important;border:0!important;background:var(--cp-panel)!important}
   #${ID}-companion .companion-sheet-body{padding:14px 16px 20px!important;font-size:13px!important}

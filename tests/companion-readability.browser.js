@@ -6,6 +6,7 @@ async function runSeleneCompanionReadabilityRegression(setCover) {
   player.setCompanionVisible(true);
   const dialog=document.getElementById('safe-music-player-companion');
   const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const alpha=color=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return ctx.getImageData(0,0,1,1).data[3]/255;};
   const image=color=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=16;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,16,16);return canvas.toDataURL('image/png');};
   const close=()=>dialog.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
   for(const [color,tone] of [['#ffffff','light'],['#111217','dark']]){
@@ -16,7 +17,9 @@ async function runSeleneCompanionReadabilityRegression(setCover) {
     dialog.querySelector('[data-person-current]').click();
     const panel=dialog.querySelector('.companion-feature'),rect=panel.getBoundingClientRect(),bounds=dialog.getBoundingClientRect();
     const background=getComputedStyle(panel).backgroundColor;
-    assert(/^rgb\(/.test(background)||/^rgba\([^)]*,\s*1\)$/.test(background),`${tone} sheet has an opaque background`);
+    assert(alpha(background)>.2&&alpha(background)<.6,`${tone} sheet retains the original translucent glass`);
+    assert(getComputedStyle(panel).backdropFilter.includes('blur'),`${tone} sheet keeps the original backdrop blur`);
+    assert(alpha(getComputedStyle(dialog).backgroundColor)<.3,`${tone} window keeps its original transparent base`);
     assert(rect.left>=bounds.left&&rect.right<=bounds.right+1&&rect.top>=bounds.top&&rect.bottom<=bounds.bottom+1,`${tone} sheet fits the window`);
     assert(dialog.querySelector('.companion-messages').inert&&getComputedStyle(dialog.querySelector('.companion-messages')).visibility==='hidden',`${tone} sheet hides and blocks the conversation below it`);
     const ink=getComputedStyle(panel.querySelector('[data-person-name]')).color.match(/[\d.]+/g).map(Number);
@@ -27,7 +30,7 @@ async function runSeleneCompanionReadabilityRegression(setCover) {
   }
   await setCover('data:image/png;base64,invalid');await pause(100);
   dialog.querySelector('[data-person-current]').click();
-  assert(/^rgb\(/.test(getComputedStyle(dialog.querySelector('.companion-feature')).backgroundColor),'a cover that cannot be sampled still has an opaque readable sheet');
+  assert(alpha(getComputedStyle(dialog.querySelector('.companion-feature')).backgroundColor)<.6,'a cover that cannot be sampled does not turn the glass opaque');
   close();
   const visibleTools=[...dialog.querySelectorAll('.companion-tools>button')].filter(button=>getComputedStyle(button).display!=='none');
   assert(visibleTools.length===3,'the chat toolbar has exactly three visible actions');
