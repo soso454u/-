@@ -249,7 +249,7 @@ function playerHarness(failure=Error('接口未返回播放地址')){
     const isVideoEntry=()=>false,bilibiliPlayer={close(){}},playbackSourceChoice=s=>s.choice||'auto',cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=()=>{},paintTime=()=>{},setStatus=()=>{},playOfflineSong=()=>wait(),playbackSourceOrder=()=>['joox'],gdFallback=async()=>{throw failure;},isNotAllowed=()=>false,mediaDetail=e=>e.message;
     let verifiedPlaybackSong=null,resumePoint=null;
     const checkpointPlayback=()=>{};
-    const clearFailedPlayback=()=>{playbackWanted=false;},toast=(kind,message)=>warnings.push(message);
+    const s01sQuality=()=> 'auto',s01sLyrics=new WeakMap(),emitPlaybackOptionsState=()=>{},resetLyrics=message=>{lyricTimeline=[];currentLyricWords='';lyricState=message;},clearFailedPlayback=()=>{playbackWanted=false;},toast=(kind,message)=>warnings.push(message);
     ${matching};
     ${section('let pendingPlay=null;','function parse(text)')};
     return {play,cancel:()=>{++playRequest;playbackWanted=false;}};

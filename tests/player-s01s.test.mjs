@@ -37,7 +37,8 @@ function player(fetch, enabled, resolveGd = () => null, playMedia = () => {}, sa
     const setStatus=(message,persistent,retryAt)=>{statuses.push(message);if(retryAt)countdowns.push(retryAt);},toast=(kind,message)=>statuses.push(message);
     let playRequest=0,disposed=false,pendingPlaybackSelection=false,playbackWanted=false,playbackPhase='',audioPriming=false;
     let playbackRecoveryCount=0,playbackBlobRetryUsed=false,lyricTimeline=[],currentLyricWords='',lyricState='';
-    const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=song=>{current=song;},paintTime=()=>{};
+    const emitPlaybackOptionsState=()=>{},emitLyricsState=()=>{},resetLyrics=(message='暂无歌词')=>{lyricTimeline=[];currentLyricWords='';lyricState=message;};
+    const cancelPlaybackProbe=()=>{},applyAudioSessionMode=()=>{},pauseKeepAliveForTrack=()=>{},primeAudioFromGesture=()=>{},updatePlayButton=()=>{},show=(song,message)=>{current=song;if(message!==undefined)resetLyrics(message);},paintTime=()=>{};
     const playOfflineSong=async()=>offline(),gdFallback=async(song,attempt,isActive,excluded,sources)=>{fallback.push(sources);return resolveGd(sources,song);};
     const isNotAllowed=e=>e.name==='NotAllowedError',clearFailedPlayback=()=>{playbackWanted=false;},mediaDetail=e=>e.message;
     const playUrl=async(url,label,isolated,options)=>{urls.push({url,label,isolated,options});return playMedia(url);};

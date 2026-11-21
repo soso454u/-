@@ -36,7 +36,7 @@ test('JOOX GD default quality is tried once after compressed quality links are e
 
 test('failed source resolution clears the priming media and loading state',()=>{
   const player={paused:false,src:'silent-ten-hours',pause(){this.paused=true;},removeAttribute(){this.src='';},load(){}};
-  const repair=new Function('audio',`let cancelPlaybackProbe=()=>{},audioPriming=true,pendingPlaybackSelection=true,playbackWanted=true,playbackPhase='loading',lyricState='加载歌词…';const releaseOfflineObjectUrl=()=>{},updatePlayButton=()=>{},paintTime=()=>{},clearMediaPosition=()=>{};${section('function clearFailedPlayback','function recoverStuckPlayback')};return ()=>{clearFailedPlayback();return {audioPriming,pendingPlaybackSelection,playbackWanted,playbackPhase,lyricState};};`)(player);
+  const repair=new Function('audio',`let cancelPlaybackProbe=()=>{},audioPriming=true,pendingPlaybackSelection=true,playbackWanted=true,playbackPhase='loading',lyricState='加载歌词…';const resetLyrics=message=>{lyricState=message;},releaseOfflineObjectUrl=()=>{},updatePlayButton=()=>{},paintTime=()=>{},clearMediaPosition=()=>{};${section('function clearFailedPlayback','function recoverStuckPlayback')};return ()=>{clearFailedPlayback();return {audioPriming,pendingPlaybackSelection,playbackWanted,playbackPhase,lyricState};};`)(player);
   const state=repair();assert.equal(player.src,'');assert.equal(player.paused,true);assert.equal(state.playbackPhase,'idle');assert.equal(state.audioPriming,false);assert.equal(state.playbackWanted,false);assert.equal(state.lyricState,'尚未开始播放');
 });
 

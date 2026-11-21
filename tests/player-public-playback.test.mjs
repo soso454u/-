@@ -9,7 +9,7 @@ function harness(){
   const ROOT={CustomEvent:class{constructor(type,{detail}){this.type=type;this.detail=detail;}},dispatchEvent:event=>events.push(event)};
   const DOC={getElementById:()=>({}),querySelector:()=>({getAttribute:()=> 'https://cdn.test/cover.jpg'})};
   const api=new Function('ROOT','DOC','audio','calls',`
-    const ID='qa';let playbackPublicReady=true,lastPlaybackStateKey='',disposed=false,current=null,
+    const emitPlaybackOptionsState=()=>{};const ID='qa';let playbackPublicReady=true,lastPlaybackStateKey='',disposed=false,current=null,
       audioPriming=false,pendingPlaybackSelection=false,resumePoint=null,playbackWanted=false,playbackPhase='idle',playRequest=0;
     const cancelPlaybackProbe=()=>calls.push('cancel'),updatePlayButton=()=>emitPlaybackState(),
       resumeMainAudioFromMediaSession=async()=>{calls.push('resume');playbackWanted=true;playbackPhase='loading';},

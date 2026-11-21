@@ -4,7 +4,7 @@
 (() => {
   'use strict';
   const ROOT = (() => { let root=window;try{while(root.parent!==root&&root.parent.document)root=root.parent;}catch{}return root; })();
-  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.109';
+  const DOC = ROOT.document, ID = 'safe-music-player', KEY = 'safe-music-player-v1', VERSION = '2.10.110';
   try { ROOT.__SAFE_MUSIC_CLEANUP__?.(); } catch (error) { console.warn('[Selene] 旧播放器清理失败',error); }
   const EXTENSION_MODE = ROOT.__SELENE_EXTENSION_MODE__ === true;
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
@@ -665,6 +665,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   let lyricState='暂无歌词',immersiveLyricsObserver=null;
   let publicMusicLibrary=null;
   let playbackPublicReady=false,lastPlaybackStateKey='';
+  let lyricsRevision=0,lastLyricsStateKey='',lastLyricsTimeline=null;
+  let lastPlaybackOptionsStateKey='';
   let cancelPlaybackProbe=null,playbackPhase='idle',audioPriming=false,playbackRecoveryCount=0,pendingPlaybackSelection=false,audioPrimeUrl='',playbackBlobRetryUsed=false;
   const failedPlaybackUrls=new Set();let playbackSources=new WeakMap();
   let searchRequest=0;
@@ -792,9 +794,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     playbackWanted=false;
     interruptionRetryCount=0;
     clearInterruptionRetry();
-    lyricTimeline=[];
-    lyricState='暂无歌词';
-    currentLyricWords='';
+    resetLyrics();
     try{audio.pause();audio.currentTime=0;}catch{}
     if(release)try{audio.removeAttribute('src');audio.load();}catch{}
     if(currentCacheObjectUrl){try{ROOT.URL.revokeObjectURL(currentCacheObjectUrl);}catch{}currentCacheObjectUrl='';}
@@ -802,7 +802,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     updatePlayButton();
     renderDesktopLyrics('');
   }
-  const save = () => {const persisted=persistSettings();updateCurrentFavorite();scheduleMusicLibraryState();return persisted;};
+  const save = () => {const persisted=persistSettings();updateCurrentFavorite();scheduleMusicLibraryState();emitPlaybackOptionsState();return persisted;};
   if(settings.theme!=='auto'){settings.theme='auto';save();}
   const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[c]);
   const toast = (kind, text) => ROOT.toastr?.[kind]?.(text);
@@ -1291,6 +1291,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const input=DOC.querySelector(`#${ID}-lyrics-float [name=lyricsLocked]`);if(input)input.checked=!!settings.lyricsLocked;
   }
   function updatePlayMode(announce=false){
+    emitPlaybackOptionsState();
     const button=DOC.querySelector(`#${ID} [data-c="mode"]`);
     if(!button)return;
     const labels={loop:'顺序循环',one:'单曲循环',shuffle:'随机播放'};
@@ -1974,7 +1975,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     resumePoint={song:selection,position};
     pendingPlaybackSelection=true;
     lyricState='点击播放继续上次歌曲';
-    show(selection);paintTime();updatePlayButton();
+    show(selection,lyricState);paintTime();updatePlayButton();
     setStatus('已恢复上次播放，点击播放继续');
   }
   function flushPlaybackOnHide(){if(DOC.visibilityState==='hidden')checkpointPlayback(true);}
@@ -1988,7 +1989,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function favorite(s){const i=settings.favorites?.findIndex(x=>x.id===s.id);if(i>=0)settings.favorites.splice(i,1);else{settings.favorites=settings.favorites||[];settings.favorites.unshift(strip(s));}save();refreshLibraryHearts();}
   function saveFavorite(s){settings.favorites=settings.favorites||[];if(!settings.favorites.some(x=>x.id===s.id)){settings.favorites.unshift(strip(s));save();refreshLibraryHearts();}}
   function count(){const badge=DOC.querySelector(`#${ID} [data-library-queue-count]`);if(badge){badge.textContent=queue.length;badge.hidden=!queue.length;}syncPlaybackQueue();scheduleMusicLibraryState('queue');}
-  function show(s){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();emitPlaybackState();scheduleMusicLibraryState('all');};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){shareLibraryCover(s,cover);applyCover(cover);}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
+  function show(s,lyricsMessage){const changed=current!==s;DOC.getElementById(`${ID}-source-float`)?.setAttribute('hidden','');if(changed){trackCompanionListeningTime({stop:true,saveNow:true});companionListeningAwaitingPlay=true;}current=s;if(changed||lyricsMessage!==undefined)resetLyrics(lyricsMessage??(s.source==='direct'?'MP3 直链歌曲':'正在准备播放…'));emitPlaybackOptionsState();updateCurrentFavorite();if(settings.keepAlive&&!keepAliveSuspendedForTrack)pauseKeepAliveForTrack();if(changed)clearMediaPosition();updateMediaMetadata(s,true);const e=DOC.getElementById(ID);if(!e)return;const sourceButton=e.querySelector('[data-c=source]');if(sourceButton){sourceButton.disabled=s.source==='direct';sourceButton.title=`切换播放源 · ${playbackLabel(s)}`;}e.querySelector('.title').textContent=s.title||'未知歌曲';e.querySelector('.artist').textContent=s.artist||'未知歌手';e.querySelector('.immersive-info h2').textContent=s.title||'未知歌曲';e.querySelector('.immersive-info p').textContent=s.artist||'未知歌手';const img=e.querySelector('.now img'),large=e.querySelector('.immersive-cover');const applyCover=cover=>{setArtworkSource(img,cover);setArtworkSource(large,cover);if(cover){const cssCover=`url("${String(cover).replace(/["\\]/g,'\\$&')}")`;e.style.setProperty('--album-cover',cssCover);e.querySelector('.immersive-view').style.setProperty('--cover-image',cssCover);}else{e.style.setProperty('--album-cover','none');e.querySelector('.immersive-view').style.removeProperty('--cover-image');}syncFloatingPanelThemes();emitPlaybackState();scheduleMusicLibraryState('all');};img.onerror=async()=>{img.onerror=null;const failed=img.src,source=s.source,id=s.mediaId;applyCover('');const cover=await resolveCover({...s,cover:''},[failed]);if(current===s&&s.source===source&&s.mediaId===id&&cover){shareLibraryCover(s,cover);applyCover(cover);}};applyCover(s.cover);syncCompanionAppearance();const line=DOC.querySelector(`#${ID}-companion .companion-song`);if(line)line.textContent=`♫ ${companionSongContext().song}`;}
   const clock = seconds => { seconds=Number.isFinite(seconds)?Math.max(0,seconds):0;return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`; };
   const mediaDetail = error => String(error?.message||'暂时无法播放这首歌，请重试或切换音源');
   function normalizeSongText(value){return String(value||'').toLowerCase().normalize('NFKC').replace(/\b(feat(?:uring)?|ft)\.?\b/g,' ').replace(/[\s·•._\-—–()（）\[\]【】'"“”‘’/\\,:：;；!?！？]+/g,'');}
@@ -2475,7 +2476,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function clearFailedPlayback(){
     cancelPlaybackProbe?.();audioPriming=false;pendingPlaybackSelection=true;playbackWanted=false;playbackPhase='idle';
     try{audio.pause();audio.removeAttribute('src');audio.load();}catch{}releaseOfflineObjectUrl();
-    lyricState='尚未开始播放';updatePlayButton();paintTime();clearMediaPosition();
+    resetLyrics('尚未开始播放');updatePlayButton();paintTime();clearMediaPosition();
   }
   function recoverStuckPlayback(error,url){
     if(disposed||!playbackWanted||!current)return;
@@ -2719,8 +2720,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   async function applyCurrentCover(s,request){reuseLibraryCovers([s]);const source=s.source,id=s.mediaId,pic=s.cover||await resolveCover({...s});if(request!==playRequest||current!==s||s.source!==source||s.mediaId!==id||!pic)return;shareLibraryCover(s,pic);syncResultCover(s);show(s);}
   async function hydrateSavedCovers(rows,heading='',kind='fav'){if(!Array.isArray(rows)||rows._coverHydrating)return;reuseLibraryCovers(rows);rows._coverHydrating=true;try{for(const song of rows.slice(0,12)){if(song.source==='direct'||isVideoEntry(song)||song.cover)continue;const source=song.source,id=song.mediaId,cover=await resolveCover({...song});if(song.source===source&&song.mediaId===id&&!song.cover)shareLibraryCover(song,cover);}if(kind==='fav')save();}finally{rows._coverHydrating=false;}if(kind==='fav')render(rows,heading,kind,false);}
   async function loadLyrics(s,request){
-    const isActive=()=>!disposed&&request===playRequest&&current===s;if(!isActive())return;
-    lyricTimeline=[];currentLyricWords='';lyricState='加载歌词…';paintTime();
+    const source=s.source,id=s.mediaId;
+    const isActive=()=>!disposed&&request===playRequest&&current===s&&s.source===source&&s.mediaId===id;if(!isActive())return;
+    resetLyrics('加载歌词…');paintTime();
     const song={...s,duration:Number.isFinite(audio.duration)&&audio.duration>0?audio.duration:songDuration(s)};
     try{
       const supplied=s01sLyrics.get(s);
@@ -2728,7 +2730,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
       lyricTimeline=mergeLyricTimeline(resolved.original,resolved.translation);
       lyricState=resolved.instrumental?'纯音乐 · 请欣赏':lyricTimeline.length?'':'暂无歌词';
     }catch(error){if(!isActive())return;lyricState=error.retryAt?'歌词请求限流，请稍后再试':'歌词暂时加载失败';console.warn('[音乐播放器] 歌词加载失败',error);}
-    paintTime();
+    emitLyricsState();paintTime();
   }
   const LX_SOURCES={tencent:{code:'tx',id:/^(?=[a-z0-9]*[a-z])[a-z0-9]{14}$/i},netease:{code:'wy',id:/^\d{1,20}$/},kugou:{code:'kg',id:/^[a-f0-9]{32}$/i}};
   const S01S_URL_API='https://tang.api.s01s.cn/music_open_api.php';
@@ -2904,7 +2906,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     if(audio.dataset)delete audio.dataset.seleneLxSource;
     s01sLyrics.delete(s);
     cancelPlaybackProbe?.();if(!recovering){playbackRecoveryCount=0;playbackBlobRetryUsed=false;failedPlaybackUrls.clear();}applyAudioSessionMode();pauseKeepAliveForTrack();primeAudioFromGesture();
-    const isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s);lyricTimeline=[];currentLyricWords='';lyricState=s.source==='direct'?'MP3 直链歌曲':'正在准备播放…';paintTime();let lastError,played=null;
+    const isActive=()=>!disposed&&playbackWanted&&request===playRequest;pendingPlaybackSelection=true;playbackWanted=true;playbackPhase='loading';if(!audioPriming)audio.pause();updatePlayButton();applyAudioSessionMode();show(s,s.source==='direct'?'MP3 直链歌曲':'正在准备播放…');paintTime();let lastError,played=null;
     const noteFailure=error=>{
       if(isNotAllowed(error)||error.name==='AbortError')throw error;
       const retryAt=Math.max(lastError?.retryAt||0,error.retryAt||0);
@@ -2968,12 +2970,12 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         show(s);setStatus(played.offline?'正在播放 · 离线缓存':lxSource?`正在播放 · ${lxSourceLabel(lxSource)}`:'正在播放');
         if(s.source==='direct'){const lyrics=DOC.querySelector(`#${ID} .lyrics`);if(lyrics)lyrics.textContent='MP3 直链歌曲';}
         else{applyCurrentCover(s,request);loadLyrics(s,request);}
-        const resumed=recordPlaybackStart(s);
+        const resumed=recordPlaybackStart(s);emitPlaybackOptionsState();
         if(!resumed){recordCompanionPlay(s);maybeAutoCompanion(s,companionPick);}
         return true;
       }
       lastError=lastError||Error('没有找到可播放音源');
-    }catch(error){if(!isActive())return;if(isNotAllowed(error)){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();lyricState='请再次点击播放';updatePlayButton();paintTime();show(s);notifyPlaybackBlocked();return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
+    }catch(error){if(!isActive())return;if(isNotAllowed(error)){if(error.track)Object.assign(s,error.track);pendingPlaybackSelection=false;playbackWanted=false;playbackPhase='idle';audio.pause();resetLyrics('请再次点击播放');updatePlayButton();paintTime();show(s);notifyPlaybackBlocked();return;}lastError=error;console.warn('[音乐播放器] 音源播放失败',error);}
     if(!isActive())return;
     if(retryOnFailure&&!lxRateLimited&&!(lastError?.retryAt>Date.now())&&lastError?.name!=='AbortError'){
       setStatus('暂未开始播放，正在重试当前歌曲…');
@@ -3095,7 +3097,9 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const name=String(answer).trim();if(!name){setStatus('歌单名称不能为空');toast('warning','歌单名称不能为空');return;}
     if(name==='收藏歌单'){setStatus('“收藏歌单”是系统保留名称');toast('warning','请换一个歌单名称');return;}
     settings.playlists=settings.playlists||[];if(settings.playlists.some(item=>item!==playlist&&item.name===name)){setStatus(`已经有名为“${name}”的歌单`);toast('warning','歌单名称已存在');return;}
-    const oldName=playlist.name;playlist.name=name;playlist.updatedAt=Date.now();save();showPlaylists();setStatus(`已将“${oldName}”改名为“${name}”`);toast('success','歌单名称已更新');
+    const oldName=playlist.name;playlist.name=name;
+    if(['tencent','netease'].includes(playlist.importSource))playlist.importNameEdited=true;
+    playlist.updatedAt=Date.now();save();showPlaylists();setStatus(`已将“${oldName}”改名为“${name}”`);toast('success','歌单名称已更新');
   }
   function askForPlaylist(){
     const lists=playlistCatalog();
@@ -3262,7 +3266,7 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   }
   function cleanResolvedPlaylistTitle(value){return String(value||'').replace(/\s*[-–—]\s*歌单(?:\s*[-–—].*)?$/i,'').trim();}
   function playlistSameOriginHeaders(){try{return context()?.getRequestHeaders?.()||ROOT.getRequestHeaders?.()||{};}catch{return{};}}
-  async function fetchPlaylistPage(target,options={}){const local=/^\//.test(String(target)),controller=typeof ROOT.AbortController==='function'?new ROOT.AbortController():null,timer=controller?ROOT.setTimeout(()=>controller.abort(),15000):0;try{return await fetch(target,{cache:'no-store',credentials:local?'same-origin':'omit',headers:local?playlistSameOriginHeaders():undefined,...options,...(controller?{signal:controller.signal}:{})});}finally{if(timer)ROOT.clearTimeout(timer);}}
+  async function fetchPlaylistPage(target,options={},timeout=15000){const local=/^\//.test(String(target)),controller=typeof ROOT.AbortController==='function'?new ROOT.AbortController():null,timer=controller?ROOT.setTimeout(()=>controller.abort(),timeout):0;try{return await fetch(target,{cache:'no-store',credentials:local?'same-origin':'omit',headers:local?playlistSameOriginHeaders():undefined,...options,...(controller?{signal:controller.signal}:{})});}finally{if(timer)ROOT.clearTimeout(timer);}}
   async function resolvePlaylistShareLink(link){
     const original=playlistLinkInfo(link).u,source=playlistShareSource(original);if(!source)return{url:original.href,title:''};const sourceLabel=PLAYLIST_SOURCE_LABELS[source]||'音乐平台';
     setStatus(`正在解析${sourceLabel}分享短链…`);const errors=[];
@@ -3280,6 +3284,56 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
     const useful=errors.find(error=>!/HTTP 401|HTTP 404|Failed to fetch/i.test(error?.message||''))||errors[0];throw Error(`${sourceLabel}分享短链解析失败：${useful?.name==='AbortError'?'请求超时':useful?.message||'链接已失效'}。已自动尝试短链服务和 SillyTavern 代理。`);
   }
   function playlistMatchesImport(item,source,id){if(!item)return false;if(item.importSource===source&&String(item.importSourceId||'')===String(id))return true;for(const link of[item.importUrl,item.importShareUrl])try{const info=playlistLinkInfo(link||'');if(info.source===source&&String(info.id||'')===String(id))return true;}catch{}return false;}
+  function qqPlaylistTitle(value){
+    if(typeof value!=='string')return'';
+    const title=value.trim().replace(/\s*[-–—|｜]\s*QQ\s*音乐(?:\s*[-–—|｜].*)?$/i,'').trim();
+    return /^(?:QQ\s*音乐(?:歌单(?:\s+\d+)?|\s*[-–—|｜].*)?|歌单被主人设为隐私|歌单)$/i.test(title)?'':title;
+  }
+  function qqPlaylistTitleFromShare(value){
+    const text=String(value||'').split(/(?:\[[^\n]*\]\(\s*|<a\b[^>]*\bhref\s*=\s*["'])?https?:\/\//i)[0].trim();
+    const quoted=text.match(/(?:分享(?:了)?\s*)?歌单\s*[：:]?\s*[《「“"]([^》」”"\r\n]+)[》」”"]/);
+    const labeled=text.match(/(?:^|[\n【])\s*分享(?:了)?\s*歌单\s*[：:]\s*([^\r\n】]+)/);
+    return qqPlaylistTitle((quoted?.[1]||labeled?.[1]||'').replace(/\s*(?:[（(]来自\s*QQ\s*音乐[）)]|@\s*QQ\s*音乐)\s*$/i,''));
+  }
+  async function fetchQqPlaylistTitle(id){
+    if(!/^\d+$/.test(id))return'';
+    const url=`https://y.qq.com/n/ryqq_v2/playlist/${id}`;
+    try{
+      const response=await fetchPlaylistPage(`/proxy/${url}`,{},4000);
+      if(!response.ok)return'';
+      const page=DOC.createElement('template');
+      page.innerHTML=await response.text();
+      const meta=property=>page.content.querySelector(`meta[property="og:${property}"]`)?.content;
+      return meta('type')==='music.playlist'&&meta('url')===url?qqPlaylistTitle(meta('title')):'';
+    }catch{return'';}
+  }
+  function canNameQqPlaylist(playlist,id){
+    if(!playlist)return true;
+    return !playlist.importNameEdited&&(playlist.name==='QQ 音乐歌单'||playlist.name===`QQ 音乐歌单 ${id}`);
+  }
+  function neteasePlaylistTitle(value){
+    if(typeof value!=='string')return '';
+    const title=value.trim().replace(/\s*[-–—|｜]\s*(?:歌单\s*[-–—|｜]\s*)?网易云音乐(?:\s*[-–—|｜].*)?$/,'').trim();
+    return /^(?:网易云音乐(?:歌单(?:\s+\d+)?)?|歌单|页面不存在|404)$/.test(title)?'':title;
+  }
+  function neteasePlaylistTitleFromShare(value){
+    const text=String(value||'').split(/https?:\/\//i)[0];
+    const title=text.match(/(?:分享(?:了)?\s*)?歌单\s*[：:]?\s*[《「“"]([^》」”"\r\n]+)[》」”"]/);
+    return neteasePlaylistTitle(title?.[1]||'');
+  }
+  function canNameNeteasePlaylist(playlist,id){
+    if(!playlist)return true;
+    return !playlist.importNameEdited&&(playlist.name==='网易云音乐歌单'||playlist.name===`网易云音乐歌单 ${id}`);
+  }
+  async function fetchNeteasePlaylistTitle(id){
+    if(!/^\d+$/.test(id))return '';
+    try{
+      const response=await fetchPlaylistPage(`/proxy/https://music.163.com/api/playlist/detail?id=${id}`,{},4000);
+      if(!response.ok)return '';
+      const data=await response.json(),playlist=data?.playlist||data?.result;
+      return Number(data?.code)===200&&String(playlist?.id)===id?neteasePlaylistTitle(playlist.name):'';
+    }catch{return '';}
+  }
   function playlistSongsFromRows(rows,source,api){
     const songs=[],known=new Set();
     for(const x of(rows||[]).slice(0,PLAYLIST_IMPORT_LIMIT)){
@@ -3300,8 +3354,8 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
   function promptPlaylistImport(){const link=ROOT.prompt?.('粘贴网易云、QQ 音乐或酷狗歌单链接');if(link)importPlaylist(link);}
   async function importPlaylist(link){
     try{
-      const sharedUrl=playlistInputUrl(link),resolved=await resolvePlaylistShareLink(link);link=resolved.url;
-      const {u,source,rawId,id,sourceLabel}=playlistLinkInfo(link);
+      const sharedUrl=playlistInputUrl(link),resolved=await resolvePlaylistShareLink(link);
+      const {u,source,rawId,id,sourceLabel}=playlistLinkInfo(resolved.url);
       if(!source||!id)throw Error('仅支持网易云、QQ 音乐或酷狗歌单链接');
       setStatus(`正在识别并导入${sourceLabel}歌单…`);
       const ids=source==='kugou'?[...new Set([rawId,id,`gcid_${id}`].filter(Boolean))]:[id];
@@ -3313,10 +3367,27 @@ FINAL: Would a real person type this unchanged? Is any phrase trying to sound pr
         rows=data;playlistApi=api;break outer;
       }catch(error){lastError=error;console.warn(`[音乐播放器] 歌单接口失败，尝试备用接口：${base}`,error);}
       if(!rows)throw Error(`歌单读取失败：${lastError?.message||'所有接口均不可用'}${source==='netease'?'；如果这是私人歌单，请先在网易云设为公开':''}`);
+      let title=resolved.title;
+      if(source==='tencent'){
+        title=qqPlaylistTitleFromShare(link)||qqPlaylistTitle(title);
+        const existing=settings.playlists?.find(item=>playlistMatchesImport(item,source,id));
+        if(!title&&canNameQqPlaylist(existing,id))title=await fetchQqPlaylistTitle(id);
+      }
+      if(source==='netease'){
+        title=neteasePlaylistTitleFromShare(link)||neteasePlaylistTitle(title);
+        const existing=settings.playlists?.find(item=>playlistMatchesImport(item,source,id));
+        if(!title&&canNameNeteasePlaylist(existing,id))title=await fetchNeteasePlaylistTitle(id);
+      }
       settings.playlists=settings.playlists||[];const matches=settings.playlists.filter(item=>playlistMatchesImport(item,source,id));
       let playlist=matches[0],created=false,duplicates=Math.max(0,matches.length-1);
       if(duplicates)settings.playlists=settings.playlists.filter(item=>item===playlist||!matches.includes(item));
-      if(!playlist){const baseName=resolved.title||`${sourceLabel}歌单`,sameName=settings.playlists.some(item=>item.name===baseName),name=sameName?`${baseName} ${id}`:baseName;playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now()};settings.playlists.unshift(playlist);created=true;}
+      if(!playlist||title&&(source==='tencent'&&canNameQqPlaylist(playlist,id)||source==='netease'&&canNameNeteasePlaylist(playlist,id))){
+        const baseName=title||`${sourceLabel}歌单`;
+        const sameName=baseName==='收藏歌单'||settings.playlists.some(item=>item!==playlist&&item.name===baseName);
+        const name=sameName?`${baseName} ${id}`:baseName;
+        if(playlist)playlist.name=name;
+        else{playlist={id:`playlist-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name,songs:[],createdAt:Date.now()};settings.playlists.unshift(playlist);created=true;}
+      }
       const previous=Array.isArray(playlist.songs)?playlist.songs:[],fresh=playlistSongsFromRows(rows,source,playlistApi);
       const nameKey=song=>`${offlineKey(song)}:${lyricVersion(song)}`,trackKey=song=>song.source===source&&song.mediaId&&song.mediaId!==song.id?`id:${song.mediaId}`:nameKey(song);
       const previousKeys=new Set(previous.map(trackKey)),freshKeys=new Set(fresh.map(trackKey)),added=fresh.filter(song=>!previousKeys.has(trackKey(song))).length,removed=previous.filter(song=>!freshKeys.has(trackKey(song))).length;
@@ -5052,7 +5123,7 @@ ${latest.slice(-1500)}
     const row=toggle.closest('[data-type="script"],[data-script-name],.script-item,.TH-script-item');
     if(isOwnScriptRow(row,toggle))cleanupPlayer();
   };
-  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;emitPlaybackState(true);disposeMusicLibrary();playbackPublicReady=false;for(const event of playbackPublicEvents)audio.removeEventListener(event,handlePublicPlaybackEvent);cleanupMoonlight?.();stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
+  function cleanupPlayer(){if(disposed||ROOT.__SAFE_MUSIC_CLEANUP__!==cleanupPlayer)return;checkpointPlayback(true);disposed=true;resetLyrics();emitPlaybackState(true);disposeMusicLibrary();playbackPublicReady=false;for(const event of playbackPublicEvents)audio.removeEventListener(event,handlePublicPlaybackEvent);cleanupMoonlight?.();stopFloatingLyricAnimation();DOC.removeEventListener('visibilitychange',flushPlaybackOnHide);watchMiniDock();ROOT.clearInterval(playbackNoticeTimer);ROOT.clearTimeout(miniTapTimer);dismissCompanionPickToast();bilibili.closeSearch();try{scriptRecoveryListener?.stop?.();}catch{}scriptRecoveryListener=null;resultCoverObserver?.disconnect();resultCoverObserver=null;immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=null;skinMenuCleanup?.();skinMenuCleanup=null;lyricMenuCleanup?.();lyricMenuCleanup=null;sourceMenuCleanup?.();sourceMenuCleanup=null;for(const cancel of companionToneLoads.values())cancel();companionToneLoads.clear();companionToneCache.clear();companionColorScheme?.removeEventListener?.('change',syncCompanionAppearance);companionColorScheme?.removeEventListener?.('change',syncFloatingPanelThemes);libraryObserver?.disconnect();libraryObserver=null;if(menuAddTimer){ROOT.clearTimeout(menuAddTimer);menuAddTimer=0;}menuObserver?.disconnect();menuObserver=null;cleanupContextEvents();clearInterruptionRetry();audioSession?.removeEventListener?.('statechange',handleAudioSessionState);stopPlayback({release:true});if(audioPrimeUrl){ROOT.URL.revokeObjectURL(audioPrimeUrl);audioPrimeUrl='';}audio.remove();clearMediaSession();cleanupKeepAlive();const menuHandler=ROOT.__SAFE_MUSIC_MENU_HANDLER__;if(menuHandler){menuHandler.btn?.removeEventListener('click',menuHandler.handler);menuHandler.btn?.removeAttribute('data-safe-music');delete ROOT.__SAFE_MUSIC_MENU_HANDLER__;}DOC.removeEventListener('focusin',miniFocusGuard,true);DOC.removeEventListener('pointerdown',scriptToggleCleanup,true);DOC.removeEventListener('click',scriptToggleCleanup,true);ROOT.removeEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.removeEventListener('pagehide',handlePlayerPageHide);ROOT.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);ROOT.visualViewport?.removeEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__);DOC.getElementById(ID)?.remove();DOC.querySelectorAll(`[id^="${ID}-"]`).forEach(x=>x.remove());delete ROOT.__SELENE_MUSIC_PLAYER__;delete ROOT.__SAFE_MUSIC_PAGEHIDE__;delete ROOT.__SAFE_MUSIC_RESIZE_HANDLER__;delete ROOT.__SAFE_MUSIC_CLEANUP__;}
   function handlePlayerPageHide(event){if(event?.persisted)checkpointPlayback(true);else cleanupPlayer();}
   ROOT.__SAFE_MUSIC_CLEANUP__=cleanupPlayer;ROOT.__SAFE_MUSIC_PAGEHIDE__=handlePlayerPageHide; ROOT.__SAFE_MUSIC_RESIZE_HANDLER__=()=>{const el=DOC.getElementById(ID),mobile=isMobile(),keyboard=mobile&&mobileKeyboardOpen();el?.classList.toggle('touch-layout',mobile);el?.classList.toggle('keyboard-open',keyboard);if(!keyboard&&!el?.classList.contains('pointer-interacting')){refreshStableMobileViewport(el);if(!preserveMiniGeometry(el)&&mobile){applyPlayerSize(el);applyMobilePosition(el);}applyCompanionPosition();}else if(keyboard)preserveMiniGeometry(el);renderDesktopLyrics(currentLyricWords);}; DOC.addEventListener('focusin',miniFocusGuard,true); DOC.addEventListener('pointerdown',scriptToggleCleanup,true); DOC.addEventListener('click',scriptToggleCleanup,true); ROOT.addEventListener('pagehide',handlePlayerPageHide);if(window!==ROOT)window.addEventListener('pagehide',handlePlayerPageHide); ROOT.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('resize',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); ROOT.visualViewport?.addEventListener('scroll',ROOT.__SAFE_MUSIC_RESIZE_HANDLER__); loadPlaybackRecord();const playerWindow=mount();applyPlayerVisibility(settings.enabled);events();restorePlaybackSelection();DOC.addEventListener('visibilitychange',flushPlaybackOnHide);audio.addEventListener('play',blockPlaybackWhenDisabled);menu();bindScriptRecoveryButton(playerWindow);
   function bindWindowFeatures(el){const toggleImmersive=value=>{settings.immersive=value??!el.classList.contains('immersive');el.classList.toggle('immersive',settings.immersive);updatePlayMode();el.classList.remove('lyrics-focus');renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true);if(settings.immersive&&!settings.windowSize&&!isMobile()){el.style.width='min(900px,calc(100vw - 28px))';el.style.height='min(680px,calc(100vh - 28px))';}save();};el.querySelector('.now img').onclick=()=>{if(current)toggleImmersive(true);};if(ROOT.ResizeObserver){immersiveLyricsObserver?.disconnect();immersiveLyricsObserver=new ROOT.ResizeObserver(()=>renderImmersiveLyrics(activeLyricIndex(audio.currentTime),true));immersiveLyricsObserver.observe(el.querySelector('.immersive-lyric'));}el.querySelector('.immersive-close').onclick=()=>toggleImmersive(false);const cover=el.querySelector('.immersive-cover');cover.onclick=()=>toggleImmersive(false);cover.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cover.click();}};el.querySelector('.immersive-lyric').onclick=event=>{const row=event.target.closest('[data-lyric-index]');if(!row)return;const line=lyricTimeline[Number(row.dataset.lyricIndex)],duration=Number(audio.duration);if(line&&Number.isFinite(duration)&&line.time<=duration){audio.currentTime=line.time;paintTime();updateMediaPosition(true);}};el.querySelector('.pin').onclick=()=>{settings.windowPinned=!settings.windowPinned;el.classList.toggle('pinned',settings.windowPinned);el.querySelector('.pin').title=settings.windowPinned?'取消固定窗口':'固定窗口，禁止移动和缩放';save();};const head=el.querySelector('.selene-player-head'),startMove=head.onpointerdown;head.onpointerdown=e=>{if(settings.windowPinned)return;startMove?.call(head,e);};let resize=null;el.querySelectorAll('.resize-handle').forEach(handle=>{handle.onpointerdown=e=>{if(settings.windowPinned||isMobile())return;const rect=el.getBoundingClientRect();resize={dir:handle.dataset.r,x:e.clientX,y:e.clientY,left:rect.left,top:rect.top,width:rect.width,height:rect.height};handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation();};handle.onpointermove=e=>{if(!resize)return;const dx=e.clientX-resize.x,dy=e.clientY-resize.y,west=resize.dir.includes('w'),north=resize.dir.includes('n'),east=resize.dir.includes('e'),south=resize.dir.includes('s'),minW=300,minH=220,maxW=(ROOT.innerWidth||1200)-12,maxH=(ROOT.innerHeight||800)-12;let width=resize.width+(east?dx:west?-dx:0),height=resize.height+(south?dy:north?-dy:0),left=resize.left+(west?dx:0),top=resize.top+(north?dy:0);width=Math.max(minW,Math.min(maxW,width));height=Math.max(minH,Math.min(maxH,height));if(west)left=resize.left+resize.width-width;if(north)top=resize.top+resize.height-height;left=Math.max(6,Math.min((ROOT.innerWidth||1200)-width-6,left));top=Math.max(6,Math.min((ROOT.innerHeight||800)-height-6,top));el.style.setProperty('left',`${left}px`,'important');el.style.setProperty('top',`${top}px`,'important');el.style.setProperty('right','auto','important');el.style.setProperty('bottom','auto','important');el.style.setProperty('width',`${width}px`,'important');el.style.setProperty('height',`${height}px`,'important');e.preventDefault();};const finish=()=>{if(!resize)return;const rect=el.getBoundingClientRect();settings.windowSize={width:Math.round(rect.width),height:Math.round(rect.height)};settings.position={right:Math.max(0,Math.round((ROOT.innerWidth||0)-rect.right)),bottom:Math.max(0,Math.round((ROOT.innerHeight||0)-rect.bottom))};resize=null;save();};handle.onpointerup=finish;handle.onpointercancel=finish;});}
@@ -5131,6 +5202,27 @@ ${latest.slice(-1500)}
     panel.style.width=`${w}px`;panel.style.maxHeight=`${Math.max(30,room)}px`;panel.style.left=`${Math.max(left+8,Math.min(left+vw-w-8,rect.right-w))}px`;
     panel.style.top=`${Math.max(top+8,down?rect.bottom+8:rect.top-panel.offsetHeight-8)}px`;
   }
+  function playbackSourceOptions(song){
+    if(!song||song.source==='direct'||isVideoEntry(song))return [];
+    return [
+      {id:'auto',label:'自动回退',available:true},
+      ...GD_SOURCES.map(id=>({id,label:GD_SOURCE_LABELS[id],available:true})),
+      ...(settings.lxMusicEnabled?[{id:'lx-tencent',label:lxSourceLabel(),available:true}]:[]),
+    ];
+  }
+  function selectPlaybackSource(song,source){
+    playbackSources.set(song,source);emitPlaybackOptionsState();
+    if(!source.startsWith('lx-')){
+      // Explicit retry discards stale URL responses, preserving searches and the shared quota.
+      for(const key of gdResponses.keys()){const url=new URL(key);if(url.searchParams.get('types')==='url'&&(source==='auto'||url.searchParams.get('source')===source))gdResponses.delete(key);}
+      if(!['direct','tencent','kugou'].includes(song.source))song.audio='';
+    }
+    return play(song);
+  }
+  function selectS01SQuality(song,quality){
+    settings.s01sQuality=quality;save();
+    return selectPlaybackSource(song,'lx-tencent');
+  }
   function bindPlaybackSources(el){
     const controls=el.querySelector('.controls');
     controls.insertAdjacentHTML('afterbegin',`<button type="button" data-c="source" title="切换当前歌曲播放源" aria-label="切换当前歌曲播放源" aria-haspopup="dialog" aria-expanded="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></svg></button>`);
@@ -5142,7 +5234,7 @@ ${latest.slice(-1500)}
       syncFloatingPanelThemes();
       const choice=playbackSourceChoice(current);
       const lxOptions=settings.lxMusicEnabled?['tencent'].map(platform=>[`lx-${platform}`,lxSourceLabel(platform)]):[];
-      const options=[['auto','自动回退'],...GD_SOURCES.map(source=>[source,GD_SOURCE_LABELS[source]]),...lxOptions];
+      const options=playbackSourceOptions(current).map(({id,label})=>[id,label]);
       panel.innerHTML=`<div class="source-heading"><b>播放源</b><button type="button" data-source-close aria-label="关闭播放源选择">×</button></div><small>当前：${esc(playbackLabel(current))} · 仅本曲生效</small><div class="source-options">${options.map(([source,label])=>`<button type="button" data-playback-source="${source}" aria-pressed="${choice===source}">${esc(label)}</button>`).join('')}</div><small class="source-hint">离线缓存、手动音源优先${lxOptions.length?' · S01S · QQ 音乐':''}</small>`;
       panel.querySelector('[data-source-close]').onclick=close;
       if(settings.lxMusicEnabled){
@@ -5150,15 +5242,11 @@ ${latest.slice(-1500)}
         qualityPanel.innerHTML=Object.entries(S01S_QUALITIES).map(([quality,info])=>`<button type="button" data-s01s-quality="${quality}" aria-pressed="${s01sQuality()===quality}">${esc(info.label)}</button>`).join('');
         const heading=DOC.createElement('small');heading.textContent='S01S 音质 · 选择后立即播放并记住偏好';panel.querySelector('.source-hint').before(heading,qualityPanel);
         qualityPanel.querySelectorAll('[data-s01s-quality]').forEach(option=>bindReliableTap(option,()=>{
-          const song=current;if(!song)return;settings.s01sQuality=option.dataset.s01sQuality;save();close();playbackSources.set(song,'lx-tencent');void play(song);
+          const song=current;if(!song)return;close();void selectS01SQuality(song,option.dataset.s01sQuality);
         }));
       }
       panel.querySelectorAll('[data-playback-source]').forEach(option=>bindReliableTap(option,()=>{
-        const song=current,source=option.dataset.playbackSource;if(!song)return;close();playbackSources.set(song,source);
-        if(source.startsWith('lx-')){void play(song);return;}
-        // Explicit retry discards stale URL responses, preserving searches and the shared quota.
-        for(const key of gdResponses.keys()){const url=new URL(key);if(url.searchParams.get('types')==='url'&&(source==='auto'||url.searchParams.get('source')===source))gdResponses.delete(key);}
-        if(!['direct','tencent','kugou'].includes(song.source))song.audio='';void play(song);
+        const song=current,source=option.dataset.playbackSource;if(!song)return;close();void selectPlaybackSource(song,source);
       }));
       panel.hidden=false;button.setAttribute('aria-expanded','true');placeFloatingPanel(panel,button,220);
     });
@@ -5600,7 +5688,7 @@ ${latest.slice(-1500)}
   function getMusicCapabilities(){
     activateMusicLibrary();
     if(!musicLibraryLoaded())return musicLibraryError('UNLOADED','播放器已卸载或尚未就绪');
-    return musicLibraryResult({playbackProtocolVersion:1,capabilities:{getMusicLibrary:true,getQueueState:true,searchMusic:true,cancelMusicSearch:true,playTrack:true,playPlaylist:true,addToQueue:true,toggleFavorite:true},searchModes:['gd','other'],maxPageSize:100,searchResultTtlMs:300000,maxSearchSessions:8,maxConcurrentSearches:4});
+    return musicLibraryResult({playbackProtocolVersion:1,capabilities:{getMusicLibrary:true,getQueueState:true,searchMusic:true,cancelMusicSearch:true,playTrack:true,playPlaylist:true,addToQueue:true,toggleFavorite:true,getLyricsState:true,getPlayMode:true,setPlayMode:true,getPlaybackSources:true,setPlaybackSource:true,setS01SQuality:true},searchModes:['gd','other'],maxPageSize:100,searchResultTtlMs:300000,maxSearchSessions:8,maxConcurrentSearches:4});
   }
   function musicPage(rows,options,toItem){
     const offset=options.offset??0,limit=options.limit??30;
@@ -5758,6 +5846,104 @@ ${latest.slice(-1500)}
     try{return await Promise.race([run(),canceled]);}
     finally{signal?.removeEventListener('abort',abort);if(publicMusicLibrary.jobs.get(channel)===job)publicMusicLibrary.jobs.delete(channel);}
   }
+  // Optional playback controls share settings and the source menu's selection path.
+  function playbackOptionsLoaded(){return playbackPublicReady&&!disposed&&!!DOC.getElementById(ID);}
+  function publicPlayMode(){return ['loop','one','shuffle'].includes(settings.playMode)?settings.playMode:'loop';}
+  function playbackOptionsState(){
+    const loaded=playbackOptionsLoaded(),song=loaded?current:null;
+    const actual=!!song&&verifiedPlaybackSong===song&&!audioPriming&&!pendingPlaybackSelection&&!!(audio.currentSrc||audio.src);
+    const actualSong=song?.customAudio&&song.audio!==song.customAudio?{...song,customAudio:''}:song;
+    return {protocolVersion:1,loaded,trackId:song?String(song.id||song.mediaId||''):'',playMode:publicPlayMode(),selectedSource:song?playbackSourceChoice(song):'auto',actualSource:actual?playbackLabel(actualSong):'',quality:s01sQuality()};
+  }
+  function emitPlaybackOptionsState(force=false){
+    if(!playbackPublicReady)return;
+    const detail=playbackOptionsState(),key=JSON.stringify([detail,!!settings.lxMusicEnabled]);
+    if(!force&&key===lastPlaybackOptionsStateKey)return;
+    lastPlaybackOptionsStateKey=key;
+    try{ROOT.dispatchEvent(new ROOT.CustomEvent('selene-music-playback-options-state',{detail}));}catch{}
+  }
+  function playbackOptionsError(code,message){return {code,message};}
+  function getPublicPlayMode(){
+    const mode=publicPlayMode();
+    return playbackOptionsLoaded()?{ok:true,mode}:{ok:false,mode,error:playbackOptionsError('UNLOADED','播放器已卸载或尚未就绪')};
+  }
+  function setPublicPlayMode(mode){
+    if(!playbackOptionsLoaded())return getPublicPlayMode();
+    if(!['loop','one','shuffle'].includes(mode))return {ok:false,mode:publicPlayMode(),error:playbackOptionsError('INVALID_MODE','播放模式须为 loop、one 或 shuffle')};
+    settings.playMode=mode;updatePlayMode();save();
+    return getPublicPlayMode();
+  }
+  function sourceControlError(){
+    if(!playbackOptionsLoaded())return playbackOptionsError('UNLOADED','播放器已卸载或尚未就绪');
+    if(settings.enabled===false)return playbackOptionsError('PLAYER_DISABLED','播放器当前已停用');
+    if(!current)return playbackOptionsError('NO_TRACK','请先选择一首歌曲');
+    if(current.source==='direct'||isVideoEntry(current))return playbackOptionsError('UNSUPPORTED_TRACK','当前歌曲不支持切换播放源');
+    return null;
+  }
+  function getPublicPlaybackSources(){
+    const state=playbackOptionsState(),error=sourceControlError(),options=error?[]:playbackSourceOptions(current);
+    const qualityOptions=options.some(option=>option.id==='lx-tencent')?Object.entries(S01S_QUALITIES).map(([id,info])=>({id,label:info.label})):[];
+    return {ok:!error,trackId:state.trackId,selected:state.selectedSource,actualSource:state.actualSource,options,quality:state.quality,qualityOptions,...(error?{error}:{})};
+  }
+  function sourceControlResult(error){return {...getPublicPlaybackSources(),ok:false,error};}
+  async function runPublicSourceSelection(select){
+    const song=current;
+    try{
+      const pending=select(song),request=playRequest;
+      const started=await pending;
+      if(!playbackOptionsLoaded())return sourceControlResult(playbackOptionsError('UNLOADED','播放器已卸载或尚未就绪'));
+      if(current!==song||playRequest!==request)return sourceControlResult(playbackOptionsError('CANCELED','播放请求已被新的操作替代'));
+      emitPlaybackOptionsState();
+      return started?getPublicPlaybackSources():sourceControlResult(playbackOptionsError('PLAYBACK_NOT_STARTED','尚未开始播放，请查看播放器提示或再次点击播放'));
+    }catch{
+      return sourceControlResult(playbackOptionsError('PLAYBACK_FAILED','音源切换失败，请查看播放器提示'));
+    }
+  }
+  async function setPublicPlaybackSource(source){
+    const error=sourceControlError();if(error)return sourceControlResult(error);
+    if(typeof source!=='string'||!['auto',...GD_SOURCES,'lx-tencent'].includes(source))return sourceControlResult(playbackOptionsError('INVALID_SOURCE','无效的播放源'));
+    if(!playbackSourceOptions(current).some(option=>option.id===source&&option.available))return sourceControlResult(playbackOptionsError('SOURCE_UNAVAILABLE','当前配置未启用此播放源'));
+    return runPublicSourceSelection(song=>selectPlaybackSource(song,source));
+  }
+  async function setPublicS01SQuality(quality){
+    const error=sourceControlError();if(error)return sourceControlResult(error);
+    if(!settings.lxMusicEnabled)return sourceControlResult(playbackOptionsError('SOURCE_UNAVAILABLE','请先在播放器设置中启用 S01S'));
+    if(typeof quality!=='string'||!Object.hasOwn(S01S_QUALITIES,quality))return sourceControlResult(playbackOptionsError('INVALID_QUALITY','无效的 S01S 音质'));
+    return runPublicSourceSelection(song=>selectS01SQuality(song,quality));
+  }
+  // Lyrics protocol v1 reads the existing merged timeline, never the rendered lyric UI.
+  function lyricsStateMetadata(){
+    const loaded=playbackPublicReady&&!disposed&&!!DOC.getElementById(ID),song=loaded?current:null;
+    let status='idle';
+    if(song){
+      if(lyricState==='纯音乐 · 请欣赏')status='instrumental';
+      else if(lyricState==='歌词请求限流，请稍后再试'||lyricState==='歌词暂时加载失败')status='error';
+      else if(lyricState==='加载歌词…'||lyricState==='正在准备播放…')status='loading';
+      else if(lyricTimeline.length)status='ready';
+      else if(lyricState==='暂无歌词'||song.source==='direct'||isVideoEntry(song))status='unavailable';
+    }
+    return {protocolVersion:1,loaded,trackId:song?String(song.id||song.mediaId||''):'',revision:lyricsRevision,status,message:loaded?lyricState:''};
+  }
+  function getLyricsState(){
+    const state=lyricsStateMetadata();
+    return {...state,lines:state.status==='ready'?lyricTimeline.map(row=>({
+      time:row.time,lines:[...row.lines],
+      ...(row.wordTimes?.length?{wordTimes:row.wordTimes.map(({text,start,end})=>({text,start,end}))}:{}),
+    })):[]};
+  }
+  function emitLyricsState(force=false){
+    if(!playbackPublicReady)return;
+    const {revision,...state}=lyricsStateMetadata(),key=JSON.stringify(state);
+    if(!force&&key===lastLyricsStateKey&&lyricTimeline===lastLyricsTimeline)return;
+    lastLyricsStateKey=key;lastLyricsTimeline=lyricTimeline;
+    // No timeupdate/line-highlight notifications or timeline copies in the event path.
+    lyricsRevision++;
+    try{ROOT.dispatchEvent(new ROOT.CustomEvent('selene-music-lyrics-state',{detail:{...state,revision:lyricsRevision}}));}catch{}
+  }
+  function resetLyrics(message='暂无歌词'){
+    lyricTimeline=[];currentLyricWords='';lyricState=message;
+    emitLyricsState();
+  }
   // Read only the existing main-track runtime; keep-alive and source probes are separate audio.
   function getPlaybackState(){
     const loaded=playbackPublicReady&&!disposed&&!!DOC.getElementById(ID),song=current;
@@ -5779,6 +5965,7 @@ ${latest.slice(-1500)}
   }
   function emitPlaybackState(force=false){
     if(!playbackPublicReady)return;
+    emitPlaybackOptionsState();
     const state=getPlaybackState();
     // Progress is available on demand. Broadcast transitions without a polling timer.
     const {currentTime,...transition}=state,key=JSON.stringify(transition);
@@ -6014,6 +6201,12 @@ ${latest.slice(-1500)}
     addToQueue:addPublicToQueue,
     toggleFavorite:togglePublicFavorite,
     getPlaybackState,
+    getLyricsState,
+    getPlayMode: getPublicPlayMode,
+    setPlayMode: setPublicPlayMode,
+    getPlaybackSources: getPublicPlaybackSources,
+    setPlaybackSource: setPublicPlaybackSource,
+    setS01SQuality: setPublicS01SQuality,
     play:playPublicPlayback,
     pause:pausePublicPlayback,
     togglePlayback:togglePublicPlayback,
@@ -6036,5 +6229,6 @@ ${latest.slice(-1500)}
   playbackPublicReady=true;
   emitPublicState();
   emitPlaybackState(true);
+  emitLyricsState(true);
   emitMusicLibraryState(['availability']);
 })();

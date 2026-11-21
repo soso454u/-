@@ -36,6 +36,7 @@ const tick=()=>Promise.resolve();
 
 test('pages are detached plain metadata without stream URLs, configuration, audio or collection references',()=>{
   const api=harness();assert.equal(api.getCapabilities().playbackProtocolVersion,1);
+  for(const method of ['getMusicLibrary','getQueueState','searchMusic','cancelMusicSearch','playTrack','playPlaylist','addToQueue','toggleFavorite','getLyricsState','getPlayMode','setPlayMode','getPlaybackSources','setPlaybackSource','setS01SQuality'])assert.equal(api.getCapabilities().capabilities[method],true);
   const first=api.getMusicLibrary({limit:1});assert.equal(first.total,2);assert.equal(first.nextOffset,1);
   assert.doesNotMatch(JSON.stringify(first),/private\.test|secret|NEVER_RETURN|customAudio/);
   const ref=structuredClone(first.items[0].trackRef);first.items[0].title='external mutation';first.items[0].trackRef.kind='current';first.items.length=0;

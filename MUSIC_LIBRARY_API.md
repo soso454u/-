@@ -107,7 +107,10 @@ const favorites = player()?.getMusicLibrary({ kind: 'favorites', offset: 0, limi
     getMusicLibrary: true, getQueueState: true,
     searchMusic: true, cancelMusicSearch: true,
     playTrack: true, playPlaylist: true,
-    addToQueue: true, toggleFavorite: true
+    addToQueue: true, toggleFavorite: true,
+    getLyricsState: true, // 以下可选能力自播放器 2.10.110 起提供
+    getPlayMode: true, setPlayMode: true,
+    getPlaybackSources: true, setPlaybackSource: true, setS01SQuality: true
   },
   searchModes: ['gd', 'other'],
   maxPageSize: 100,
@@ -244,3 +247,119 @@ playlistId 是真实用户歌单 ID 或 `selene-favorites`。options 可指定 `
 | `EXPIRED_SEARCH` | 搜索会话已过期、被淘汰或不存在 |
 | `BUSY` | 超过最多 4 个并发搜索 |
 | `SEARCH_FAILED` | 原搜索服务失败；稍后重试或按 retryAt 等待 |
+
+## 可选歌词协议 v1（2.10.110+）
+
+`ROOT.__SELENE_MUSIC_PLAYER__.getLyricsState()` 同步返回当前歌词的独立副本，不发起歌词请求：
+
+```js
+{
+  protocolVersion: 1, loaded: true,
+  trackId: 'netease:123', revision: 3,
+  status: 'ready', message: '',
+  lines: [{
+    time: 12.5,
+    lines: ['歌词原文', '对应翻译'],
+    wordTimes: [{text: '歌词片段', start: 12.5, end: 13.2}]
+  }]
+}
+```
+
+`trackId` 与 v1 `getPlaybackState().trackId` 一致，区别于音乐库 v2 的 `track-N` 引用。`revision` 是当前播放器实例内递增的歌词变更序号，重载后重新开始。时间单位均为秒；`lines` 完整保留现有合并后的多行原文、翻译及空白间奏行，不取自显示层。
+
+只有原歌词包含真实逐字时间信息时才提供 `wordTimes`。普通 LRC 不生成逐字时间。Enhanced LRC 的末段没有结束标签时沿用原数据的 `end: null`，表示结束时间未知；不使用悬浮歌词的估算时间冒充真实时间。
+
+| status | 含义及 message 示例 |
+| --- | --- |
+| `idle` | 尚未播放、恢复待播放、播放状态重置；保留原提示 |
+| `loading` | `正在准备播放…` 或 `加载歌词…` |
+| `ready` | 有真实时间轴，通常 message 为空 |
+| `instrumental` | `纯音乐 · 请欣赏` |
+| `unavailable` | `暂无歌词`、`MP3 直链歌曲` 等当前不提供歌词的情况 |
+| `error` | `歌词请求限流，请稍后再试` 或 `歌词暂时加载失败` |
+
+非 `ready` 状态的 `lines` 为 `[]`。切歌、重新加载及重置时同步清空旧歌词；旧歌曲、旧 `playRequest`、已变更音源的异步结果不能覆盖当前歌词。
+
+ROOT 事件 **`selene-music-lyrics-state`** 的 detail 仅包含上述 `protocolVersion / loaded / trackId / revision / status / message`，不携带完整时间轴。初始化、切歌、开始加载、完成、失败、状态重置、卸载时通知；歌词高亮和 `timeupdate` 不发此事件。卸载时发送 `loaded:false、trackId:''、status:'idle'、message:''`，旧句柄再读取也返回空歌词。
+
+客户端先注册事件，再读取快照。事件到达时重新获取公开对象和歌词；逐句高亮使用 v1 播放时间查找最后一条 `line.time <= currentTime` 的歌词。
+
+```js
+const readLyrics = () => {
+  const state = ROOT.__SELENE_MUSIC_PLAYER__?.getLyricsState?.();
+  // 无对象、loaded=false 或非 ready 时清空旧歌词；否则使用 state.lines。
+};
+ROOT.addEventListener('selene-music-lyrics-state', readLyrics);
+readLyrics();
+// 小手机卸载时 removeEventListener；热重载后重新读取 capabilities 和初始状态。
+```
+
+## 可选播放模式和播放源控制（2.10.110+）
+
+这些方法追加在同一个公开对象上。先按 `getCapabilities().capabilities` 检测各方法，旧播放器可能没有这些能力。
+
+### getPlayMode() / setPlayMode(mode)
+
+均同步返回 `{ok:true, mode}`。`mode` 只接受 `loop`（顺序循环）、`one`（单曲循环）、`shuffle`（随机播放）。设置复用 `settings.playMode / updatePlayMode() / save()`，原播放器和小手机共享同一个值，不立即切歌。
+
+失败返回 `{ok:false, mode:当前模式, error:{code,message}}`；错误码为 `INVALID_MODE` 或 `UNLOADED`。不会保存无效值。
+
+### getPlaybackSources()
+
+同步返回当前歌曲可选音源、当前偏好、已确认播放的实际来源，以及可选 S01S 音质的独立副本：
+
+```js
+{
+  ok: true, trackId: 'netease:123',
+  selected: 'auto', actualSource: 'JOOX',
+  options: [
+    {id:'auto', label:'自动回退', available:true},
+    {id:'netease', label:'网易云', available:true},
+    {id:'joox', label:'JOOX', available:true},
+    {id:'lx-tencent', label:'S01S · QQ', available:true}
+  ],
+  quality: 'auto',
+  qualityOptions: [
+    {id:'auto', label:'默认'}, {id:'standard', label:'标准'},
+    {id:'hq', label:'高音质'}, {id:'sq', label:'SQ 无损'}, {id:'pq', label:'PQ'}
+  ]
+}
+```
+
+`options` 来自当前配置和原播放源面板共享的选项生成函数；GD 项读取 `GD_SOURCES`。禁用 S01S 后不提供 `lx-tencent`，`qualityOptions=[]`。音质项读取实际 `S01S_QUALITIES`，客户端使用返回的 id，不硬编码。
+
+`selected` 是本曲音源偏好，来自 `playbackSourceChoice()`；`actualSource` 是原 `playbackLabel()` 对应的显示名称，例如 `JOOX`、`网易云`、`离线缓存`、`手动音源`、`S01S · QQ · SQ 无损`。它不是可传入 setter 的 id。尚未验证播放、切歌解析中或卸载时为空字符串，暂停保留已确认的来源。离线缓存、手动音源和自动回退仍按原规则优先，实际来源可能不同于所选偏好。
+
+无歌曲、停用或不支持切源时返回同结构及 `ok:false,error:{code,message}`，`options=[]、qualityOptions=[]`。
+
+### setPlaybackSource(source) / setS01SQuality(quality)
+
+均返回 Promise，完成后返回与 `getPlaybackSources()` 相同的结构；失败有 `ok:false,error:{code,message}`。
+
+- `setPlaybackSource(source)` 接受当前 `options` 中 `available:true` 的 id。与面板使用同一个切源函数，更新本曲 `playbackSources`；GD 选择清理对应旧 URL 响应缓存，并按原规则移除过期歌曲音频地址，再调用原 `play(song)` 重新解析和播放。保留搜索缓存、共享额度、离线/手动音源优先级、备用源及错误处理。
+- `setS01SQuality(quality)` 接受当前 `qualityOptions` 的 id。与面板相同，先保存 `settings.s01sQuality`，然后选中本曲 `lx-tencent` 并立即重播。播放失败仍保留音质偏好；指定音质不可用继续原有回退，不保证实际来源一定为 S01S。
+
+设置方法操作调用时的当前歌曲；解析期间被切歌、暂停或新请求替代，返回 `CANCELED`。卸载返回 `UNLOADED`。可能的其他错误码：`NO_TRACK`、`PLAYER_DISABLED`、`UNSUPPORTED_TRACK`（直链或视频）、`INVALID_SOURCE`、`SOURCE_UNAVAILABLE`（如 S01S 未启用）、`INVALID_QUALITY`、`PLAYBACK_NOT_STARTED`（包括浏览器拒绝授权）、`PLAYBACK_FAILED`。原播放器保留具体失败提示，接口不透传内部异常。
+
+```js
+const p = ROOT.__SELENE_MUSIC_PLAYER__;
+p?.setPlayMode?.('shuffle');
+const sources = p?.getPlaybackSources?.();
+if (sources?.options.some(x => x.id === 'joox' && x.available)) {
+  const result = await p.setPlaybackSource('joox');
+  // 检查 result.ok；重播可能需要用户手势。
+}
+```
+
+### 播放选项状态事件
+
+ROOT 事件 **`selene-music-playback-options-state`**：
+
+```js
+{
+  protocolVersion:1, loaded:true, trackId:'netease:123',
+  playMode:'loop', selectedSource:'auto', actualSource:'JOOX', quality:'auto'
+}
+```
+
+初始化、播放模式变化、切歌、音源/音质选择、实际来源确认或重置、S01S 配置变化及卸载时通知。原播放器按钮/设置与公开方法都能触发；相同状态去重，不随 `timeupdate` 或歌词高亮广播，也不携带音乐库。客户端收到事件后按需重新读取模式和选项。卸载时 `loaded:false、trackId:''、actualSource:''`；应清理歌曲选项并等待新实例。原播放、音乐库、歌词事件继续独立工作。
