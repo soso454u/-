@@ -6,7 +6,9 @@ const source = readFileSync(new URL('../纯音乐播放器.js', import.meta.url)
 const esc = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const messageStart = source.indexOf('  function companionMessageItems(');
 const messageEnd = source.indexOf('  function renderCompanionDialog()', messageStart);
-const { render } = new Function('esc', 'cleanCompanionText', 'companionAssistantParts', `${source.slice(messageStart, messageEnd)};return {render:companionConversationMarkup};`)(esc, text => text, () => []);
+const chatStart=source.indexOf('  function companionChatOutputRule('),chatEnd=source.indexOf('  function normalizeCompanionReply(',chatStart);
+const chatMessageText=new Function('cleanCompanionText',`${source.slice(chatStart,chatEnd)};return companionChatMessageText;`)(text=>text);
+const { render } = new Function('esc', 'cleanCompanionText', 'companionAssistantParts', 'companionChatMessageText', `${source.slice(messageStart, messageEnd)};return {render:companionConversationMarkup};`)(esc, text => text, () => [], chatMessageText);
 const urlStart = source.indexOf('  function companionWallpaperUrl(');
 const urlEnd = source.indexOf('  function syncCompanionWallpaper(', urlStart);
 const wallpaperUrl = new Function(`${source.slice(urlStart, urlEnd)};return companionWallpaperUrl;`)();
